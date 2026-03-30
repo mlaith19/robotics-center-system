@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { Suspense, useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,7 +12,7 @@ import { Lock, Loader2, AlertCircle } from "lucide-react"
 import { useLanguage } from "@/lib/i18n/context"
 import { LanguageSelector } from "@/components/language-selector"
 
-export default function ChangePasswordPage() {
+function ChangePasswordContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { t, dir } = useLanguage()
@@ -170,5 +170,13 @@ export default function ChangePasswordPage() {
         </Card>
       </div>
     </div>
+  )
+}
+
+export default function ChangePasswordPage() {
+  return (
+    <Suspense fallback={null}>
+      <ChangePasswordContent />
+    </Suspense>
   )
 }
