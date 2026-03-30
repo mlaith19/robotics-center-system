@@ -1,0 +1,164 @@
+import { handleDbError } from "@/lib/db"
+import bcrypt from "bcryptjs"
+import { requireFeatureFromRequest } from "@/lib/feature-gate"
+import { withTenantAuth } from "@/lib/tenant-api-auth"
+import { requireTenant } from "@/lib/tenant/resolve-tenant"
+
+type Ctx = { params: Promise<{ id: string }> }
+
+const TEACHER_PRIVILEGED_ROLES = ["super_admin", "center_admin", "admin", "administrator", "owner", "manager", "secretary", "coordinator"]
+
+function canAccessTeacher(session: { id: string; roleKey?: string; role?: string }, teacherUserId: string | null): boolean {
+  const role = (session.roleKey ?? session.role ?? "").toString().trim().toLowerCase()
+  if (TEACHER_PRIVILEGED_ROLES.includes(role)) return true
+  if (role.includes("admin") || role.includes("מנהל") || role === "אדמין") return true
+  return teacherUserId != null && session.id === teacherUserId
+}
+
+export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
+  const { id } = await params
+  const [tenant, tenantErr] = await requireTenant(req)
+  if (tenantErr) return tenantErr
+  const db = tenant.db
+  try {
+    const result = await db`SELECT * FROM "Teacher" WHERE id = ${id}`
+    if (result.length === 0) return Response.json({ error: "Teacher not found" }, { status: 404 })
+    const row = result[0] as { userId?: string | null }
+    const userId = row?.userId != null ? String(row.userId) : null
+    if (!canAccessTeacher(session, userId)) {
+      return Response.json({ error: "errors.forbiddenTeacher" }, { status: 403 })
+    }
+
+    const teacherIdParam = String(id)
+    const courses = await db`
+      SELECT 
+        c.id, c.name, c."daysOfWeek", c."startTime", c."endTime",
+        c."startDate", c."endDate", c.price, c.status, c.location,
+        COALESCE(enrollment_stats."enrollmentCount", 0) as "enrollmentCount"
+      FROM "Course" c
+      LEFT JOIN (
+        SELECT "courseId", COUNT(*) as "enrollmentCount"
+        FROM "Enrollment"
+        GROUP BY "courseId"
+      ) enrollment_stats ON c.id = enrollment_stats."courseId"
+      WHERE c."teacherIds" IS NOT NULL
+        AND jsonb_array_length(c."teacherIds") > 0
+        AND EXISTS (
+          SELECT 1 FROM jsonb_array_elements_text(c."teacherIds") AS elem
+          WHERE elem = (${teacherIdParam})::text
+        )
+      ORDER BY c.name
+    `
+
+    const teacher = {
+      ...result[0],
+      teacherCourses: courses.map((c: any) => ({
+        course: {
+          id: c.id, name: c.name, daysOfWeek: c.daysOfWeek,
+          startTime: c.startTime, endTime: c.endTime,
+          startDate: c.startDate, endDate: c.endDate,
+          price: c.price, status: c.status, location: c.location,
+          enrollmentCount: c.enrollmentCount
+        }
+      }))
+    }
+    return Response.json(teacher)
+  } catch (err) {
+    return handleDbError(err, "GET /api/teachers/[id]")
+  }
+})
+
+export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
+  const featureErr = await requireFeatureFromRequest(req, "teachers", session)
+  if (featureErr) return featureErr
+  const [tenant, tenantErr] = await requireTenant(req)
+  if (tenantErr) return tenantErr
+  const db = tenant.db
+  const { id } = await params
+  const body = await req.json()
+
+  const existingTeacher = await db`SELECT "userId" FROM "Teacher" WHERE id = ${id}`
+  if (existingTeacher.length > 0) {
+    const userId = (existingTeacher[0] as { userId: string | null })?.userId ?? null
+    if (!canAccessTeacher(session, userId)) {
+      return Response.json({ error: "errors.forbiddenTeacher" }, { status: 403 })
+    }
+  }
+
+  try {
+    const name = String(body.name ?? "").trim()
+    const email = body.email ? String(body.email).trim() : null
+    const phone = body.phone ? String(body.phone).trim() : null
+    const idNumber = body.idNumber ? String(body.idNumber).trim() : null
+    const birthDate = body.birthDate || null
+    const city = body.city ? String(body.city).trim() : null
+    const specialty = body.specialization ? String(body.specialization).trim() : null
+    const status = body.status ? String(body.status).trim() : null
+    const bio = body.bio ? String(body.bio).trim() : null
+    const centerHourlyRate = body.centerHourlyRate ?? null
+    const travelRate = body.travelRate ?? null
+    const externalCourseRate = body.externalCourseRate ?? null
+    const now = new Date().toISOString()
+
+    const createUserAccount = body.createUserAccount === true
+    const username = body.username ? String(body.username).trim() : null
+    const password = body.password ? String(body.password) : null
+    let userId: string | null = null
+
+    if (createUserAccount && username && password) {
+      const existingUser = await db`SELECT id FROM "User" WHERE username = ${username}`
+      if (existingUser.length > 0) return Response.json({ error: "שם המשתמש כבר קיים במערכת" }, { status: 409 })
+      userId = crypto.randomUUID()
+      const hashedPassword = await bcrypt.hash(password, 10)
+      await db`
+        INSERT INTO "User" (id, name, email, username, password, phone, status, role, permissions, "force_password_reset", "createdAt", "updatedAt")
+        VALUES (${userId}, ${name}, ${email}, ${username}, ${hashedPassword}, ${phone}, 'active', 'teacher', ${JSON.stringify([
+          "courses.view", "students.view", "teachers.view", "schedule.view",
+          "attendance.view", "attendance.edit", "settings.home",
+        ])}, false, ${now}, ${now})
+      `
+    }
+
+    const result = await db`
+      UPDATE "Teacher"
+      SET 
+        name = ${name}, email = ${email}, phone = ${phone},
+        "idNumber" = ${idNumber}, "birthDate" = ${birthDate}, city = ${city},
+        specialty = ${specialty}, status = ${status}, bio = ${bio},
+        "centerHourlyRate" = ${centerHourlyRate}, "travelRate" = ${travelRate},
+        "externalCourseRate" = ${externalCourseRate},
+        "userId" = COALESCE(${userId}, "userId"),
+        "updatedAt" = ${now}
+      WHERE id = ${id}
+      RETURNING *
+    `
+    if (result.length === 0) return Response.json({ error: "Teacher not found" }, { status: 404 })
+    return Response.json(result[0])
+  } catch (err) {
+    return handleDbError(err, "PUT /api/teachers/[id]")
+  }
+})
+
+export const DELETE = withTenantAuth(async (req, session, { params }: Ctx) => {
+  const featureErr = await requireFeatureFromRequest(req, "teachers", session)
+  if (featureErr) return featureErr
+  const [tenant, tenantErr] = await requireTenant(req)
+  if (tenantErr) return tenantErr
+  const db = tenant.db
+  const { id } = await params
+
+  const existing = await db`SELECT "userId" FROM "Teacher" WHERE id = ${id}`
+  if (existing.length > 0) {
+    const userId = (existing[0] as { userId: string | null })?.userId ?? null
+    if (!canAccessTeacher(session, userId)) {
+      return Response.json({ error: "errors.forbiddenTeacher" }, { status: 403 })
+    }
+  }
+
+  try {
+    await db`DELETE FROM "Teacher" WHERE id = ${id}`
+    return new Response(null, { status: 204 })
+  } catch (err) {
+    return handleDbError(err, "DELETE /api/teachers/[id]")
+  }
+})

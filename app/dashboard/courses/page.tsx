@@ -1,0 +1,441 @@
+"use client"
+
+import { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import { 
+  Trash2, Pencil, Eye, Plus, RefreshCw, Users, Clock, Calendar, 
+  LayoutGrid, List, User, AlertCircle, CheckCircle2, Copy, Check
+} from "lucide-react"
+import { PageHeader } from "@/components/page-header"
+import { deleteWithUndo } from "@/lib/notify"
+import { useCurrentUser } from "@/lib/auth-context"
+import { hasPermission, hasFullAccessRole } from "@/lib/permissions"
+import { useUserType } from "@/lib/use-user-type"
+import { getCourseStatusPresentation } from "@/lib/course-status"
+import { cn } from "@/lib/utils"
+import { useToast } from "@/hooks/use-toast"
+
+type Course = {
+  id: string
+  name: string
+  description?: string
+  courseNumber?: string
+  category?: string
+  courseType?: string
+  location?: string
+  level?: string
+  duration?: string
+  price?: number
+  status?: string
+  startDate?: string
+  endDate?: string
+  startTime?: string
+  endTime?: string
+  daysOfWeek?: string[]
+  teacherIds?: string[]
+  createdAt: string
+  updatedAt: string
+  enrollmentCount?: number
+  totalPaid?: number
+  paidCount?: number
+  teachers?: { id: string; name: string }[]
+}
+
+type Teacher = {
+  id: string
+  name: string
+}
+
+export default function CoursesPage() {
+  const [courses, setCourses] = useState<Course[]>([])
+  const [teachers, setTeachers] = useState<Teacher[]>([])
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState<string | null>(null)
+  const [q, setQ] = useState("")
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
+  const [copiedCourseId, setCopiedCourseId] = useState<string | null>(null)
+
+  const currentUser = useCurrentUser()
+  const { toast } = useToast()
+  const { data: userTypeData, loading: userTypeLoading } = useUserType(
+    currentUser?.id,
+    currentUser?.roleKey || currentUser?.role,
+  )
+  const roleKey = (currentUser?.roleKey || currentUser?.role)?.toString().toLowerCase()
+  const isAdmin =
+    hasFullAccessRole(currentUser?.roleKey) ||
+    hasFullAccessRole(currentUser?.role) ||
+    roleKey === "admin" ||
+    currentUser?.role === "Administrator" ||
+    currentUser?.role === "אדמין" ||
+    currentUser?.role === "מנהל"
+  const userPerms = currentUser?.permissions || []
+  const canSeeFinancial = isAdmin || hasPermission(userPerms, "courses.financial")
+  const canViewCourses = isAdmin || hasPermission(userPerms, "courses.view")
+  const canEditCourses = isAdmin || hasPermission(userPerms, "courses.edit")
+  const canDeleteCourses = isAdmin || hasPermission(userPerms, "courses.delete")
+  const isLinkedTeacher = userTypeData?.isTeacher === true
+
+  async function load() {
+    setLoading(true)
+    setErr(null)
+    try {
+      const [coursesRes, teachersRes] = await Promise.all([
+        fetch("/api/courses", { cache: "no-store" }),
+        fetch("/api/teachers", { cache: "no-store" })
+      ])
+      if (!coursesRes.ok) throw new Error(`Failed to load courses (${coursesRes.status})`)
+      const coursesData = await coursesRes.json()
+      setCourses(coursesData ?? [])
+      
+      if (teachersRes.ok) {
+        const teachersData = await teachersRes.json()
+        setTeachers(teachersData ?? [])
+      }
+    } catch (e: any) {
+      setErr(e?.message ?? "Failed to load")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function remove(id: string) {
+    const course = courses.find((c) => c.id === id)
+    deleteWithUndo({
+      entityKey: "course",
+      itemId: id,
+      itemLabel: course?.name,
+      removeFromUI: () => setCourses((prev) => prev.filter((c) => c.id !== id)),
+      restoreFn: () => course && setCourses((prev) => [...prev, course]),
+      deleteFn: async () => {
+        const res = await fetch(`/api/courses/${id}`, { method: "DELETE", credentials: "include" })
+        if (!res.ok) throw new Error("Delete failed")
+      },
+      confirmPolicy: "standard",
+      undoWindowMs: 10_000,
+    })
+  }
+
+  useEffect(() => {
+    load()
+  }, [])
+
+  const coursesForUser = useMemo(() => {
+    if (isAdmin || !isLinkedTeacher) return courses
+    const ids = new Set(userTypeData?.courseIds || [])
+    return courses.filter((c) => ids.has(c.id))
+  }, [courses, isAdmin, isLinkedTeacher, userTypeData?.courseIds])
+
+  const filtered = useMemo(() => {
+    const s = q.trim().toLowerCase()
+    if (!s) return coursesForUser
+    return coursesForUser.filter(
+      (c) =>
+        c.name.toLowerCase().includes(s) ||
+        c.description?.toLowerCase().includes(s) ||
+        c.category?.toLowerCase().includes(s),
+    )
+  }, [q, coursesForUser])
+
+  const pageBusy = loading || (!isAdmin && userTypeLoading)
+
+  const getTeacherNames = (teacherIds?: string[]) => {
+    if (!teacherIds || teacherIds.length === 0) return null
+    return teacherIds
+      .map(id => teachers.find(t => t.id === id)?.name)
+      .filter(Boolean)
+      .join(", ")
+  }
+
+  const getDaysLabel = (days?: string[]) => {
+    if (!days || days.length === 0) return null
+    const dayNames: Record<string, string> = {
+      sunday: "ראשון",
+      monday: "שני",
+      tuesday: "שלישי",
+      wednesday: "רביעי",
+      thursday: "חמישי",
+      friday: "שישי",
+      saturday: "שבת"
+    }
+    return days.map(d => dayNames[d] || d).join(", ")
+  }
+
+  const formatDate = (date?: string) => {
+    if (!date) return null
+    return new Intl.DateTimeFormat("he-IL", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(date))
+  }
+
+  const copyCourseRegistrationLink = async (course: Course) => {
+    const origin = typeof window !== "undefined" ? window.location.origin : ""
+    const params = new URLSearchParams({
+      courseId: course.id,
+      courseName: course.name,
+    })
+    const link = origin ? `${origin}/register/student?${params.toString()}` : `/register/student?${params.toString()}`
+    try {
+      await navigator.clipboard.writeText(link)
+      setCopiedCourseId(course.id)
+      setTimeout(() => setCopiedCourseId(null), 1800)
+      toast({ title: "הקישור הועתק", description: `קישור רישום לקורס "${course.name}" הועתק ללוח` })
+    } catch {
+      toast({ title: "שגיאה", description: "לא ניתן להעתיק את הקישור", variant: "destructive" })
+    }
+  }
+
+  return (
+    <div dir="rtl" className="container mx-auto max-w-7xl p-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3">
+        <PageHeader
+          title="קורסים"
+          description={
+            isLinkedTeacher && !isAdmin
+              ? "הקורסים שמשויכים אליך במרכז"
+              : "נהל את כל הקורסים במרכז"
+          }
+        />
+
+        <div className="flex gap-2 items-center">
+          {/* View Toggle */}
+          <div className="flex border rounded-lg overflow-hidden">
+            <Button 
+              variant={viewMode === "list" ? "default" : "ghost"} 
+              size="sm"
+              onClick={() => setViewMode("list")}
+              className="rounded-none"
+            >
+              <List className="h-4 w-4" />
+            </Button>
+            <Button 
+              variant={viewMode === "grid" ? "default" : "ghost"} 
+              size="sm"
+              onClick={() => setViewMode("grid")}
+              className="rounded-none"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {canEditCourses && (
+            <Link href="/dashboard/courses/new">
+              <Button className="gap-2 bg-primary">
+                <Plus className="h-4 w-4" />
+                קורס חדש
+              </Button>
+            </Link>
+          )}
+        </div>
+      </div>
+
+      {/* Search */}
+      <Card className="p-4">
+        <div className="flex items-center gap-3">
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="חפש לפי שם קורס..."
+            className="max-w-md text-right"
+            dir="rtl"
+          />
+          <Button variant="outline" onClick={load} className="gap-2 bg-transparent">
+            <RefreshCw className="h-4 w-4" />
+            רענן
+          </Button>
+          <div className="text-sm text-muted-foreground mr-auto">
+            סה״כ: {filtered.length} קורסים
+          </div>
+        </div>
+      </Card>
+
+      {/* Content */}
+      {pageBusy ? (
+        <div className="text-muted-foreground text-center py-12">טוען...</div>
+      ) : err ? (
+        <Card className="p-6 border-red-200 bg-red-50">
+          <div className="text-red-700 font-semibold">שגיאה</div>
+          <div className="text-red-700/80 mt-1">{err}</div>
+          <div className="mt-4">
+            <Button variant="outline" onClick={load}>נסה שוב</Button>
+          </div>
+        </Card>
+      ) : filtered.length === 0 ? (
+        <Card className="p-8 text-center text-muted-foreground">
+          <div className="text-lg">{isLinkedTeacher && !isAdmin ? "אין קורסים משויכים אליך" : "אין קורסים"}</div>
+          {canEditCourses && (
+            <Link href="/dashboard/courses/new">
+              <Button className="mt-4 gap-2">
+                <Plus className="h-4 w-4" />
+                הוסף קורס ראשון
+              </Button>
+            </Link>
+          )}
+        </Card>
+      ) : (
+        <div className={viewMode === "grid" ? "grid md:grid-cols-2 lg:grid-cols-3 gap-4" : "space-y-4"}>
+          {filtered.map((c) => {
+            const statusPres = getCourseStatusPresentation({
+              status: c.status,
+              endDate: c.endDate,
+            })
+            return (
+            <Card
+              key={c.id}
+              className={cn("p-5 space-y-4 hover:shadow-lg transition-shadow", statusPres.cardClassName)}
+            >
+              {/* Header with status */}
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 text-right">
+                  <h3 className="font-bold text-lg">{c.name}</h3>
+                  {c.description && (
+                    <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{c.description}</p>
+                  )}
+                </div>
+                <Badge className={statusPres.badgeClassName}>{statusPres.labelHe}</Badge>
+              </div>
+
+              {/* Info rows */}
+              <div className="space-y-2 text-sm">
+                {/* Students count */}
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Users className="h-4 w-4 text-blue-500" />
+                  <span>{c.enrollmentCount || 0} תלמידים</span>
+                </div>
+
+                {/* Duration */}
+                {c.duration && (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Clock className="h-4 w-4 text-blue-500" />
+                    <span>{c.duration}</span>
+                  </div>
+                )}
+
+                {/* Days */}
+                {c.daysOfWeek && c.daysOfWeek.length > 0 && (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Calendar className="h-4 w-4 text-blue-500" />
+                    <span>{getDaysLabel(c.daysOfWeek)}</span>
+                  </div>
+                )}
+
+                {/* Teachers */}
+                {getTeacherNames(c.teacherIds) && (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <User className="h-4 w-4 text-purple-500" />
+                    <span>{getTeacherNames(c.teacherIds)}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Payment status - only for users with courses.financial */}
+              {canSeeFinancial && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-green-50 rounded-lg p-3 text-center">
+                    <div className="flex items-center justify-center gap-1 text-green-600 text-xs mb-1">
+                      <CheckCircle2 className="h-3 w-3" />
+                      <span>שילמו</span>
+                    </div>
+                    <div className="font-bold text-green-700">{c.paidCount || 0}/{c.enrollmentCount || 0}</div>
+                  </div>
+                  <div className={`rounded-lg p-3 text-center ${
+                    ((c.enrollmentCount || 0) * (c.price || 0) - (c.totalPaid || 0)) > 0 
+                      ? "bg-red-50" 
+                      : "bg-green-50"
+                  }`}>
+                    <div className={`flex items-center justify-center gap-1 text-xs mb-1 ${
+                      ((c.enrollmentCount || 0) * (c.price || 0) - (c.totalPaid || 0)) > 0 
+                        ? "text-red-600" 
+                        : "text-green-600"
+                    }`}>
+                      <AlertCircle className="h-3 w-3" />
+                      <span>יתרה</span>
+                    </div>
+                    <div className={`font-bold ${
+                      ((c.enrollmentCount || 0) * (c.price || 0) - (c.totalPaid || 0)) > 0 
+                        ? "text-red-700" 
+                        : "text-green-700"
+                    }`}>
+                      {((c.enrollmentCount || 0) * (c.price || 0) - (c.totalPaid || 0)).toLocaleString()}₪
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Price and dates */}
+              <div className="border-t pt-3 space-y-2">
+                {canSeeFinancial && c.price != null && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-2xl font-bold text-primary">{c.price}₪</span>
+                    <span className="text-sm text-muted-foreground">מחיר:</span>
+                  </div>
+                )}
+                
+                {(c.startDate || c.endDate) && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">
+                      {formatDate(c.startDate)} - {formatDate(c.endDate)}
+                    </span>
+                    <span className="text-muted-foreground">תאריכים:</span>
+                  </div>
+                )}
+
+                {(c.startTime || c.endTime) && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">
+                      {c.startTime} - {c.endTime}
+                    </span>
+                    <span className="text-muted-foreground">שעות:</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Action buttons - ערוך ומחיקה רק למי שיש לו הרשאה */}
+              <div className="flex gap-2 pt-2">
+                {canDeleteCourses && (
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    className="text-red-500 hover:text-red-700 hover:bg-red-50 bg-transparent"
+                    onClick={() => remove(c.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+                {canEditCourses && (
+                  <Link href={`/dashboard/courses/${c.id}/edit`} className="flex-1">
+                    <Button variant="outline" className="w-full gap-2 bg-transparent">
+                      <Pencil className="h-4 w-4" />
+                      ערוך
+                    </Button>
+                  </Link>
+                )}
+                {canViewCourses && (
+                  <Link href={`/dashboard/courses/${c.id}`} className="flex-1">
+                    <Button variant="outline" className="w-full gap-2 bg-transparent">
+                      <Eye className="h-4 w-4" />
+                      צפה
+                    </Button>
+                  </Link>
+                )}
+              </div>
+
+              <Button
+                variant="secondary"
+                className="w-full gap-2"
+                onClick={() => copyCourseRegistrationLink(c)}
+              >
+                {copiedCourseId === c.id ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                {copiedCourseId === c.id ? "הועתק" : "העתק קישור רישום לקורס"}
+              </Button>
+            </Card>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}

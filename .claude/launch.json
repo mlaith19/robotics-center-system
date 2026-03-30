@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Next.js Dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "Database (Docker)",
+      "runtimeExecutable": "docker",
+      "runtimeArgs": ["compose", "up", "-d"],
+      "port": 5432
+    },
+    {
+      "name": "Start Dev (DB + App)",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["scripts/start-dev.js"],
+      "port": 3000
+    }
+  ]
+}

@@ -1,0 +1,440 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import { useRouter, useParams } from "next/navigation"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ArrowRight, Building2, MapPin, Phone, CreditCard, FileText, Save, Loader2, ClipboardList } from "lucide-react"
+
+const israelCities = [
+  "תל אביב", "ירושלים", "חיפה", "ראשון לציון", "פתח תקווה", "אשדוד", "נתניה", "באר שבע",
+  "בני ברק", "חולון", "רמת גן", "אשקלון", "רחובות", "בת ים", "הרצליה", "כפר סבא",
+  "מודיעין", "לוד", "רמלה", "רעננה", "הוד השרון", "גבעתיים", "קריית גת", "נהריה",
+  "עכו", "אילת", "טבריה", "צפת", "קריית שמונה", "עפולה", "נצרת", "אום אל-פחם"
+]
+
+const banksList = [
+  { code: "12", name: "בנק הפועלים" },
+  { code: "10", name: "בנק לאומי" },
+  { code: "11", name: "בנק דיסקונט" },
+  { code: "20", name: "בנק מזרחי טפחות" },
+  { code: "14", name: "בנק אוצר החייל" },
+  { code: "31", name: "בנק הבינלאומי" },
+  { code: "17", name: "בנק מרכנתיל" },
+  { code: "46", name: "בנק מסד" },
+  { code: "54", name: "בנק ירושלים" },
+]
+
+export default function EditSchoolPage() {
+  const router = useRouter()
+  const params = useParams()
+  const id = params.id as string
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  const [form, setForm] = useState({
+    status: "interested",
+    name: "",
+    institutionCode: "",
+    schoolType: "",
+    city: "",
+    address: "",
+    schoolPhone: "",
+    contactPerson: "",
+    contactPhone: "",
+    email: "",
+    bankName: "",
+    bankCode: "",
+    bankBranch: "",
+    bankAccount: "",
+    notes: "",
+  })
+
+  const handleBankChange = (bankName: string) => {
+    const bank = banksList.find(b => b.name === bankName)
+    setForm({ ...form, bankName, bankCode: bank?.code || "" })
+  }
+
+  useEffect(() => {
+    ;(async () => {
+      setLoading(true)
+      setErr(null)
+      try {
+        const res = await fetch(`/api/schools/${id}`, { cache: "no-store" })
+        if (!res.ok) throw new Error(`Failed to load (${res.status})`)
+        const data = await res.json()
+
+        setForm({
+          status: data?.status ?? "interested",
+          name: data?.name ?? "",
+          institutionCode: data?.institutionCode ?? "",
+          schoolType: data?.schoolType ?? "",
+          city: data?.city ?? "",
+          address: data?.address ?? "",
+          schoolPhone: data?.schoolPhone ?? "",
+          contactPerson: data?.contactPerson ?? "",
+          contactPhone: data?.contactPhone ?? data?.phone ?? "",
+          email: data?.email ?? "",
+          bankName: data?.bankName ?? "",
+          bankCode: data?.bankCode ?? "",
+          bankBranch: data?.bankBranch ?? "",
+          bankAccount: data?.bankAccount ?? "",
+          notes: data?.notes ?? "",
+        })
+      } catch (e: unknown) {
+        const error = e as Error
+        setErr(error?.message ?? "Failed to load")
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [id])
+
+  async function save() {
+    setSaving(true)
+    setErr(null)
+    try {
+      const res = await fetch(`/api/schools/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j?.error ?? `Failed (${res.status})`)
+      }
+      router.push(`/dashboard/schools/${id}`)
+    } catch (e: unknown) {
+      const error = e as Error
+      setErr(error?.message ?? "Failed to save")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div dir="rtl" className="container mx-auto max-w-4xl p-6 flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  return (
+    <div dir="rtl" className="container mx-auto max-w-4xl p-6 space-y-6">
+      <div className="flex items-center gap-3">
+        <Link href={`/dashboard/schools/${id}`}>
+          <Button variant="ghost" size="icon">
+            <ArrowRight className="h-5 w-5" />
+          </Button>
+        </Link>
+        <div>
+          <h1 className="text-3xl font-bold">ערוך בית ספר</h1>
+          <p className="text-muted-foreground mt-1">עדכן את פרטי בית הספר</p>
+        </div>
+      </div>
+
+      {err && <Card className="p-4 border-red-200 bg-red-50 text-red-700">שגיאה: {err}</Card>}
+
+      {/* סטטוס בית הספר */}
+      <Card className="border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-white">
+        <CardHeader className="text-right">
+          <div className="flex flex-row-reverse items-center justify-end gap-3">
+            <div className="p-2 bg-blue-500 rounded-lg">
+              <ClipboardList className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <CardTitle>סטטוס בית הספר</CardTitle>
+              <CardDescription>בחר את סטטוס בית הספר הנוכחי</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
+            <SelectTrigger className="text-right">
+              <SelectValue placeholder="בחר סטטוס" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="interested">מתעניין</SelectItem>
+              <SelectItem value="active">פעיל</SelectItem>
+              <SelectItem value="inactive">לא פעיל</SelectItem>
+              <SelectItem value="potential">פוטנציאלי</SelectItem>
+            </SelectContent>
+          </Select>
+        </CardContent>
+      </Card>
+
+      {/* מידע כללי */}
+      <Card className="border-2 border-green-200 bg-gradient-to-br from-green-50 to-white">
+        <CardHeader className="text-right">
+          <div className="flex flex-row-reverse items-center justify-end gap-3">
+            <div className="p-2 bg-green-500 rounded-lg">
+              <Building2 className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <CardTitle>מידע כללי</CardTitle>
+              <CardDescription>פרטי בית הספר הבסיסיים</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-right block">שם בית הספר *</Label>
+            <Input 
+              value={form.name} 
+              onChange={(e) => setForm({ ...form, name: e.target.value })} 
+              className="text-right"
+              dir="rtl"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-right block">קוד מוסד</Label>
+              <Input 
+                value={form.institutionCode} 
+                onChange={(e) => setForm({ ...form, institutionCode: e.target.value })} 
+                className="text-right"
+                dir="rtl"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-right block">סוג בית הספר</Label>
+              <Select value={form.schoolType} onValueChange={(v) => setForm({ ...form, schoolType: v })}>
+                <SelectTrigger className="text-right">
+                  <SelectValue placeholder="בחר סוג" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="elementary">יסודי</SelectItem>
+                  <SelectItem value="middle">חטיבת ביניים</SelectItem>
+                  <SelectItem value="high">תיכון</SelectItem>
+                  <SelectItem value="combined">משולב</SelectItem>
+                  <SelectItem value="special">חינוך מיוחד</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* מיקום */}
+      <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-white">
+        <CardHeader className="text-right">
+          <div className="flex flex-row-reverse items-center justify-end gap-3">
+            <div className="p-2 bg-purple-500 rounded-lg">
+              <MapPin className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <CardTitle>מיקום</CardTitle>
+              <CardDescription>כתובת בית הספר</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-right block">עיר *</Label>
+              <Select value={form.city} onValueChange={(v) => setForm({ ...form, city: v })}>
+                <SelectTrigger className="text-right">
+                  <SelectValue placeholder="בחר עיר" />
+                </SelectTrigger>
+                <SelectContent>
+                  {israelCities.map((city) => (
+                    <SelectItem key={city} value={city}>{city}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-right block">כתובת *</Label>
+              <Input 
+                value={form.address} 
+                onChange={(e) => setForm({ ...form, address: e.target.value })} 
+                className="text-right"
+                dir="rtl"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-right block">טלפון בית ספר</Label>
+            <Input 
+              value={form.schoolPhone} 
+              onChange={(e) => setForm({ ...form, schoolPhone: e.target.value })} 
+              className="text-right"
+              dir="rtl"
+              type="tel"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* פרטי קשר */}
+      <Card className="border-2 border-cyan-200 bg-gradient-to-br from-cyan-50 to-white">
+        <CardHeader className="text-right">
+          <div className="flex flex-row-reverse items-center justify-end gap-3">
+            <div className="p-2 bg-cyan-500 rounded-lg">
+              <Phone className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <CardTitle>פרטי קשר</CardTitle>
+              <CardDescription>איש קשר בבית הספר</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-right block">איש קשר *</Label>
+            <Input 
+              value={form.contactPerson} 
+              onChange={(e) => setForm({ ...form, contactPerson: e.target.value })} 
+              className="text-right"
+              dir="rtl"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-right block flex items-center gap-1 justify-end">
+                <Phone className="h-4 w-4" />
+                טלפון נייד *
+              </Label>
+              <Input 
+                value={form.contactPhone} 
+                onChange={(e) => setForm({ ...form, contactPhone: e.target.value })} 
+                className="text-right"
+                dir="rtl"
+                type="tel"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-right block flex items-center gap-1 justify-end">
+                אימייל *
+              </Label>
+              <Input 
+                value={form.email} 
+                onChange={(e) => setForm({ ...form, email: e.target.value })} 
+                className="text-right"
+                dir="rtl"
+                type="email"
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* פרטי חשבון בנק */}
+      <Card className="border-2 border-orange-200 bg-gradient-to-br from-orange-50 to-white">
+        <CardHeader className="text-right">
+          <div className="flex flex-row-reverse items-center justify-end gap-3">
+            <div className="p-2 bg-orange-500 rounded-lg">
+              <CreditCard className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <CardTitle>פרטי חשבון בנק</CardTitle>
+              <CardDescription>מידע חשבון לתשלומים</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-right block">בנק</Label>
+            <Select value={form.bankName} onValueChange={handleBankChange}>
+              <SelectTrigger className="text-right">
+                <SelectValue placeholder="בחר בנק" />
+              </SelectTrigger>
+              <SelectContent>
+                {banksList.map((bank) => (
+                  <SelectItem key={bank.code} value={bank.name}>{bank.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label className="text-right block">קוד בנק</Label>
+              <Input 
+                value={form.bankCode} 
+                className="text-right bg-muted"
+                dir="rtl"
+                disabled
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-right block">סניף</Label>
+              <Input 
+                value={form.bankBranch} 
+                onChange={(e) => setForm({ ...form, bankBranch: e.target.value })} 
+                className="text-right"
+                dir="rtl"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-right block">מספר חשבון</Label>
+              <Input 
+                value={form.bankAccount} 
+                onChange={(e) => setForm({ ...form, bankAccount: e.target.value })} 
+                className="text-right"
+                dir="rtl"
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* מידע נוסף */}
+      <Card className="border-2 border-pink-200 bg-gradient-to-br from-pink-50 to-white">
+        <CardHeader className="text-right">
+          <div className="flex flex-row-reverse items-center justify-end gap-3">
+            <div className="p-2 bg-pink-500 rounded-lg">
+              <FileText className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <CardTitle>מידע נוסף</CardTitle>
+              <CardDescription>הערות ומידע משלים</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            <Label className="text-right block">הערות</Label>
+            <Textarea 
+              value={form.notes} 
+              onChange={(e) => setForm({ ...form, notes: e.target.value })} 
+              className="text-right"
+              dir="rtl"
+              rows={4}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* כפתורי פעולה */}
+      <div className="flex gap-3 justify-start">
+        <Button onClick={save} disabled={!form.name.trim() || saving} className="gap-2">
+          {saving ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              שומר...
+            </>
+          ) : (
+            <>
+              <Save className="h-4 w-4" />
+              שמור שינויים
+            </>
+          )}
+        </Button>
+        <Button variant="outline" onClick={() => router.back()}>
+          ביטול
+        </Button>
+      </div>
+    </div>
+  )
+}

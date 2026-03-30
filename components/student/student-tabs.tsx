@@ -1,0 +1,996 @@
+"use client"
+
+import { useEffect } from "react"
+
+import { TableCell } from "@/components/ui/table"
+
+import { TableBody } from "@/components/ui/table"
+
+import { TableHead } from "@/components/ui/table"
+
+import { TableRow } from "@/components/ui/table"
+
+import { TableHeader } from "@/components/ui/table"
+
+import { Table } from "@/components/ui/table"
+
+import { useMemo, useState } from "react"
+import { Card } from "@/components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { BookOpen, Receipt, CalendarCheck, Plus, Loader2, User, Phone, CreditCard, Users, Heart } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { hasPermission } from "@/lib/permissions"
+import { useCurrentUser } from "@/lib/auth-context"
+
+type Course = {
+  id: string
+  name: string
+  duration?: number
+}
+
+type Enrollment = {
+  id: string
+  sessionsLeft?: number
+  status: string
+  joinedAt?: string
+  enrollmentDate?: string
+  courseName?: string
+  coursePrice?: number | null
+  course?: Course | null
+  createdByUserName?: string | null
+}
+
+type Payment = {
+  id: string
+  amount: number
+  status?: "PAID" | "PENDING" | "CANCELED"
+  paymentType?: string
+  paymentDate?: string
+  description?: string | null
+  createdByUserName?: string | null
+}
+
+type Attendance = {
+  id: string
+  date: string
+  status: string
+  courseName?: string | null
+  courseDuration?: number | null
+  courseId?: string
+  note?: string | null
+  createdByUserName?: string | null
+}
+
+function formatDate(dateString?: string) {
+  if (!dateString) return "-"
+  const d = new Date(dateString)
+  if (Number.isNaN(d.getTime())) return "-"
+  return new Intl.DateTimeFormat("he-IL").format(d)
+}
+
+function formatDateTime(dateString?: string) {
+  if (!dateString) return "-"
+  const d = new Date(dateString)
+  if (Number.isNaN(d.getTime())) return "-"
+  return new Intl.DateTimeFormat("he-IL", { dateStyle: "short", timeStyle: "short" }).format(d)
+}
+
+function paymentStatusHe(s: Payment["status"]) {
+  if (s === "PAID") return "שולם"
+  if (s === "PENDING") return "ממתין"
+  return "בוטל"
+}
+
+function paymentMethodHe(m?: string) {
+  switch (m?.toLowerCase()) {
+    case "cash":
+      return "מזומן"
+    case "credit":
+      return "אשראי"
+    case "transfer":
+    case "bank_transfer":
+      return "העברה בנקאית"
+    case "check":
+      return "שיק"
+    case "bit":
+      return "ביט"
+    case "paybox":
+      return "פייבוקס"
+    default:
+      return "מזומן"
+  }
+}
+
+function attendanceStatusHe(s: string) {
+  if (s === "present" || s === "PRESENT") return "נוכח"
+  if (s === "absent" || s === "ABSENT") return "נעדר"
+  if (s === "sick") return "חולה"
+  if (s === "vacation") return "חופש"
+  return s
+}
+
+type Student = {
+  id: string
+  name: string
+  email: string | null
+  phone: string | null
+  address: string | null
+  city: string | null
+  birthDate: string | null
+  idNumber: string | null
+  father: string | null
+  mother: string | null
+  additionalPhone: string | null
+  healthFund: string | null
+  allergies: string | null
+  status: string
+}
+
+function safeText(v: any) {
+  if (v === null || v === undefined || v === "") return "—"
+  return String(v)
+}
+
+export function StudentTabs({
+  studentId,
+  student,
+  enrollments,
+  payments,
+  attendances,
+  enrolledCourseNames = [],
+  onPaymentAdded,
+  isOwnProfile = false,
+}: {
+  studentId: string
+  student?: Student
+  enrollments: Enrollment[]
+  payments: Payment[]
+  attendances: Attendance[]
+  enrolledCourseNames?: string[]
+  onPaymentAdded?: () => void
+  /** כשהתלמיד צופה בפרופיל שלו – הרשאות מהכרטסת "הפרופיל שלי" */
+  isOwnProfile?: boolean
+}) {
+  const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false)
+  const [isAddingPayment, setIsAddingPayment] = useState(false)
+  const [paymentAmount, setPaymentAmount] = useState("")
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "credit" | "transfer" | "check" | "bit">("cash")
+  const [paymentDescription, setPaymentDescription] = useState("")
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split("T")[0])
+  const [cardLastDigits, setCardLastDigits] = useState("")
+  const [bankName, setBankName] = useState("")
+  const [bankBranch, setBankBranch] = useState("")
+  const [accountNumber, setAccountNumber] = useState("")
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null)
+  const [paymentType, setPaymentType] = useState<"payment" | "discount" | "credit">("payment")
+  const currentUser = useCurrentUser()
+
+  const isAdmin =
+    currentUser?.roleKey === "admin" ||
+    currentUser?.roleKey === "super_admin" ||
+    currentUser?.role === "Administrator" ||
+    currentUser?.role === "admin" ||
+    currentUser?.role === "אדמין" ||
+    currentUser?.role === "מנהל"
+  const userPerms = currentUser?.permissions || []
+  const roleKey = (currentUser?.roleKey || currentUser?.role)?.toString().toLowerCase()
+  const isTeacher = roleKey === "teacher"
+  const canSeeStudentFinancial = isAdmin || hasPermission(userPerms, "students.financial")
+  // מצב מיוחד: מורה בלי הרשאת כספים – רואה רק פרופיל + נוכחות (fallback אם אין הרשאות טאב)
+  const teacherLimitedView = isTeacher && !canSeeStudentFinancial
+  // בפרופיל שלי (תלמיד צופה בעצמו) – הרשאות מהכרטסת "הפרופיל שלי"; אחרת – מכרטסת תלמידים
+  const canTabProfile = isAdmin || (isOwnProfile ? hasPermission(userPerms, "myProfile.tab.profile") : hasPermission(userPerms, "students.tab.profile"))
+  const canTabGeneral = isAdmin || (isOwnProfile ? hasPermission(userPerms, "myProfile.tab.general") : hasPermission(userPerms, "students.tab.general"))
+  const canTabCourses = isAdmin || (isOwnProfile ? hasPermission(userPerms, "myProfile.tab.courses") : hasPermission(userPerms, "students.tab.courses"))
+  const canTabPayments = isAdmin || (isOwnProfile ? hasPermission(userPerms, "myProfile.tab.payments") : hasPermission(userPerms, "students.tab.payments"))
+  const canTabAttendance = isAdmin || (isOwnProfile ? hasPermission(userPerms, "myProfile.tab.attendance") : hasPermission(userPerms, "students.tab.attendance"))
+  const hasAnyTabPerm = canTabProfile || canTabGeneral || canTabCourses || canTabPayments || canTabAttendance
+  // בפרופיל שלי – רק הרשאות מפורשות (myProfile.tab.*); לא פרופיל שלי – כמו עד כה + fallback למורה
+  const showProfile = canTabProfile || (!isOwnProfile && ((!hasAnyTabPerm && !teacherLimitedView) || (!hasAnyTabPerm && isTeacher)))
+  const showGeneral = canTabGeneral || (!isOwnProfile && !hasAnyTabPerm && !teacherLimitedView)
+  const showCourses = canTabCourses || (!isOwnProfile && !hasAnyTabPerm && !teacherLimitedView)
+  const showPayments = canTabPayments || (!isOwnProfile && !hasAnyTabPerm && !teacherLimitedView)
+  const showAttendance = canTabAttendance || (!isOwnProfile && ((!hasAnyTabPerm && !teacherLimitedView) || (!hasAnyTabPerm && isTeacher)))
+  const canAddDiscount = isAdmin || hasPermission(userPerms, "cashier.discount")
+  const canAddCredit = isAdmin || hasPermission(userPerms, "cashier.credit")
+
+  const israeliBanks = [
+    "בנק לאומי",
+    "בנק הפועלים",
+    "בנק דיסקונט",
+    "בנק מזרחי טפחות",
+    "בנק מרכנתיל",
+    "בנק הבינלאומי הראשון",
+    "בנק אוצר החייל",
+    "בנק יהב",
+    "בנק ירושלים",
+    "בנק מסד",
+    "בנק הדואר",
+    "וואן זירו (ONE ZERO)",
+  ]
+
+  const paymentsSummary = useMemo(() => {
+    // Sum all payments (payments without status are considered paid)
+    const paid = payments.reduce((sum, p) => {
+      if (!p.status || p.status === "PAID") {
+        return sum + Number(p.amount)
+      }
+      return sum
+    }, 0)
+    // Calculate total course costs (charges) from enrollments
+    const charges = enrollments.reduce((sum, e) => sum + Number(e.coursePrice || 0), 0)
+    // Balance = paid - charges (negative means owes money, positive means credit)
+    const balance = paid - charges
+    return { paid, charges, balance }
+  }, [payments, enrollments])
+
+  // Filter attendances by selected course
+  const filteredAttendances = useMemo(() => {
+    if (!selectedCourseId) return attendances
+    return attendances.filter((a) => a.courseId === selectedCourseId)
+  }, [attendances, selectedCourseId])
+
+  // Calculate remaining sessions for a specific course
+  const getRemainingSessions = (courseId: string, totalSessions: number) => {
+    const presentCount = attendances.filter(
+      (a) => a.courseId === courseId && (a.status === "present" || a.status === "PRESENT")
+    ).length
+    return Math.max(0, totalSessions - presentCount)
+  }
+
+  // Calculate total paid amount (all payments for this student)
+  const totalPaidAmount = useMemo(() => {
+    return payments.reduce((sum, p) => {
+      if (!p.status || p.status === "PAID") {
+        return sum + Number(p.amount || 0)
+      }
+      return sum
+    }, 0)
+  }, [payments])
+
+  // Calculate total course prices
+  const totalCoursePrices = useMemo(() => {
+    return enrollments.reduce((sum, e: any) => sum + Number(e.coursePrice || 0), 0)
+  }, [enrollments])
+
+  // Calculate paid amount for a specific course (proportionally distributed)
+  const getPaidForCourse = (coursePrice: number) => {
+    if (totalCoursePrices === 0) return 0
+    // If only one course, all payments go to it
+    if (enrollments.length === 1) return totalPaidAmount
+    // Otherwise distribute proportionally based on course price
+    const proportion = coursePrice / totalCoursePrices
+    return Math.round(totalPaidAmount * proportion)
+  }
+
+  // Get selected course details from enrollment (flat structure)
+  const selectedCourse = useMemo(() => {
+    if (!selectedCourseId) return null
+    const enrollment = enrollments.find((e: any) => e.courseId === selectedCourseId || e.courseIdRef === selectedCourseId)
+    if (!enrollment) return null
+    return {
+      id: enrollment.courseId || enrollment.courseIdRef,
+      name: enrollment.courseName,
+      duration: enrollment.courseDuration,
+      price: enrollment.coursePrice
+    }
+  }, [enrollments, selectedCourseId])
+
+  const attendanceSummary = useMemo(() => {
+    // Count present attendance records (filtered by course if selected)
+    const present = filteredAttendances.filter((a) => a.status === "present" || a.status === "PRESENT").length
+    
+    // Calculate total sessions based on selected course or all courses
+    let totalSessions: number
+    if (selectedCourseId && selectedCourse) {
+      totalSessions = selectedCourse.duration || 0
+    } else {
+      // Sum duration from all enrolled courses (flat structure from API)
+      totalSessions = enrollments.reduce((sum, e: any) => {
+        const courseDuration = e.courseDuration || 0
+        return sum + courseDuration
+      }, 0)
+    }
+    
+    // Calculate remaining sessions (total - attended)
+    const remaining = Math.max(0, totalSessions - present)
+    
+    // Calculate attendance percentage
+    const percent = totalSessions === 0 ? 0 : Math.round((present / totalSessions) * 100)
+    
+    return { totalSessions, present, remaining, percent }
+  }, [filteredAttendances, enrollments, selectedCourseId, selectedCourse])
+
+  const handleAddPayment = async () => {
+    if (!paymentAmount || Number(paymentAmount) <= 0) return
+    if (paymentType === "payment" && paymentMethod === "credit" && cardLastDigits.length !== 4) return
+    if (paymentType === "payment" && (paymentMethod === "transfer" || paymentMethod === "check") && (!bankName || !bankBranch || !accountNumber)) return
+
+    if (paymentType === "discount" && !canAddDiscount) {
+      alert("נדרשת הרשאה להנחה (תשלומים). ניתן להפעיל בדף משתמשים → הרשאות.")
+      return
+    }
+    if (paymentType === "credit" && !canAddCredit) {
+      alert("נדרשת הרשאה לזיכוי (תשלומים). ניתן להפעיל בדף משתמשים → הרשאות.")
+      return
+    }
+
+    setIsAddingPayment(true)
+    try {
+      const response = await fetch("/api/payments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: Number(paymentAmount),
+          date: paymentDate,
+          paymentMethod: paymentType === "payment" ? paymentMethod : paymentType,
+          description: paymentDescription || (paymentType === "discount" ? "הנחה" : paymentType === "credit" ? "זיכוי" : ""),
+          studentId,
+          paymentType,
+          cardLastDigits: paymentType === "payment" && paymentMethod === "credit" ? cardLastDigits : undefined,
+          bankName: paymentType === "payment" && (paymentMethod === "transfer" || paymentMethod === "check") ? bankName : undefined,
+          bankBranch: paymentType === "payment" && (paymentMethod === "transfer" || paymentMethod === "check") ? bankBranch : undefined,
+          accountNumber: paymentType === "payment" && (paymentMethod === "transfer" || paymentMethod === "check") ? accountNumber : undefined,
+        }),
+      })
+
+      if (response.ok) {
+        // Reset form
+        setPaymentAmount("")
+        setPaymentMethod("cash")
+        setPaymentDescription("")
+        setPaymentDate(new Date().toISOString().split("T")[0])
+        setCardLastDigits("")
+        setBankName("")
+        setBankBranch("")
+        setAccountNumber("")
+        setPaymentType("payment")
+        setIsPaymentDialogOpen(false)
+        onPaymentAdded?.()
+      }
+    } catch (error) {
+      console.error("Failed to add payment:", error)
+    }
+    setIsAddingPayment(false)
+  }
+
+  const defaultTab = showProfile ? "profile" : showGeneral ? "general" : showCourses ? "courses" : showPayments ? "payments" : "attendance"
+  const tabCount = [showProfile, showGeneral, showCourses, showPayments, showAttendance].filter(Boolean).length
+
+  return (
+    <Tabs defaultValue={defaultTab} className="w-full" dir="rtl">
+      <TabsList className={`grid w-full grid-cols-${Math.min(tabCount, 5)}`} style={{ gridTemplateColumns: `repeat(${tabCount}, 1fr)` }}>
+        {showProfile && <TabsTrigger value="profile">פרופיל</TabsTrigger>}
+        {showGeneral && <TabsTrigger value="general">כללי</TabsTrigger>}
+        {showCourses && <TabsTrigger value="courses">קורסים</TabsTrigger>}
+        {showPayments && <TabsTrigger value="payments">תשלומים</TabsTrigger>}
+        {showAttendance && <TabsTrigger value="attendance">נוכחות</TabsTrigger>}
+      </TabsList>
+
+      {/* Profile Tab - All student details */}
+      {showProfile && (
+      <TabsContent value="profile" className="space-y-6 mt-6">
+        {/* Details Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Personal Info Card */}
+          <Card className="overflow-hidden border-2">
+            <CardHeader className="flex flex-row-reverse items-center justify-start gap-2 pb-4 bg-green-50/50 dark:bg-green-950/20">
+              <div className="p-2 bg-green-100 rounded-lg">
+                <CreditCard className="h-5 w-5 text-green-600" />
+              </div>
+              <CardTitle className="text-lg">מידע אישי</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-4">
+              <div className="flex flex-row-reverse justify-between items-center">
+                <span className="text-muted-foreground">תעודת זהות:</span>
+                <span className="font-medium">{safeText(student?.idNumber)}</span>
+              </div>
+              <div className="flex flex-row-reverse justify-between items-center">
+                <span className="text-muted-foreground">תאריך לידה:</span>
+                <span className="font-medium">{formatDate(student?.birthDate || undefined)}</span>
+              </div>
+              <div className="flex flex-row-reverse justify-between items-center">
+                <span className="text-muted-foreground">כתובת:</span>
+                <span className="font-medium">{safeText(student?.address)}</span>
+              </div>
+              <div className="flex flex-row-reverse justify-between items-center">
+                <span className="text-muted-foreground">עיר:</span>
+                <span className="font-medium">{safeText(student?.city)}</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Contact Info Card */}
+          <Card className="overflow-hidden border-2">
+            <CardHeader className="flex flex-row-reverse items-center justify-start gap-2 pb-4 bg-blue-50/50 dark:bg-blue-950/20">
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <Phone className="h-5 w-5 text-blue-600" />
+              </div>
+              <CardTitle className="text-lg">פרטי קשר</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-4">
+              <div className="flex flex-row-reverse justify-between items-center">
+                <span className="text-muted-foreground">טלפון:</span>
+                <span className="font-medium">{safeText(student?.phone)}</span>
+              </div>
+              <div className="flex flex-row-reverse justify-between items-center">
+                <span className="text-muted-foreground">אימייל:</span>
+                <span className="font-medium">{safeText(student?.email)}</span>
+              </div>
+              <div className="flex flex-row-reverse justify-between items-center">
+                <span className="text-muted-foreground">טלפון נוסף:</span>
+                <span className="font-medium">{safeText(student?.additionalPhone)}</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Parent Info Card */}
+          <Card className="overflow-hidden border-2">
+            <CardHeader className="flex flex-row-reverse items-center justify-start gap-2 pb-4 bg-emerald-50/50 dark:bg-emerald-950/20">
+              <div className="p-2 bg-emerald-100 rounded-lg">
+                <Users className="h-5 w-5 text-emerald-600" />
+              </div>
+              <CardTitle className="text-lg">פרטי הורים</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-4">
+              <div className="flex flex-row-reverse justify-between items-center">
+                <span className="text-muted-foreground">שם האב:</span>
+                <span className="font-medium">{safeText(student?.father)}</span>
+              </div>
+              <div className="flex flex-row-reverse justify-between items-center">
+                <span className="text-muted-foreground">שם האם:</span>
+                <span className="font-medium">{safeText(student?.mother)}</span>
+              </div>
+              <div className="flex flex-row-reverse justify-between items-center">
+                <span className="text-muted-foreground">טלפון הורה:</span>
+                <span className="font-medium">{safeText(student?.additionalPhone)}</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Medical Info Card */}
+          <Card className="overflow-hidden border-2">
+            <CardHeader className="flex flex-row-reverse items-center justify-start gap-2 pb-4 bg-red-50/50 dark:bg-red-950/20">
+              <div className="p-2 bg-red-100 rounded-lg">
+                <Heart className="h-5 w-5 text-red-600" />
+              </div>
+              <CardTitle className="text-lg">מידע רפואי</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-4">
+              <div className="flex flex-row-reverse justify-between items-center">
+                <span className="text-muted-foreground">קופת חולים:</span>
+                <span className="font-medium">{safeText(student?.healthFund)}</span>
+              </div>
+              <div className="flex flex-row-reverse justify-between items-center">
+                <span className="text-muted-foreground">רגישויות ואלרגיות:</span>
+                <span className="font-medium">{safeText(student?.allergies)}</span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Courses Card */}
+        <Card className="overflow-hidden border-2">
+          <CardHeader className="flex flex-row-reverse items-center justify-start gap-2 pb-4 bg-purple-50/50 dark:bg-purple-950/20">
+            <div className="p-2 bg-purple-100 rounded-lg">
+              <BookOpen className="h-5 w-5 text-purple-600" />
+            </div>
+            <CardTitle className="text-lg">קורסים משויכים</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            {enrolledCourseNames.length > 0 ? (
+              <div className="flex gap-2 flex-wrap">
+                {enrolledCourseNames.map((name, idx) => (
+                  <Badge key={idx} variant="outline" className="text-sm py-1.5 px-4 bg-purple-50 border-purple-200 text-purple-700 dark:bg-purple-950/30 dark:border-purple-800 dark:text-purple-300">
+                    {name}
+                  </Badge>
+                ))}
+              </div>
+            ) : (
+              <p className="text-muted-foreground">לא משויך לקורסים</p>
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
+      )}
+
+      {showGeneral && (
+      <TabsContent value="general" className="space-y-4 mt-6">
+        <Card className="p-5">
+          <div className="text-sm text-muted-foreground">סיכום מהיר</div>
+          <div className="mt-3 grid grid-cols-3 gap-3">
+            <div className="border rounded-lg p-4">
+              <div className="text-xs text-muted-foreground">קורסים פעילים</div>
+              <div className="text-2xl font-bold">{enrollments.length}</div>
+            </div>
+            <div className="border rounded-lg p-4">
+              <div className="text-xs text-muted-foreground">שולם</div>
+              <div className="text-2xl font-bold">{paymentsSummary.paid.toLocaleString()} ₪</div>
+            </div>
+            <div className="border rounded-lg p-4">
+              <div className="text-xs text-muted-foreground">נוכחות</div>
+              <div className="text-2xl font-bold">{attendanceSummary.percent}%</div>
+            </div>
+          </div>
+        </Card>
+      </TabsContent>
+      )}
+
+      {showCourses && (
+      <TabsContent value="courses" className="space-y-4 mt-6">
+        <div className="space-y-3">
+          <h4 className="font-semibold text-foreground text-lg">קורסים רשומים</h4>
+
+          {enrollments.length > 0 ? (
+            <Card className="overflow-hidden border-2">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50 hover:bg-muted/50">
+                    <TableHead className="text-right font-bold text-foreground">שם הקורס</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">תאריך הצטרפות</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">מחיר</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">שולם</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">יתרה</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">סה״כ מפגשים</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">יתרת מפגשים</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">סטטוס</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">בוצע על ידי</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {enrollments.map((enr) => {
+                    const courseId = enr.courseId || enr.courseIdRef
+                    const totalSessions = enr.courseDuration || 0
+                    const remainingSessions = getRemainingSessions(courseId, totalSessions)
+                    const coursePrice = Number(enr.coursePrice || 0)
+                    const paidAmount = getPaidForCourse(coursePrice)
+                    const balance = coursePrice - paidAmount
+                    
+                    return (
+                      <TableRow key={enr.id} className="hover:bg-muted/30">
+                        <TableCell className="font-semibold">{enr.courseName || "קורס לא ידוע"}</TableCell>
+                        <TableCell>{formatDate(enr.enrollmentDate || enr.joinedAt)}</TableCell>
+                        <TableCell className="font-medium">{coursePrice.toLocaleString()} ₪</TableCell>
+                        <TableCell>
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                            {paidAmount.toLocaleString()} ₪
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${
+                            balance > 0 
+                              ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                              : "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                          }`}>
+                            {balance.toLocaleString()} ₪
+                          </span>
+                        </TableCell>
+                        <TableCell className="font-medium">{totalSessions}</TableCell>
+                        <TableCell>
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
+                            {remainingSessions}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
+                            enr.status === "active" 
+                              ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                              : "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400"
+                          }`}>
+                            {enr.status === "active" ? "פעיל" : enr.status}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{enr.createdByUserName || "—"}</TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </Card>
+          ) : (
+            <Card className="p-8 text-center">
+              <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-2" />
+              <p className="text-muted-foreground">התלמיד אינו רשום לאף קורס כרגע</p>
+            </Card>
+          )}
+        </div>
+      </TabsContent>
+      )}
+
+      {showPayments && (
+      <TabsContent value="payments" className="space-y-4 mt-6">
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <Card className="p-4 bg-green-50 dark:bg-green-950/20 relative">
+            <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
+              <DialogTrigger asChild>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="absolute top-2 left-2 h-8 w-8 rounded-full bg-green-100 hover:bg-green-200 text-green-700"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md" dir="rtl">
+                <DialogHeader>
+                  <DialogTitle>הוספת תשלום חדש</DialogTitle>
+                  <DialogDescription>הזן את פרטי התשלום</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 mt-4">
+                  {/* Payment Type Selection */}
+                  <div className="space-y-2">
+                    <Label>סוג פעולה</Label>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant={paymentType === "payment" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setPaymentType("payment")}
+                        className={paymentType === "payment" ? "" : "bg-transparent"}
+                      >
+                        תשלום
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={paymentType === "discount" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setPaymentType("discount")}
+                        disabled={!canAddDiscount}
+                        className={paymentType === "discount" ? "bg-orange-500 hover:bg-orange-600" : "bg-transparent"}
+                        title={!canAddDiscount ? "נדרשת הרשאה 'הנחה (תשלומים)' בדף משתמשים" : ""}
+                      >
+                        הנחה
+                        {!canAddDiscount && <span className="mr-1 text-xs">(הרשאה)</span>}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={paymentType === "credit" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setPaymentType("credit")}
+                        disabled={!canAddCredit}
+                        className={paymentType === "credit" ? "bg-purple-500 hover:bg-purple-600" : "bg-transparent"}
+                        title={!canAddCredit ? "נדרשת הרשאה 'זיכוי (תשלומים)' בדף משתמשים" : ""}
+                      >
+                        זיכוי
+                        {!canAddCredit && <span className="mr-1 text-xs">(הרשאה)</span>}
+                      </Button>
+                    </div>
+                    {((paymentType === "discount" && !canAddDiscount) || (paymentType === "credit" && !canAddCredit)) && (
+                      <p className="text-xs text-red-500">ניתן להעניק הרשאות הנחה/זיכוי בדף משתמשים → עריכת משתמש → הרשאות (קופה)</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="payment-amount">סכום *</Label>
+                    <Input
+                      id="payment-amount"
+                      type="number"
+                      placeholder="0"
+                      value={paymentAmount}
+                      onChange={(e) => setPaymentAmount(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="payment-date">תאריך</Label>
+                    <Input
+                      id="payment-date"
+                      type="date"
+                      value={paymentDate}
+                      onChange={(e) => setPaymentDate(e.target.value)}
+                    />
+                  </div>
+
+                  {paymentType === "payment" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="payment-method">אמצעי תשלום</Label>
+                      <Select value={paymentMethod} onValueChange={(v: any) => setPaymentMethod(v)}>
+                        <SelectTrigger id="payment-method">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cash">מזומן</SelectItem>
+                          <SelectItem value="credit">אשראי</SelectItem>
+                          <SelectItem value="transfer">העברה בנקאית</SelectItem>
+                          <SelectItem value="check">שיק</SelectItem>
+                          <SelectItem value="bit">ביט</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {paymentType === "payment" && paymentMethod === "credit" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="card-digits">4 ספרות אחרונות של כרטיס *</Label>
+                      <Input
+                        id="card-digits"
+                        placeholder="1234"
+                        maxLength={4}
+                        value={cardLastDigits}
+                        onChange={(e) => setCardLastDigits(e.target.value.replace(/\D/g, ""))}
+                      />
+                    </div>
+                  )}
+
+                  {paymentType === "payment" && (paymentMethod === "transfer" || paymentMethod === "check") && (
+                    <div className="grid gap-3 grid-cols-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="bank-name">בנק *</Label>
+                        <Select value={bankName} onValueChange={setBankName}>
+                          <SelectTrigger id="bank-name">
+                            <SelectValue placeholder="בחר בנק" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {israeliBanks.map((bank) => (
+                              <SelectItem key={bank} value={bank}>
+                                {bank}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="bank-branch">סניף *</Label>
+                        <Input
+                          id="bank-branch"
+                          placeholder="מספר סניף"
+                          value={bankBranch}
+                          onChange={(e) => setBankBranch(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="account-number">מס' חשבון *</Label>
+                        <Input
+                          id="account-number"
+                          placeholder="מספר חשבון"
+                          value={accountNumber}
+                          onChange={(e) => setAccountNumber(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="payment-description">תיאור</Label>
+                    <Input
+                      id="payment-description"
+                      placeholder="תיאור התשלום (אופציונלי)"
+                      value={paymentDescription}
+                      onChange={(e) => setPaymentDescription(e.target.value)}
+                    />
+                  </div>
+
+                  <Button
+                    onClick={handleAddPayment}
+                    disabled={isAddingPayment || !paymentAmount || (paymentType === "discount" && !canAddDiscount) || (paymentType === "credit" && !canAddCredit)}
+                    className={`w-full ${paymentType === "discount" ? "bg-orange-500 hover:bg-orange-600" : paymentType === "credit" ? "bg-purple-500 hover:bg-purple-600" : ""}`}
+                  >
+                    {isAddingPayment ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin ml-2" />
+                        שומר...
+                      </>
+                    ) : (
+                      paymentType === "payment" ? "הוסף תשלום" : paymentType === "discount" ? "הוסף הנחה" : "הוסף זיכוי"
+                    )}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-green-600 font-bold">₪</span>
+              <p className="text-xs text-green-700 dark:text-green-400">שולם</p>
+            </div>
+            <p className="text-2xl font-bold text-green-700 dark:text-green-400">{paymentsSummary.paid.toLocaleString()} ₪</p>
+          </Card>
+
+          <Card className="p-4 bg-orange-50 dark:bg-orange-950/20">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-orange-600 font-bold">₪</span>
+              <p className="text-xs text-orange-700 dark:text-orange-400">חיובים</p>
+            </div>
+            <p className="text-2xl font-bold text-orange-700 dark:text-orange-400">{paymentsSummary.charges.toLocaleString()} ₪</p>
+          </Card>
+
+          <Card className={`p-4 ${paymentsSummary.balance >= 0 ? "bg-green-50 dark:bg-green-950/20" : "bg-red-50 dark:bg-red-950/20"}`}>
+            <div className="flex items-center gap-2 mb-2">
+              <span className={`font-bold ${paymentsSummary.balance >= 0 ? "text-green-600" : "text-red-600"}`}>₪</span>
+              <p className={`text-xs ${paymentsSummary.balance >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}`}>יתרה</p>
+            </div>
+            <p className={`text-2xl font-bold ${paymentsSummary.balance >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}`}>
+              {paymentsSummary.balance.toLocaleString()} ₪
+            </p>
+          </Card>
+        </div>
+
+        <div className="space-y-3">
+          <h4 className="font-semibold text-foreground text-lg">היסטוריית תשלומים</h4>
+
+          {payments.length > 0 ? (
+            <Card className="overflow-hidden border-2">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50 hover:bg-muted/50">
+                    <TableHead className="text-right font-bold text-foreground">תאריך</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">סוג</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">סכום</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">אמצעי תשלום</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">הערה</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">סטטוס</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">בוצע על ידי</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {payments.map((p) => {
+                    const isDiscount = p.paymentType === "discount"
+                    const isCredit = p.paymentType === "credit"
+                    const typeLabel = isDiscount ? "הנחה" : isCredit ? "זיכוי" : "תשלום"
+                    const typeStyle = isDiscount 
+                      ? "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400"
+                      : isCredit 
+                        ? "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400"
+                        : "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
+                    
+                    return (
+                      <TableRow key={p.id} className="hover:bg-muted/30">
+                        <TableCell className="font-medium">{formatDate(p.paymentDate)}</TableCell>
+                        <TableCell>
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${typeStyle}`}>
+                            {typeLabel}
+                          </span>
+                        </TableCell>
+                        <TableCell className={`font-bold ${isDiscount || isCredit ? "text-orange-600" : "text-primary"}`}>
+                          {Number(p.amount).toLocaleString()} ₪
+                        </TableCell>
+                        <TableCell>{isDiscount || isCredit ? "—" : paymentMethodHe(p.paymentType)}</TableCell>
+                        <TableCell className="text-muted-foreground">{p.description || "—"}</TableCell>
+                        <TableCell>
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                            {isDiscount ? "אושר" : isCredit ? "זוכה" : "שולם"}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{p.createdByUserName || "—"}</TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </Card>
+          ) : (
+            <Card className="p-8 text-center">
+              <Receipt className="h-12 w-12 text-muted-foreground mx-auto mb-2" />
+              <p className="text-muted-foreground">אין תשלומים לתלמיד הזה עדיין</p>
+            </Card>
+          )}
+        </div>
+      </TabsContent>
+      )}
+
+      {showAttendance && (
+      <TabsContent value="attendance" className="space-y-4 mt-6">
+        {/* Course Selection Dropdown */}
+        <div className="flex items-center gap-3 mb-4">
+          <span className="text-sm text-muted-foreground">סנן לפי קורס:</span>
+          <Select 
+            value={selectedCourseId || "all"} 
+            onValueChange={(value) => setSelectedCourseId(value === "all" ? null : value)}
+          >
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="כל הקורסים" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">כל הקורסים</SelectItem>
+              {enrollments.map((enr: any) => {
+                const courseId = enr.courseId || enr.courseIdRef
+                return (
+                  <SelectItem key={courseId || enr.id} value={courseId || enr.id}>
+                    {enr.courseName || "קורס"}
+                  </SelectItem>
+                )
+              })}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Course Info Header */}
+        {selectedCourse && (
+          <Card className="p-4 bg-primary/5 border-primary/20 mb-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-semibold text-primary">{selectedCourse.name}</h4>
+                <p className="text-sm text-muted-foreground">מספר מפגשים בקורס: {selectedCourse.duration || 0}</p>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <Card className="p-4 bg-green-50 dark:bg-green-950/20">
+            <div className="flex items-center gap-2 mb-2">
+              <CalendarCheck className="h-4 w-4 text-green-600" />
+              <p className="text-xs text-green-700 dark:text-green-400">נוכחות</p>
+            </div>
+            <p className="text-2xl font-bold text-green-700 dark:text-green-400">{attendanceSummary.percent}%</p>
+          </Card>
+
+          <Card className="p-4 bg-blue-50 dark:bg-blue-950/20">
+            <div className="flex items-center gap-2 mb-2">
+              <CalendarCheck className="h-4 w-4 text-blue-600" />
+              <p className="text-xs text-blue-700 dark:text-blue-400">מפגשים</p>
+            </div>
+            <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">
+              {attendanceSummary.present}/{attendanceSummary.totalSessions}
+            </p>
+          </Card>
+
+          <Card className="p-4 bg-orange-50 dark:bg-orange-950/20">
+            <div className="flex items-center gap-2 mb-2">
+              <CalendarCheck className="h-4 w-4 text-orange-600" />
+              <p className="text-xs text-orange-700 dark:text-orange-400">יתרת מפגשים</p>
+            </div>
+            <p className="text-2xl font-bold text-orange-700 dark:text-orange-400">{attendanceSummary.remaining}</p>
+          </Card>
+        </div>
+
+        <div className="space-y-3">
+          <h4 className="font-semibold text-foreground text-lg">רשומות נוכחות</h4>
+
+          {filteredAttendances.length > 0 ? (
+            <Card className="overflow-hidden border-2">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50 hover:bg-muted/50">
+                    <TableHead className="text-right font-bold text-foreground">תאריך</TableHead>
+                    {!selectedCourseId && <TableHead className="text-right font-bold text-foreground">קורס</TableHead>}
+                    <TableHead className="text-right font-bold text-foreground">הערה</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">סטטוס</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">בוצע על ידי</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredAttendances.map((a) => {
+                    const isPresent = a.status === "present" || a.status === "PRESENT"
+                    const statusStyle = isPresent
+                      ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                      : a.status === "sick"
+                        ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
+                        : a.status === "vacation"
+                          ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
+                          : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                    
+                    return (
+                      <TableRow key={a.id} className="hover:bg-muted/30">
+                        <TableCell className="font-medium">{formatDateTime(a.date)}</TableCell>
+                        {!selectedCourseId && <TableCell>{a.courseName || "—"}</TableCell>}
+                        <TableCell className="text-muted-foreground">{a.note || "—"}</TableCell>
+                        <TableCell>
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${statusStyle}`}>
+                            {attendanceStatusHe(a.status)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{a.createdByUserName || "—"}</TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </Card>
+          ) : (
+            <Card className="p-8 text-center">
+              <CalendarCheck className="h-12 w-12 text-muted-foreground mx-auto mb-2" />
+              <p className="text-muted-foreground">אין נוכחות לתלמיד הזה עדיין</p>
+            </Card>
+          )}
+        </div>
+      </TabsContent>
+      )}
+    </Tabs>
+  )
+}

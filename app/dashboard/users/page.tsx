@@ -1,0 +1,789 @@
+"use client"
+
+import { useEffect, useMemo, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
+import {
+  ArrowRight,
+  UserPlus,
+  Edit,
+  Trash2,
+  Power,
+  Lock,
+  BookOpen,
+  GraduationCap,
+  School,
+  User as UserIcon,
+  FileText,
+  Rocket,
+  BarChart,
+  DollarSign,
+  Calendar,
+  ClipboardCheck,
+  Settings,
+  Users,
+} from "lucide-react"
+
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
+import { PERMISSION_CATEGORIES, type PermissionCategory, ROLE_PRESETS, type RoleType, getRoleById } from "@/lib/permissions"
+import { PageHeader } from "@/components/page-header"
+import { useLanguage } from "@/lib/i18n/context"
+
+type User = {
+  id: string
+  name: string
+  username?: string
+  email: string
+  phone?: string | null
+  status: "active" | "disabled"
+  role?: RoleType
+  permissions?: string[]
+  createdAt: string
+}
+
+const categoryIcons: Record<string, any> = {
+  courses: BookOpen,
+  students: GraduationCap,
+  schools: School,
+  teachers: UserIcon,
+  registration: FileText,
+  gafan: Rocket,
+  reports: BarChart,
+  cashier: DollarSign,
+  schedule: Calendar,
+  attendance: ClipboardCheck,
+  settings: Settings,
+  users: Users,
+  myProfile: UserIcon,
+}
+
+const colorClasses: Record<string, string> = {
+  blue: "bg-blue-50 border-blue-200",
+  pink: "bg-pink-50 border-pink-200",
+  orange: "bg-orange-50 border-orange-200",
+  green: "bg-green-50 border-green-200",
+  cyan: "bg-cyan-50 border-cyan-200",
+  rose: "bg-rose-50 border-rose-200",
+  yellow: "bg-yellow-50 border-yellow-200",
+  emerald: "bg-emerald-50 border-emerald-200",
+  sky: "bg-sky-50 border-sky-200",
+  purple: "bg-purple-50 border-purple-200",
+  slate: "bg-slate-50 border-slate-200",
+  indigo: "bg-indigo-50 border-indigo-200",
+  violet: "bg-violet-50 border-violet-200",
+}
+
+export default function UsersPage() {
+  const router = useRouter()
+
+  const [users, setUsers] = useState<User[]>([])
+  const [loading, setLoading] = useState(true)
+  const { t } = useLanguage()
+  const [q, setQ] = useState("")
+  const [statusFilter, setStatusFilter] = useState<"__all__" | "active" | "disabled">("__all__")
+
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [editingUser, setEditingUser] = useState<User | null>(null)
+
+  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false)
+  const [passwordInput, setPasswordInput] = useState("")
+  const [pendingAction, setPendingAction] = useState<{ type: "edit" | "toggle" | "delete"; user: User } | null>(null)
+
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    username: "",
+    password: "",
+  })
+
+  const [selectedRole, setSelectedRole] = useState<RoleType>("other")
+  const [selectedPermissions, setSelectedPermissions] = useState<string[]>([])
+  const selectedPermissionsRef = useRef<string[]>([])
+  useEffect(() => {
+    selectedPermissionsRef.current = selectedPermissions
+  }, [selectedPermissions])
+
+  // פונקציה לשינוי תפקיד ומילוי הרשאות אוטומטי — רק כשעוברים לתפקיד *אחר*, כדי לא לדרוס שינויים ידניים בצ'קבוקסים
+  const handleRoleChange = (roleId: RoleType) => {
+    if (roleId === selectedRole) return
+    setSelectedRole(roleId)
+    const role = getRoleById(roleId)
+    if (role) {
+      setSelectedPermissions([...role.permissions])
+    }
+  }
+
+  const isAdminUser = (u: User) => u.email === "admin@test.com"
+
+  const [noPermission, setNoPermission] = useState(false)
+
+  async function loadUsers() {
+    const params = new URLSearchParams()
+    if (q.trim()) params.set("q", q.trim())
+    if (statusFilter !== "__all__") params.set("status", statusFilter)
+
+    const res = await fetch(`/api/users?${params.toString()}`, { cache: "no-store" })
+    if (res.status === 403) {
+      const data = await res.json().catch(() => ({})) as { error?: string }
+      if (data?.error === "TENANT_MISMATCH") {
+        window.location.href = "/login?reason=tenant_mismatch"
+        return
+      }
+      setNoPermission(true)
+      setUsers([])
+      return
+    }
+    if (!res.ok) throw new Error("Failed to load users")
+    const data = (await res.json()) as User[]
+    setUsers(data)
+  }
+
+  useEffect(() => {
+    ;(async () => {
+      try {
+        setLoading(true)
+        await loadUsers()
+      } catch (e) {
+        console.error(e)
+        alert(t("errors.loadUsers"))
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [])
+
+  useEffect(() => {
+    if (loading) return
+    const t = setTimeout(() => {
+      loadUsers().catch((e) => console.error(e))
+    }, 350)
+    return () => clearTimeout(t)
+  }, [q, statusFilter])
+
+  function resetForm() {
+    setFormData({ name: "", email: "", phone: "", username: "", password: "" })
+    setSelectedRole("other")
+    setSelectedPermissions([])
+    setEditingUser(null)
+  }
+
+  function openCreate() {
+    resetForm()
+    setIsDialogOpen(true)
+  }
+
+  async function openEdit(user: User & { username?: string }) {
+    setEditingUser(user)
+    setFormData({
+      name: user.name ?? "",
+      email: user.email ?? "",
+      phone: user.phone ?? "",
+      username: user.username ?? "",
+      password: "",
+    })
+    const role = (user.role as RoleType) || "other"
+    setSelectedRole(role)
+    const dbPerms = Array.isArray(user.permissions) ? user.permissions : []
+    if (dbPerms.length > 0) {
+      setSelectedPermissions(dbPerms)
+    } else {
+      const preset = getRoleById(role)
+      setSelectedPermissions(preset ? [...preset.permissions] : [])
+    }
+    setIsDialogOpen(true)
+    if (user.id) {
+      try {
+        const res = await fetch(`/api/users/${user.id}`, { cache: "no-store" })
+        if (res.ok) {
+          const data = (await res.json()) as User & { permissions?: string[]; role?: string }
+          setFormData({
+            name: data.name ?? "",
+            email: data.email ?? "",
+            phone: data.phone ?? "",
+            username: data.username ?? "",
+            password: "",
+          })
+          const freshRole = (data.role as RoleType) || "other"
+          setSelectedRole(freshRole)
+          const freshPerms = Array.isArray(data.permissions) ? data.permissions : []
+          if (freshPerms.length > 0) {
+            setSelectedPermissions(freshPerms)
+          } else {
+            const preset = getRoleById(freshRole)
+            setSelectedPermissions(preset ? [...preset.permissions] : [])
+          }
+          setEditingUser(data)
+        }
+      } catch (_) {}
+    }
+  }
+
+  async function createUser() {
+    const name = formData.name.trim()
+    const email = formData.email.trim()
+    const username = formData.username.trim()
+    const password = formData.password
+
+    if (!name || !email) {
+      alert("יש למלא שם ואימייל")
+      return
+    }
+
+    if (!username || !password) {
+      alert("יש למלא שם משתמש וסיסמה")
+      return
+    }
+
+    if (password.length < 4) {
+      alert("הסיסמה חייבת להכיל לפחות 4 תווים")
+      return
+    }
+
+    const res = await fetch("/api/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name,
+        email,
+        username,
+        password,
+        phone: formData.phone.trim() || null,
+        role: selectedRole,
+        permissions: selectedPermissions,
+        status: "active",
+      }),
+    })
+
+    if (res.status === 409) {
+      alert("האימייל כבר קיים")
+      return
+    }
+    if (!res.ok) {
+      alert("שגיאה ביצירת משתמש")
+      return
+    }
+
+    setIsDialogOpen(false)
+    resetForm()
+    await loadUsers()
+  }
+
+  async function updateUser(id: string) {
+    const name = formData.name?.trim()
+    const email = formData.email?.trim()
+    const username = formData.username?.trim()
+    if (!name || !email) {
+      alert("יש למלא שם מלא ואימייל")
+      return
+    }
+    if (!username) {
+      alert("יש למלא שם משתמש")
+      return
+    }
+    const permsToSave = selectedPermissionsRef.current.length ? selectedPermissionsRef.current : selectedPermissions
+    const payload: Record<string, unknown> = {
+      name,
+      email: email || null,
+      username,
+      phone: formData.phone?.trim() || null,
+      role: selectedRole,
+      permissions: permsToSave,
+    }
+    if (formData.password && formData.password.trim().length >= 4) {
+      payload.password = formData.password.trim()
+    }
+    const res = await fetch(`/api/users/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      const msg = typeof data?.error === "string" && data.error.startsWith("errors.") ? t(data.error) : (data?.error || t("errors.updateUser"))
+      alert(msg)
+      return
+    }
+
+    const updated = data as User & { permissions?: string[]; role?: string }
+    const savedPerms = Array.isArray(updated.permissions) ? updated.permissions : (updated.permissions ?? [])
+    setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, ...updated, permissions: savedPerms } : u)))
+    setIsDialogOpen(false)
+    resetForm()
+    setEditingUser(null)
+    await loadUsers()
+    alert("ההרשאות והפרטים נשמרו בהצלחה.")
+  }
+
+  async function toggleUser(user: User) {
+    const nextStatus = user.status === "active" ? "disabled" : "active"
+
+    const res = await fetch(`/api/users/${user.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: nextStatus }),
+    })
+
+    if (!res.ok) {
+      alert("שגיאה בעדכון סטטוס משתמש")
+      return
+    }
+    await loadUsers()
+  }
+
+  async function deleteUser(user: User) {
+    const res = await fetch(`/api/users/${user.id}`, {
+      method: "DELETE",
+    })
+
+    if (!res.ok) {
+      alert("שגיאה במחיקת משתמש")
+      return
+    }
+    await loadUsers()
+  }
+
+  function requireAdminPassword(action: { type: "edit" | "toggle" | "delete"; user: User }) {
+    setPendingAction(action)
+    setIsPasswordDialogOpen(true)
+  }
+
+  function verifySuperAdminPassword() {
+    if (passwordInput === "admin123") {
+      setIsPasswordDialogOpen(false)
+      setPasswordInput("")
+
+      if (pendingAction) {
+        if (pendingAction.type === "edit") openEdit(pendingAction.user)
+        if (pendingAction.type === "toggle") toggleUser(pendingAction.user).catch(console.error)
+        if (pendingAction.type === "delete") deleteUser(pendingAction.user).catch(console.error)
+      }
+      setPendingAction(null)
+    } else {
+      alert("סיסמה שגויה")
+      setPasswordInput("")
+    }
+  }
+
+  const MUTUAL_EXCLUSIVE_HOME_PROFILE = ["nav.myProfile", "settings.home"] as const
+
+  function togglePermission(permissionId: string) {
+    setSelectedPermissions((prev) => {
+      const arr = Array.isArray(prev) ? prev : []
+      const isAdding = !arr.includes(permissionId)
+      let next = isAdding ? [...arr, permissionId] : arr.filter((p) => p !== permissionId)
+      if (isAdding && MUTUAL_EXCLUSIVE_HOME_PROFILE.includes(permissionId as any)) {
+        next = next.filter((p) => !MUTUAL_EXCLUSIVE_HOME_PROFILE.includes(p as any) || p === permissionId)
+      }
+      return next
+    })
+  }
+
+  function toggleCategoryAll(category: PermissionCategory) {
+    const categoryPermissionIds = category.permissions.map((p) => p.id)
+    const current = Array.isArray(selectedPermissions) ? selectedPermissions : []
+    const allSelected = categoryPermissionIds.every((id) => current.includes(id))
+
+    if (allSelected) {
+      setSelectedPermissions(current.filter((p) => !categoryPermissionIds.includes(p)))
+    } else {
+      let next = [...new Set([...current, ...categoryPermissionIds])]
+      if (category.id === "myProfile" && categoryPermissionIds.includes("nav.myProfile")) {
+        next = next.filter((p) => p !== "settings.home")
+      }
+      if (category.id === "settings" && categoryPermissionIds.includes("settings.home")) {
+        next = next.filter((p) => p !== "nav.myProfile")
+      }
+      setSelectedPermissions(next)
+    }
+  }
+
+  const filteredCount = useMemo(() => users.length, [users])
+
+  if (noPermission) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6" dir="rtl">
+        <Card className="max-w-md w-full text-center">
+          <CardHeader>
+            <CardTitle className="text-lg text-red-600">אין הרשאה</CardTitle>
+            <CardDescription>אין לך הרשאה לצפות בדף המשתמשים. פנה למנהל המערכת.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" onClick={() => router.push("/dashboard")}>חזרה לדף הבית</Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-6" dir="rtl">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="mr-2 inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900"
+          >
+            <ArrowRight className="h-4 w-4" />
+            חזרה
+          </button>
+          <PageHeader title="משתמשים" description="ניהול משתמשים והרשאות" />
+        </div>
+
+          <Button className="gap-2" onClick={openCreate}>
+            <UserPlus className="h-4 w-4" />
+            הוסף משתמש
+          </Button>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">סינון וחיפוש</CardTitle>
+            <CardDescription>חיפוש לפי שם/אימייל/טלפון וסינון לפי סטטוס</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3 md:flex-row md:items-end">
+            <div className="flex-1 space-y-2">
+              <Label>חיפוש</Label>
+              <Input value={q ?? ""} onChange={(e) => setQ(e.target.value)} placeholder="חפש משתמש..." />
+            </div>
+
+            <div className="w-full md:w-64 space-y-2">
+              <Label>סטטוס</Label>
+              <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="הכל" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">הכל</SelectItem>
+                  <SelectItem value="active">פעיל</SelectItem>
+                  <SelectItem value="disabled">מושבת</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="text-sm text-gray-600 pt-2 md:pt-0">
+              {loading ? "טוען..." : `${filteredCount} משתמשים`}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>רשימת משתמשים</CardTitle>
+            <CardDescription>עריכה: טלפון + הרשאות | פעולה: השבת/הפעל/מחק. לכניסה למערכת: הזן את &quot;שם משתמש&quot; או אימייל + סיסמה.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="py-10 text-center text-gray-500">טוען...</div>
+            ) : users.length === 0 ? (
+              <div className="py-10 text-center text-gray-500">אין משתמשים</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>שם</TableHead>
+                    <TableHead title="לכניסה למערכת יש להזין שם משתמש או אימייל">שם משתמש</TableHead>
+                    <TableHead>אימייל</TableHead>
+                    <TableHead>טלפון</TableHead>
+                    <TableHead>הרשאות</TableHead>
+                    <TableHead>סטטוס</TableHead>
+                    <TableHead>נוצר</TableHead>
+                    <TableHead>פעולות</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {users.map((u) => (
+                    <TableRow key={u.id}>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          {isAdminUser(u) && <Lock className="h-4 w-4 text-purple-600" />}
+                          {u.name}
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-mono text-sm text-indigo-600" title="לכניסה: הזן ערך זה בשדה שם משתמש">
+                        {u.username ?? "—"}
+                      </TableCell>
+                      <TableCell>{u.email}</TableCell>
+                      <TableCell>{u.phone || "—"}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{u.permissions?.length || 0} הרשאות</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          className={u.status === "active" ? "bg-emerald-600 text-white" : "bg-gray-400 text-white"}
+                        >
+                          {u.status === "active" ? "פעיל" : "מושבת"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-gray-600">
+                        {new Date(u.createdAt).toLocaleDateString("he-IL")}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            title={isAdminUser(u) ? "דורש אימות" : "ערוך"}
+                            onClick={() =>
+                              isAdminUser(u) ? requireAdminPassword({ type: "edit", user: u }) : openEdit(u)
+                            }
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            title={u.status === "active" ? "השבת" : "הפעל"}
+                            onClick={() =>
+                              isAdminUser(u)
+                                ? requireAdminPassword({ type: "toggle", user: u })
+                                : toggleUser(u).catch(console.error)
+                            }
+                          >
+                            {u.status === "active" ? (
+                              <Power className="h-4 w-4 text-orange-600" />
+                            ) : (
+                              <Power className="h-4 w-4 text-emerald-600" />
+                            )}
+                          </Button>
+
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            title="מחק"
+                            onClick={() =>
+                              isAdminUser(u)
+                                ? requireAdminPassword({ type: "delete", user: u })
+                                : deleteUser(u).catch(console.error)
+                            }
+                          >
+                            <Trash2 className="h-4 w-4 text-red-600" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        <Dialog
+          open={isDialogOpen}
+          onOpenChange={(open) => {
+            setIsDialogOpen(open)
+            if (!open) resetForm()
+          }}
+        >
+          <DialogContent className="!max-w-[1400px] w-[98vw] max-h-[90vh] overflow-y-auto sm:!max-w-[1400px]" dir="rtl">
+            <DialogHeader>
+              <DialogTitle>{editingUser ? "עריכת משתמש" : "משתמש חדש"}</DialogTitle>
+              <DialogDescription>
+                {editingUser ? "הגדר את פרטי המשתמש והרשאותיו במערכת" : "יצירת משתמש חדש (שם + אימייל חובה)"}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-6">
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <div className="space-y-2">
+                  <Label>שם מלא *</Label>
+                  <Input
+                    value={formData.name ?? ""}
+                    onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
+                    placeholder="הזן שם מלא"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>אימייל *</Label>
+                  <Input
+                    type="email"
+                    value={formData.email ?? ""}
+                    onChange={(e) => setFormData((p) => ({ ...p, email: e.target.value }))}
+                    placeholder="example@email.com"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>טלפון</Label>
+                  <Input
+                    value={formData.phone ?? ""}
+                    onChange={(e) => setFormData((p) => ({ ...p, phone: e.target.value }))}
+                    placeholder="מספר טלפון"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>שם משתמש *</Label>
+                  <Input
+                    value={formData.username ?? ""}
+                    onChange={(e) => setFormData((p) => ({ ...p, username: e.target.value }))}
+                    placeholder="שם משתמש להתחברות"
+                    dir="ltr"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{editingUser ? "סיסמה חדשה" : "סיסמה *"}</Label>
+                  <Input
+                    type="password"
+                    value={formData.password ?? ""}
+                    onChange={(e) => setFormData((p) => ({ ...p, password: e.target.value }))}
+                    placeholder={editingUser ? "השאר ריק לשמירת הסיסמה הנוכחית" : "סיסמה (לפחות 4 תווים)"}
+                    dir="ltr"
+                  />
+                </div>
+              </div>
+
+              {/* בחירת תפקיד */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label className="text-lg font-semibold">תפקיד</Label>
+                  <span className="text-sm text-muted-foreground">מעבר לתפקיד אחר ממלא הרשאות אוטומטית. שינויים בצ'קבוקסים נשמרים בלחיצה על שמור.</span>
+                </div>
+                <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-6">
+                  {ROLE_PRESETS.map((role) => (
+                    <div
+                      key={role.id}
+                      onClick={() => handleRoleChange(role.id)}
+                      className={`cursor-pointer rounded-xl border-2 p-4 text-center transition-all hover:shadow-md ${
+                        selectedRole === role.id
+                          ? "border-primary bg-primary/10 shadow-md"
+                          : "border-border hover:border-primary/50"
+                      }`}
+                    >
+                      <div className="font-semibold text-base">{role.name}</div>
+                      <div className="text-xs text-muted-foreground mt-1 line-clamp-2">{role.description}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label className="text-lg font-semibold">הרשאות</Label>
+                  <Badge variant="outline">{selectedPermissions.length} הרשאות נבחרו</Badge>
+                </div>
+
+                <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {PERMISSION_CATEGORIES.map((category) => {
+                    const Icon = categoryIcons[category.id]
+                    const allSelected = category.permissions.every((p) => selectedPermissions.includes(p.id))
+
+                    return (
+                      <Card
+                        key={category.id}
+                        className={`${colorClasses[category.color] || "bg-gray-50 border-gray-200"} border-2 min-w-[200px]`}
+                      >
+                        <CardHeader className="pb-4 px-5">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-3">
+                              <Icon className="h-6 w-6 flex-shrink-0" />
+                              <CardTitle className="text-lg font-semibold">{category.name}</CardTitle>
+                            </div>
+                            <Badge
+                              variant="secondary"
+                              className="text-sm cursor-pointer flex-shrink-0 px-3 py-1"
+                              onClick={() => toggleCategoryAll(category)}
+                            >
+                              {allSelected ? "ביטול" : "הכל"}
+                            </Badge>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-5 px-5">
+                          {category.permissions.map((perm) => (
+                            <div key={perm.id} className="flex items-start gap-4 p-2 rounded-lg hover:bg-black/5 transition-colors">
+                              <Checkbox
+                                id={perm.id}
+                                checked={selectedPermissions.includes(perm.id)}
+                                onCheckedChange={() => togglePermission(perm.id)}
+                                className="mt-1 flex-shrink-0 h-5 w-5"
+                              />
+                              <div className="grid gap-2 leading-none min-w-0 flex-1">
+                                <label htmlFor={perm.id} className="text-base font-medium leading-tight cursor-pointer">
+                                  {perm.name}
+                                </label>
+                                <p className="text-sm text-muted-foreground leading-relaxed">{perm.description}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <Button
+                className="w-full"
+                size="lg"
+                onClick={() => (editingUser ? updateUser(editingUser.id) : createUser())}
+              >
+                {editingUser ? "שמור שינויים" : "צור משתמש"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <AlertDialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
+          <AlertDialogContent dir="rtl">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <Lock className="h-5 w-5 text-purple-600" />
+                אימות סיסמה
+              </AlertDialogTitle>
+              <AlertDialogDescription>פעולה על ADMIN מוגנת. הזן סיסמה כדי להמשיך.</AlertDialogDescription>
+            </AlertDialogHeader>
+
+            <div className="space-y-2 py-2">
+              <Label>סיסמת ADMIN</Label>
+              <Input
+                type="password"
+                value={passwordInput ?? ""}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                placeholder="admin123"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") verifySuperAdminPassword()
+                }}
+              />
+            </div>
+
+            <AlertDialogFooter>
+              <AlertDialogCancel
+                onClick={() => {
+                  setPasswordInput("")
+                  setPendingAction(null)
+                }}
+              >
+                ביטול
+              </AlertDialogCancel>
+              <AlertDialogAction onClick={verifySuperAdminPassword}>אמת</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    </div>
+  )
+}
