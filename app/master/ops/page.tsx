@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { Suspense, useCallback, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useT } from "@/lib/master-i18n"
 
@@ -123,7 +123,7 @@ function MigrationBanner({
   )
 }
 
-export default function OpsPage() {
+function OpsPageContent() {
   const { t } = useT()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -597,5 +597,13 @@ export default function OpsPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function OpsPage() {
+  return (
+    <Suspense fallback={null}>
+      <OpsPageContent />
+    </Suspense>
   )
 }
