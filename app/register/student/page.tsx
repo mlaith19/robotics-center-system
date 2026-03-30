@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { Suspense, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { User, Phone, Mail, Loader2, CheckCircle, Users, Heart } from "lucide-react"
 
-export default function RegisterStudentPage() {
+function RegisterStudentContent() {
   const searchParams = useSearchParams()
   const [name, setName] = useState("")
   const [idNumber, setIdNumber] = useState("")
@@ -286,5 +286,13 @@ export default function RegisterStudentPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function RegisterStudentPage() {
+  return (
+    <Suspense fallback={null}>
+      <RegisterStudentContent />
+    </Suspense>
   )
 }
