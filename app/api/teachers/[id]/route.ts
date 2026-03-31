@@ -3,15 +3,23 @@ import bcrypt from "bcryptjs"
 import { requireFeatureFromRequest } from "@/lib/feature-gate"
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
+import { hasFullAccessRole, hasPermission } from "@/lib/permissions"
 
 type Ctx = { params: Promise<{ id: string }> }
 
 const TEACHER_PRIVILEGED_ROLES = ["super_admin", "center_admin", "admin", "administrator", "owner", "manager", "secretary", "coordinator"]
 
-function canAccessTeacher(session: { id: string; roleKey?: string; role?: string }, teacherUserId: string | null): boolean {
+function canAccessTeacher(
+  session: { id: string; roleKey?: string; role?: string; permissions?: string[] },
+  teacherUserId: string | null,
+  requiredPermission?: string
+): boolean {
   const role = (session.roleKey ?? session.role ?? "").toString().trim().toLowerCase()
+  const perms = Array.isArray(session.permissions) ? session.permissions : []
+  if (hasFullAccessRole(session.roleKey) || hasFullAccessRole(session.role)) return true
   if (TEACHER_PRIVILEGED_ROLES.includes(role)) return true
   if (role.includes("admin") || role.includes("מנהל") || role === "אדמין") return true
+  if (requiredPermission && hasPermission(perms, requiredPermission)) return true
   return teacherUserId != null && session.id === teacherUserId
 }
 
@@ -25,7 +33,7 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
     if (result.length === 0) return Response.json({ error: "Teacher not found" }, { status: 404 })
     const row = result[0] as { userId?: string | null }
     const userId = row?.userId != null ? String(row.userId) : null
-    if (!canAccessTeacher(session, userId)) {
+    if (!canAccessTeacher(session, userId, "teachers.view")) {
       return Response.json({ error: "errors.forbiddenTeacher" }, { status: 403 })
     }
 
@@ -80,7 +88,7 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
   const existingTeacher = await db`SELECT "userId" FROM "Teacher" WHERE id = ${id}`
   if (existingTeacher.length > 0) {
     const userId = (existingTeacher[0] as { userId: string | null })?.userId ?? null
-    if (!canAccessTeacher(session, userId)) {
+    if (!canAccessTeacher(session, userId, "teachers.edit")) {
       return Response.json({ error: "errors.forbiddenTeacher" }, { status: 403 })
     }
   }
@@ -150,7 +158,7 @@ export const DELETE = withTenantAuth(async (req, session, { params }: Ctx) => {
   const existing = await db`SELECT "userId" FROM "Teacher" WHERE id = ${id}`
   if (existing.length > 0) {
     const userId = (existing[0] as { userId: string | null })?.userId ?? null
-    if (!canAccessTeacher(session, userId)) {
+    if (!canAccessTeacher(session, userId, "teachers.delete")) {
       return Response.json({ error: "errors.forbiddenTeacher" }, { status: 403 })
     }
   }
