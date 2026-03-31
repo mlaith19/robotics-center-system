@@ -9,6 +9,52 @@ function hashKey(key: string): string {
   return createHash("sha256").update(key.trim(), "utf8").digest("hex")
 }
 
+const ACTIVATE_FAILURE_LIMIT = 10
+const ACTIVATE_WINDOW_MS = 10 * 60 * 1000
+const activateAttempts = new Map<string, { count: number; firstAt: number }>()
+
+function clientIp(req: NextRequest): string {
+  const forwarded = req.headers.get("x-forwarded-for")
+  if (forwarded) return forwarded.split(",")[0].trim()
+  const real = req.headers.get("x-real-ip")
+  if (real) return real.trim()
+  return "unknown"
+}
+
+function isRateLimited(req: NextRequest): boolean {
+  const ip = clientIp(req)
+  const cur = activateAttempts.get(ip)
+  if (!cur) return false
+  if (Date.now() - cur.firstAt > ACTIVATE_WINDOW_MS) {
+    activateAttempts.delete(ip)
+    return false
+  }
+  return cur.count >= ACTIVATE_FAILURE_LIMIT
+}
+
+function remainingSeconds(req: NextRequest): number {
+  const ip = clientIp(req)
+  const cur = activateAttempts.get(ip)
+  if (!cur) return 0
+  const remain = Math.max(0, ACTIVATE_WINDOW_MS - (Date.now() - cur.firstAt))
+  return Math.ceil(remain / 1000)
+}
+
+function recordFailure(req: NextRequest): void {
+  const ip = clientIp(req)
+  const now = Date.now()
+  const cur = activateAttempts.get(ip)
+  if (!cur) {
+    activateAttempts.set(ip, { count: 1, firstAt: now })
+    return
+  }
+  cur.count += 1
+}
+
+function clearFailures(req: NextRequest): void {
+  activateAttempts.delete(clientIp(req))
+}
+
 /**
  * POST /api/activate
  * Phase 8: Serial license activation.
@@ -17,8 +63,16 @@ function hashKey(key: string): string {
  * Validates key, binds to center if unbound, extends subscription, logs activation.
  */
 export async function POST(request: NextRequest) {
+  if (isRateLimited(request)) {
+    return NextResponse.json(
+      { error: "Too many activation attempts. Try again later.", retryAfterSeconds: remainingSeconds(request) },
+      { status: 429 }
+    )
+  }
+
   const centerId = request.headers.get("x-tenant-center-id")
   if (!centerId) {
+    recordFailure(request)
     return NextResponse.json(
       { error: "Tenant context required. Use the center subdomain." },
       { status: 400 }
@@ -29,11 +83,13 @@ export async function POST(request: NextRequest) {
   try {
     body = await request.json()
   } catch {
+    recordFailure(request)
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
   }
 
   const rawKey = typeof body?.key === "string" ? body.key.trim() : ""
   if (!rawKey) {
+    recordFailure(request)
     return NextResponse.json({ error: "License key is required" }, { status: 400 })
   }
 
@@ -49,10 +105,12 @@ export async function POST(request: NextRequest) {
     const keyRow = keys[0] as { id: string; plan_id: string; duration_days: number; max_activations: number; center_id: string | null } | undefined
 
     if (!keyRow) {
+      recordFailure(request)
       return NextResponse.json({ error: "Invalid or inactive license key" }, { status: 400 })
     }
 
     if (keyRow.center_id != null && keyRow.center_id !== centerId) {
+      recordFailure(request)
       return NextResponse.json({ error: "This key is already bound to another center" }, { status: 400 })
     }
 
@@ -61,6 +119,7 @@ export async function POST(request: NextRequest) {
     `
     const count = Number((actCount[0] as { c: string })?.c ?? 0)
     if (count >= keyRow.max_activations) {
+      recordFailure(request)
       return NextResponse.json({ error: "License key has reached maximum activations" }, { status: 400 })
     }
 
@@ -70,6 +129,7 @@ export async function POST(request: NextRequest) {
       LIMIT 1
     `
     if (existingActivation.length > 0) {
+      recordFailure(request)
       return NextResponse.json({ error: "This center has already activated this key" }, { status: 400 })
     }
 
@@ -122,11 +182,13 @@ export async function POST(request: NextRequest) {
       `
     })
 
+    clearFailures(request)
     return NextResponse.json({
       success: true,
       message: "License activated successfully",
     })
   } catch (err) {
+    recordFailure(request)
     console.error("Activation error:", err)
     return NextResponse.json(
       { error: "Activation failed" },

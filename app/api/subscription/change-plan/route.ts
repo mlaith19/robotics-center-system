@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import crypto from "crypto"
 import { sql } from "@/lib/db"
+import { requireAdmin } from "@/lib/auth-server"
+import { withTenantAuth } from "@/lib/tenant-api-auth"
 
 /**
  * POST /api/subscription/change-plan
@@ -8,7 +10,10 @@ import { sql } from "@/lib/db"
  * Requires x-tenant-center-id (tenant context). In production, restrict to master admin or payment flow.
  * Downgrade does NOT delete any tenant data; only plan and features change.
  */
-export async function POST(req: NextRequest) {
+export const POST = withTenantAuth(async (req: NextRequest, session) => {
+  const adminErr = requireAdmin(session)
+  if (adminErr) return adminErr
+
   const centerId = req.headers.get("x-tenant-center-id")
   if (!centerId) {
     return NextResponse.json({ error: "Missing tenant context" }, { status: 400 })
@@ -56,4 +61,4 @@ export async function POST(req: NextRequest) {
     console.error("change-plan error:", err)
     return NextResponse.json({ error: "Failed to change plan" }, { status: 500 })
   }
-}
+})

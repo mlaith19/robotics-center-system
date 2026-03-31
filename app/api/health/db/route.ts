@@ -6,10 +6,13 @@ export const dynamic = "force-dynamic"
 
 export async function GET() {
   const result = await checkDbConnection()
+  const isProd = process.env.NODE_ENV === "production"
 
   if (!result.ok) {
     return NextResponse.json(
-      { status: "error", db: "unreachable", master: "unreachable", detail: result.error },
+      isProd
+        ? { status: "error", db: "unreachable", master: "unreachable" }
+        : { status: "error", db: "unreachable", master: "unreachable", detail: result.error },
       { status: 503 }
     )
   }

@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   const centerId = await getCenterIdByHost(host)
   if (!centerId) {
     return NextResponse.json(
-      { centerId: null, plan: null, enabledFeatures: [], subscription: null, accessMode: "ACTIVATION_ONLY", tenantDbUrl: null },
+      { centerId: null, plan: null, enabledFeatures: [], subscription: null, accessMode: "ACTIVATION_ONLY" },
       { status: 200 }
     )
   }
@@ -41,6 +41,5 @@ export async function GET(req: NextRequest) {
     enabledFeatures: context.enabledFeatures,
     subscription: context.subscription,
     accessMode: context.accessMode,
-    tenantDbUrl: context.tenantDbUrl,
   })
 }
