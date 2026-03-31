@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { inspectAuth, getCookieNames } from "@/lib/auth-server"
 import { resolveTenantBySubdomain } from "@/lib/tenant/resolve-tenant"
+import { ensureDebugRouteAllowed } from "@/lib/debug-routes"
 
 /**
  * DEV-ONLY: Auth + tenant resolution debug.
@@ -8,9 +9,8 @@ import { resolveTenantBySubdomain } from "@/lib/tenant/resolve-tenant"
  * Returns: host, centerSlugResolved, centerIdResolved, cookieNames, hasTenantSessionCookie, authOk, authFailureReason
  */
 export async function GET(req: NextRequest) {
-  if (process.env.NODE_ENV === "production") {
-    return NextResponse.json({ error: "Not available in production" }, { status: 404 })
-  }
+  const blocked = ensureDebugRouteAllowed()
+  if (blocked) return blocked
 
   const host = req.headers.get("host") ?? ""
   const cookieNames = getCookieNames(req)

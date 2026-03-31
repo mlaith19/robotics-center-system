@@ -6,11 +6,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth-server"
 import { resolveTenantBySubdomain } from "@/lib/tenant/resolve-tenant"
+import { ensureDebugRouteAllowed } from "@/lib/debug-routes"
 
 export async function GET(req: NextRequest) {
-  if (process.env.NODE_ENV === "production") {
-    return NextResponse.json({ error: "Not available in production" }, { status: 404 })
-  }
+  const blocked = ensureDebugRouteAllowed()
+  if (blocked) return blocked
 
   const tenant = await resolveTenantBySubdomain(req)
   const session = await getSession(req)

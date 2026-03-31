@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { resolveTenant } from "@/lib/resolve-tenant"
 import { buildTenantSessionCookie, purgeLegacyCookies, SESSION_ABSOLUTE_MS } from "@/lib/session-config"
+import { ensureDebugRouteAllowed } from "@/lib/debug-routes"
 
 /**
  * DEV-ONLY: Finds the first active admin-role user in the resolved tenant DB
@@ -13,9 +14,8 @@ import { buildTenantSessionCookie, purgeLegacyCookies, SESSION_ABSOLUTE_MS } fro
  * Returns: { ok, userId, username, role } + Set-Cookie: tenant-session
  */
 export async function POST(req: NextRequest) {
-  if (process.env.NODE_ENV === "production") {
-    return NextResponse.json({ error: "Not available in production" }, { status: 404 })
-  }
+  const blocked = ensureDebugRouteAllowed()
+  if (blocked) return blocked
 
   // Resolve tenant (supports ?centerId= for dev multi-tenant testing)
   const tenant = await resolveTenant(req)

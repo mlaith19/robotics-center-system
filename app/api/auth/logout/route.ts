@@ -7,10 +7,3 @@ export async function POST() {
   purgeLegacyCookies(res)
   return res
 }
-
-export async function GET() {
-  const res = NextResponse.json({ ok: true })
-  res.headers.set("Set-Cookie", clearTenantSessionCookie())
-  purgeLegacyCookies(res)
-  return res
-}

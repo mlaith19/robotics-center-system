@@ -8,19 +8,28 @@ import { withTenantAuth } from "@/lib/tenant-api-auth"
 type Ctx = { params: Promise<{ jobId: string }> }
 
 export const GET = withTenantAuth(async (req: NextRequest, session, { params }: Ctx) => {
-  const adminErr = requireAdmin(session)
-  if (adminErr) return adminErr
-
   const { jobId } = await params
   if (!jobId) {
     return new Response(JSON.stringify({ error: "Missing job id" }), { status: 400, headers: { "Content-Type": "application/json" } })
   }
 
-  const rows = await sql`SELECT "errorFilePath" FROM "ImportJob" WHERE id = ${jobId} LIMIT 1`
+  const rows = await sql`
+    SELECT "errorFilePath", "userId"
+    FROM "ImportJob"
+    WHERE id = ${jobId}
+    LIMIT 1
+  `
   if (rows.length === 0) {
     return new Response(JSON.stringify({ error: "Job not found" }), { status: 404, headers: { "Content-Type": "application/json" } })
   }
-  const errorFilePath = (rows[0] as { errorFilePath: string | null }).errorFilePath
+  const row = rows[0] as { errorFilePath: string | null; userId: string | null }
+  const isAdmin = requireAdmin(session) === null
+  const isOwner = typeof row.userId === "string" && row.userId === session.id
+  if (!isAdmin && !isOwner) {
+    return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { "Content-Type": "application/json" } })
+  }
+
+  const errorFilePath = row.errorFilePath
   if (!errorFilePath) {
     return new Response(JSON.stringify({ error: "No error file for this job" }), { status: 404, headers: { "Content-Type": "application/json" } })
   }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { resolveTenant } from "@/lib/resolve-tenant"
 import { getCenterIdByHost } from "@/lib/tenant"
+import { ensureDebugRouteAllowed } from "@/lib/debug-routes"
 
 /**
  * GET /api/_debug/tenant
@@ -22,9 +23,8 @@ import { getCenterIdByHost } from "@/lib/tenant"
  * }
  */
 export async function GET(req: Request) {
-  if (process.env.NODE_ENV === "production") {
-    return NextResponse.json({ error: "Not available in production" }, { status: 404 })
-  }
+  const blocked = ensureDebugRouteAllowed()
+  if (blocked) return blocked
 
   const url     = new URL(req.url)
   const host    = req.headers.get("host") ?? ""

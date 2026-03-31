@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { ensureDebugRouteAllowed } from "@/lib/debug-routes"
 
 /**
  * GET /api/_debug/cookies
@@ -8,9 +9,8 @@ import { NextResponse } from "next/server"
  * Blocked in production.
  */
 export async function GET(req: Request) {
-  if (process.env.NODE_ENV === "production") {
-    return NextResponse.json({ error: "Not available in production" }, { status: 404 })
-  }
+  const blocked = ensureDebugRouteAllowed()
+  if (blocked) return blocked
 
   const raw = req.headers.get("cookie") ?? ""
 
