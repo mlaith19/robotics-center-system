@@ -21,7 +21,11 @@ export const GET = withTenantAuth(async (req, session) => {
   if (tenantErr) return tenantErr
   const db = tenant.db
   try {
-    await runAutoCompleteExpiredCourses(db)
+    // Avoid blocking/slowing every courses read request.
+    // Keep status sync as best-effort background work.
+    runAutoCompleteExpiredCourses(db).catch((e) => {
+      console.warn("runAutoCompleteExpiredCourses skipped:", e)
+    })
 
     let teacherScopeId: string | null = null
     if (!sessionRolesGrantFullAccess(session.roleKey, session.role)) {
@@ -42,23 +46,14 @@ export const GET = withTenantAuth(async (req, session) => {
         to_char(c."startTime"::time, 'HH24:MI') as "startTime",
         to_char(c."endTime"::time, 'HH24:MI') as "endTime",
         COALESCE(enrollment_stats."enrollmentCount", 0) as "enrollmentCount",
-        COALESCE(payment_stats."totalPaid", 0) as "totalPaid",
-        COALESCE(payment_stats."paidCount", 0) as "paidCount"
+        0 as "totalPaid",
+        0 as "paidCount"
       FROM "Course" c
       LEFT JOIN (
         SELECT "courseId", COUNT(*) as "enrollmentCount"
         FROM "Enrollment"
         GROUP BY "courseId"
       ) enrollment_stats ON c.id = enrollment_stats."courseId"
-      LEFT JOIN (
-        SELECT 
-          e."courseId",
-          COALESCE(SUM(p.amount), 0) as "totalPaid",
-          COUNT(DISTINCT p."studentId") as "paidCount"
-        FROM "Enrollment" e
-        LEFT JOIN "Payment" p ON e."studentId" = p."studentId"
-        GROUP BY e."courseId"
-      ) payment_stats ON c.id = payment_stats."courseId"
       ${teacherWhere}
       ORDER BY c."createdAt" DESC
     `
