@@ -27,7 +27,16 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
         courseIdsRaw = []
       }
     }
-    const courseIds = Array.isArray(courseIdsRaw) ? courseIdsRaw : []
+    const courseIdsFromProfile = Array.isArray(courseIdsRaw) ? courseIdsRaw.map((v) => String(v)) : []
+    const enrollments = await db`
+      SELECT "courseId"
+      FROM "Enrollment"
+      WHERE "studentId" = ${String(student.id ?? "")}
+    ` as { courseId?: string | null }[]
+    const courseIdsFromEnrollments = enrollments
+      .map((r) => (typeof r.courseId === "string" ? r.courseId.trim() : ""))
+      .filter((v) => v.length > 0)
+    const courseIds = [...new Set([...courseIdsFromProfile, ...courseIdsFromEnrollments])]
     let courses: { id: string; name: string; description: string | null }[] = []
     if (courseIds.length > 0) {
       courses = await db`SELECT id, name, description FROM "Course" WHERE id = ANY(${courseIds})`
