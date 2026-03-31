@@ -280,9 +280,6 @@ export const POST = withTenantAuth(async (req, session) => {
       if (studentId && courseId && (status === "present" || status === "נוכח")) {
         await syncTeacherAttendanceForCourseDate(db, courseId, date, createdByUserId, now)
       }
-      if (courseId) {
-        await syncTeacherExpensesForCourseDate(db, courseId, date, createdByUserId)
-      }
       return Response.json(saved)
     }
 
@@ -294,9 +291,6 @@ export const POST = withTenantAuth(async (req, session) => {
     const saved = result[0]
     if (studentId && courseId && (status === "present" || status === "נוכח")) {
       await syncTeacherAttendanceForCourseDate(db, courseId, date, createdByUserId, now)
-    }
-    if (courseId) {
-      await syncTeacherExpensesForCourseDate(db, courseId, date, createdByUserId)
     }
     return Response.json(saved, { status: 201 })
   } catch (err) {
@@ -341,133 +335,6 @@ async function syncTeacherAttendanceForCourseDate(
         VALUES (${teacherAttendanceId}, null, ${tid}, ${courseId}, ${date}, ${presentStatus}, null, null, ${createdByUserId}, ${now})
       `
     }
-  }
-}
-
-function timeStringToHours(raw: unknown): number | null {
-  if (raw == null) return null
-  const s = String(raw).trim()
-  if (!s) return null
-  const hhmm = /(?:^|T|\s)(\d{2}):(\d{2})/.exec(s)
-  if (!hhmm) return null
-  const h = Number(hhmm[1])
-  const m = Number(hhmm[2])
-  if (!Number.isFinite(h) || !Number.isFinite(m)) return null
-  if (h < 0 || h > 23 || m < 0 || m > 59) return null
-  return h + m / 60
-}
-
-async function upsertAutoTeacherExpense(
-  db: ReturnType<typeof postgres>,
-  teacherId: string,
-  date: string,
-  amount: number,
-  description: string,
-  createdByUserId: string | null
-) {
-  // Keep one deterministic auto-expense per teacher+date+course-marker description.
-  const existing = await db`
-    SELECT id FROM "Expense"
-    WHERE "teacherId" = ${teacherId} AND "date"::date = ${date}::date AND description = ${description}
-    LIMIT 1
-  `
-
-  if (existing.length > 0) {
-    await db`
-      UPDATE "Expense"
-      SET amount = ${amount}
-      WHERE id = ${existing[0].id}
-    `
-    return
-  }
-
-  const id = crypto.randomUUID()
-  try {
-    await db`
-      INSERT INTO "Expense" (
-        id, description, amount, date, category, "paymentMethod", "isRecurring", "teacherId", "createdByUserId", "createdAt"
-      )
-      VALUES (
-        ${id}, ${description}, ${amount}, ${date}, 'salary', 'transfer', false, ${teacherId}, ${createdByUserId}, ${new Date().toISOString()}
-      )
-    `
-  } catch (err: any) {
-    // Older tenant schemas may not have createdByUserId on Expense.
-    if (err?.code === "42703" && String(err?.message || "").includes("createdByUserId")) {
-      await db`
-        INSERT INTO "Expense" (
-          id, description, amount, date, category, "paymentMethod", "isRecurring", "teacherId", "createdAt"
-        )
-        VALUES (
-          ${id}, ${description}, ${amount}, ${date}, 'salary', 'transfer', false, ${teacherId}, ${new Date().toISOString()}
-        )
-      `
-      return
-    }
-    throw err
-  }
-}
-
-async function syncTeacherExpensesForCourseDate(
-  db: ReturnType<typeof postgres>,
-  courseId: string,
-  date: string,
-  createdByUserId: string | null
-) {
-  const courseRows = await db`
-    SELECT id, name, location, "startTime", "endTime"
-    FROM "Course"
-    WHERE id = ${courseId}
-    LIMIT 1
-  `
-  if (courseRows.length === 0) return
-
-  const course = courseRows[0] as {
-    id: string
-    name?: string | null
-    location?: string | null
-    startTime?: unknown
-    endTime?: unknown
-  }
-
-  const defaultStart = timeStringToHours(course.startTime)
-  const defaultEnd = timeStringToHours(course.endTime)
-  const defaultHours = defaultStart != null && defaultEnd != null && defaultEnd > defaultStart ? defaultEnd - defaultStart : 0
-  const loc = (course.location || "").toString().toLowerCase()
-  const isCenter = loc.includes("מרכז") || loc === "center" || loc === ""
-
-  const teacherAttendance = await db`
-    SELECT a.id, a."teacherId", a.hours, a.status, t.name as "teacherName",
-           t."centerHourlyRate" as "centerHourlyRate", t."externalCourseRate" as "externalCourseRate"
-    FROM "Attendance" a
-    LEFT JOIN "Teacher" t ON a."teacherId" = t.id
-    WHERE a."courseId" = ${courseId} AND a."date" = ${date} AND a."teacherId" IS NOT NULL
-  `
-
-  for (const row of teacherAttendance as any[]) {
-    const status = String(row.status || "").toLowerCase()
-    const isPresent = status === "נוכח" || status === "present"
-    const teacherId = row.teacherId as string
-    if (!teacherId) continue
-
-    const explicitHours = row.hours != null ? Number(row.hours) : NaN
-    const workedHours = Number.isFinite(explicitHours) && explicitHours > 0 ? explicitHours : defaultHours
-    const rate = isCenter ? Number(row.centerHourlyRate || 0) : Number(row.externalCourseRate || 0)
-    const amount = Math.max(0, Number((workedHours * rate).toFixed(2)))
-
-    const courseName = String(course.name || "קורס")
-    const teacherName = String(row.teacherName || "מורה")
-    const description = `שכר מורה אוטומטי: ${teacherName} | ${courseName} | ${date}`
-
-    if (!isPresent || amount <= 0) {
-      await db`
-        DELETE FROM "Expense"
-        WHERE "teacherId" = ${teacherId} AND "date"::date = ${date}::date AND description = ${description}
-      `
-      continue
-    }
-
-    await upsertAutoTeacherExpense(db, teacherId, date, amount, description, createdByUserId)
   }
 }
 

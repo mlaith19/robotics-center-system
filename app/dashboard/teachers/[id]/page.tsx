@@ -417,18 +417,6 @@ export default function TeacherViewPage() {
     [filteredExpenses],
   )
   
-  // Calculate total salary payments to teacher - filtered by period
-  const paidSum = useMemo(() => {
-    const { startDate } = getDateRange(paymentsPeriod)
-    return (payments || [])
-      .filter((p: any) => {
-        const paymentDate = new Date(p.date || p.createdAt)
-        const isSalary = p.type === "salary" || p.type === "שכר" || p.description?.includes("שכר")
-        return isSalary && paymentDate >= startDate
-      })
-      .reduce((s: number, p: any) => s + Number(p.amount ?? 0), 0)
-  }, [payments, paymentsPeriod])
-  
   // Calculate total owed to teacher based on hours worked - filtered by period
   const owedToTeacher = useMemo(() => {
     const centerRate = teacher?.centerHourlyRate || 0
@@ -450,10 +438,10 @@ export default function TeacherViewPage() {
     }, 0)
   }, [filteredAttendanceForPayments, teacher?.centerHourlyRate, teacher?.externalCourseRate])
   
-  // Pending/debt = total owed minus what was paid as salary
+  // Pending/debt = total owed minus manual expense payments only.
   const pendingSum = useMemo(() => {
-    return Math.max(0, owedToTeacher - paidSum)
-  }, [owedToTeacher, paidSum])
+    return Math.max(0, owedToTeacher - expensesSum)
+  }, [owedToTeacher, expensesSum])
   // Calculate hours based on course start/end time for each "present" attendance
   const totalHours = useMemo(() => {
     return attendance.reduce((sum, a: any) => {
