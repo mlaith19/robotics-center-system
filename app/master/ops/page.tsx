@@ -232,28 +232,46 @@ function OpsPageContent() {
 
   useEffect(() => {
     if (!pollingRunId) return
+    let failures = 0
     const t = setInterval(async () => {
-      const res = await fetch(`/api/master/ops/migrate?runId=${encodeURIComponent(pollingRunId)}`)
-      if (!res.ok) return
-      const data = await res.json()
-      setMigrateRun({
-        runId: data.runId,
-        startedAt: data.startedAt,
-        status: data.status,
-        totalCenters: data.totalCenters,
-        results: data.results ?? [],
-        summary: data.summary,
-      })
-      if (data.status === "completed" || data.status === "partial") {
-        setPollingRunId(null)
-        loadStatus()
-        loadMigrationStatus()
-        loadLastFailures()
-        const failed = (data.results ?? []).filter((r: MigrateResultItem) => r.status === "failed").length
-        if (failed > 0) {
-          showToast(`${failed} מרכזים נכשלו — ראה טבלה`, "error")
-        } else {
-          showToast("כל המיגרציות הושלמו בהצלחה", "success")
+      try {
+        const res = await fetch(`/api/master/ops/migrate?runId=${encodeURIComponent(pollingRunId)}`)
+        if (!res.ok) {
+          failures += 1
+          if (failures >= 4) {
+            setPollingRunId(null)
+            showToast("פולינג מיגרציה נכשל. רענן דף כדי למשוך סטטוס עדכני.", "error")
+          }
+          return
+        }
+        failures = 0
+        const data = await res.json()
+        setMigrateRun({
+          runId: data.runId,
+          startedAt: data.startedAt,
+          status: data.status,
+          totalCenters: data.totalCenters,
+          results: data.results ?? [],
+          summary: data.summary,
+        })
+        const doneStatuses = new Set(["completed", "partial", "success", "failed"])
+        if (doneStatuses.has(String(data.status))) {
+          setPollingRunId(null)
+          loadStatus()
+          loadMigrationStatus()
+          loadLastFailures()
+          const failed = (data.results ?? []).filter((r: MigrateResultItem) => r.status === "failed").length
+          if (failed > 0) {
+            showToast(`${failed} מרכזים נכשלו — ראה טבלה`, "error")
+          } else {
+            showToast("כל המיגרציות הושלמו בהצלחה", "success")
+          }
+        }
+      } catch {
+        failures += 1
+        if (failures >= 4) {
+          setPollingRunId(null)
+          showToast("פולינג מיגרציה נותק. רענן דף כדי לוודא תוצאות.", "error")
         }
       }
     }, POLL_INTERVAL_MS)
