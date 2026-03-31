@@ -43,8 +43,6 @@ export const GET = withTenantAuth(async (req, session) => {
     const courses = await db`
       SELECT 
         c.*,
-        to_char(c."startTime"::time, 'HH24:MI') as "startTime",
-        to_char(c."endTime"::time, 'HH24:MI') as "endTime",
         COALESCE(enrollment_stats."enrollmentCount", 0) as "enrollmentCount",
         0 as "totalPaid",
         0 as "paidCount"
@@ -64,7 +62,7 @@ export const GET = withTenantAuth(async (req, session) => {
       startTime: courseTimeToDisplayValue(course.startTime),
       endTime: courseTimeToDisplayValue(course.endTime),
       weekdays: course.daysOfWeek || [],
-      teachers: (course.teacherIds || []).map((id: string) => ({
+      teachers: (Array.isArray(course.teacherIds) ? course.teacherIds : []).map((id: string) => ({
         id,
         name: teacherMap.get(id) || "לא ידוע"
       }))
