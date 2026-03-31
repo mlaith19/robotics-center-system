@@ -26,7 +26,7 @@ import {
   User, // Import User icon
 } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { canAccessPage, canShowInSidebar, type RoleType } from "@/lib/permissions"
+import { canAccessPage, canShowInSidebar, hasFullAccessRole, type RoleType } from "@/lib/permissions"
 import { useUserType, clearUserTypeCache } from "@/lib/use-user-type"
 import { useSettings, clearSettingsCache } from "@/lib/use-settings"
 import { useLanguage } from "@/lib/i18n/context"
@@ -103,8 +103,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       .finally(() => setIsLoading(false))
   }, [router])
 
-  // Pass role so admins bypass by-user API calls entirely (no loading loop)
-  const { data: userTypeData, loading: userTypeLoading } = useUserType(currentUser?.id, currentUser?.role)
+  const currentRoleToken = (currentUser?.roleKey || currentUser?.role || "").toString()
+  const isAdminRole = hasFullAccessRole(currentRoleToken) || hasFullAccessRole(currentUser?.role)
+  // Pass roleKey/role so admins bypass by-user API calls entirely (no loading loop)
+  const { data: userTypeData, loading: userTypeLoading } = useUserType(currentUser?.id, currentRoleToken)
   
   // Derive student/teacher data from cached hook
   const studentData = userTypeData?.isStudent ? { id: userTypeData.studentId!, courseIds: userTypeData.courseIds || [] } : null
@@ -116,7 +118,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     : null
   const isLinkedToStudent = userTypeData?.isStudent || false
   const isLinkedToTeacher = userTypeData?.isTeacher || false
-  const isTeacherRole = isLinkedToTeacher || (currentUser?.roleKey === "teacher" || currentUser?.role === "teacher")
+  // חשוב: אדמין שמקושר גם לרשומת מורה לא אמור להידחף למסלול "מורה".
+  const isTeacherRole = !isAdminRole && (isLinkedToTeacher || (currentUser?.roleKey === "teacher" || currentUser?.role === "teacher"))
   const userPermissions = currentUser?.permissions || []
   const showHomeInSidebar = userPermissions.includes("settings.home")
   // פרופיל בסרגל: מפורש nav.myProfile, או ברירת מחדל למורה/תלמיד כשאין דף בית (גם אם ההרשאות ב-DB ריקות/ישנות)
@@ -131,7 +134,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (userTypeLoading) return
 
     // If user is linked to a teacher, allow own profile + schedule + attendance
-    if (isLinkedToTeacher && teacherData) {
+    if (!isAdminRole && isLinkedToTeacher && teacherData) {
         const isOwnTeacherProfile =
           pathname === `/dashboard/teachers/${teacherData.id}` ||
           pathname.startsWith(`/dashboard/teachers/${teacherData.id}/`)
@@ -177,7 +180,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           router.push("/dashboard")
         }
       }
-  }, [currentUser, pathname, router, studentData, isLinkedToStudent, isLinkedToTeacher, teacherData, userTypeLoading])
+  }, [currentUser, pathname, router, studentData, isLinkedToStudent, isLinkedToTeacher, teacherData, userTypeLoading, isAdminRole])
 
   const handleLogout = () => {
     clearUserTypeCache()

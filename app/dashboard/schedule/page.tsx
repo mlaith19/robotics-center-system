@@ -9,7 +9,7 @@ import { PageHeader } from "@/components/page-header"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useCurrentUser } from "@/lib/auth-context"
-import { hasPermission } from "@/lib/permissions"
+import { hasPermission, hasFullAccessRole } from "@/lib/permissions"
 import { arrayFetcher } from "@/lib/swr-fetcher"
 
 interface Course {
@@ -85,8 +85,16 @@ interface CurrentUser {
 }
 
 export default function SchedulePage() {
+  const currentUser = useCurrentUser()
+  const userPerms = currentUser?.permissions ?? []
+  const isAdmin = hasFullAccessRole(currentUser?.roleKey) || hasFullAccessRole(currentUser?.role)
+  const canViewStudents = isAdmin || hasPermission(userPerms, "students.view")
+
   const { data: rawCourses,  isLoading: coursesLoading  } = useSWR<Course[]>("/api/courses",   arrayFetcher)
-  const { data: rawStudents, isLoading: studentsLoading } = useSWR<Student[]>("/api/students", arrayFetcher)
+  const { data: rawStudents, isLoading: studentsLoading } = useSWR<Student[]>(
+    canViewStudents ? "/api/students" : null,
+    arrayFetcher,
+  )
   const courses  = Array.isArray(rawCourses)  ? rawCourses  : []
   const students = Array.isArray(rawStudents) ? rawStudents : []
 
@@ -100,9 +108,6 @@ export default function SchedulePage() {
   const [filterStudent, setFilterStudent] = useState<string>("all")
   const [isStudentUser, setIsStudentUser] = useState(false)
 
-  const currentUser = useCurrentUser()
-  const userPerms = currentUser?.permissions ?? []
-  const isAdmin = (currentUser?.roleKey ?? currentUser?.role ?? "").toString().toLowerCase().match(/admin|owner|manager|מנהל|אדמין/)
   const canSeeFinancial = !!isAdmin || hasPermission(userPerms, "courses.financial")
 
   useEffect(() => {
@@ -439,7 +444,7 @@ export default function SchedulePage() {
     )
   }
 
-  if (coursesLoading || studentsLoading) {
+  if (coursesLoading || (canViewStudents && studentsLoading)) {
     return (
       <div className="flex items-center justify-center min-h-[400px]" dir="rtl">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -518,22 +523,24 @@ export default function SchedulePage() {
             </SelectContent>
           </Select>
 
-          <Select value={filterStudent} onValueChange={setFilterStudent}>
-            <SelectTrigger className="w-[180px]">
-              <div className="flex items-center gap-2">
-                <Filter className="h-4 w-4" />
-                <SelectValue placeholder="כל התלמידים" />
-              </div>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">כל התלמידים</SelectItem>
-              {students.map((student) => (
-                <SelectItem key={student.id} value={student.id}>
-                  {student.firstName} {student.lastName}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {canViewStudents && (
+            <Select value={filterStudent} onValueChange={setFilterStudent}>
+              <SelectTrigger className="w-[180px]">
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4" />
+                  <SelectValue placeholder="כל התלמידים" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">כל התלמידים</SelectItem>
+                {students.map((student) => (
+                  <SelectItem key={student.id} value={student.id}>
+                    {student.firstName} {student.lastName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
       </div>
 

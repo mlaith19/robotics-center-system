@@ -36,6 +36,12 @@ export async function requireFeature(
   const ctx = await getTenantContext(centerId)
   if (!ctx) return { allowed: false, reason: "Tenant not found" }
   const enabled = ctx.enabledFeatures || []
+  // Backward-compat mode:
+  // In many existing centers there is no plan_features configuration yet.
+  // If we strictly enforce an empty list, every feature returns 403 (FORBIDDEN)
+  // even when RBAC permissions are correctly granted in Users page.
+  // Therefore: empty enabledFeatures => allow all features.
+  if (enabled.length === 0) return { allowed: true }
   if (enabled.includes(featureKey)) return { allowed: true }
   return { allowed: false, reason: `Feature "${featureKey}" is not enabled for this plan` }
 }
