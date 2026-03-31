@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { usePathname } from "next/navigation"
 
 type BrandState = {
   center_name: string
@@ -14,7 +13,6 @@ const DEFAULT_BRAND: BrandState = {
 }
 
 export function GlobalCenterBrand() {
-  const pathname = usePathname()
   const [brand, setBrand] = useState<BrandState>(DEFAULT_BRAND)
 
   useEffect(() => {
@@ -35,9 +33,6 @@ export function GlobalCenterBrand() {
       cancelled = true
     }
   }, [])
-
-  const hideOnDashboard = pathname?.startsWith("/dashboard") || pathname?.startsWith("/master")
-  if (hideOnDashboard) return null
 
   return (
     <div className="fixed top-3 left-1/2 z-40 -translate-x-1/2 pointer-events-none">

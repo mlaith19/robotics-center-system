@@ -28,7 +28,7 @@ import {
 import { useRouter } from "next/navigation"
 import { canAccessPage, canShowInSidebar, hasFullAccessRole, type RoleType } from "@/lib/permissions"
 import { useUserType, clearUserTypeCache } from "@/lib/use-user-type"
-import { useSettings, clearSettingsCache } from "@/lib/use-settings"
+import { clearSettingsCache } from "@/lib/use-settings"
 import { useLanguage } from "@/lib/i18n/context"
 import { LanguageSelector } from "@/components/language-selector"
 import { AuthProvider } from "@/lib/auth-context"
@@ -80,7 +80,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [updatingMessage, setUpdatingMessage] = useState("המערכת מתעדכנת. אנא המתן כמה דקות ובצע רענון לדף.")
   const statusFailuresRef = useRef(0)
   
-  const { settings: centerSettings } = useSettings()
   const { features: enabledFeatures } = useEnabledFeatures()
 
   useEffect(() => {
@@ -299,16 +298,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }`}
       >
         <div className="flex h-full flex-col">
-          {/* Header */}
-          <div className="flex flex-col items-center justify-center border-b border-border px-4 py-3 gap-1">
-            <span className="text-lg font-bold text-foreground text-center">{centerSettings.center_name}</span>
-            {/* Debug badge — shows resolved center slug for easy verification */}
-            {currentUser?.centerSlug && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-mono text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
-                <span className="opacity-60">Center:</span> {currentUser.centerSlug}
-              </span>
-            )}
-          </div>
+          <div className="border-b border-border px-4 py-2" />
 
           {/* Navigation */}
           <nav className="flex-1 space-y-1 p-4 overflow-y-auto">
@@ -493,7 +483,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
             <div className="flex items-center gap-3 rounded-lg bg-muted p-3">
               {userProfileImage ? (
-                <img src={userProfileImage} alt="Profile" className="h-10 w-10 rounded-full object-contain bg-white p-0.5 border" />
+                <img src={userProfileImage} alt="Profile" className="h-10 w-10 rounded-full object-cover border" />
               ) : (
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-semibold">
                   {currentUser.full_name?.charAt(0) || currentUser.username.charAt(0).toUpperCase()}
