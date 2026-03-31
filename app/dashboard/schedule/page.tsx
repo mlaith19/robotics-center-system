@@ -68,6 +68,27 @@ const hebrewToEnglish: Record<string, string> = {
   שבת: "saturday",
 }
 
+function ymd(date: Date): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, "0")
+  const d = String(date.getDate()).padStart(2, "0")
+  return `${y}-${m}-${d}`
+}
+
+function normalizeCourseDays(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.map((v) => String(v).trim()).filter(Boolean)
+  if (typeof raw === "string") {
+    const s = raw.trim()
+    if (!s) return []
+    try {
+      const parsed = JSON.parse(s)
+      if (Array.isArray(parsed)) return parsed.map((v) => String(v).trim()).filter(Boolean)
+    } catch {}
+    return s.split(",").map((v) => v.trim()).filter(Boolean)
+  }
+  return []
+}
+
 const courseColors = [
   { bg: "bg-blue-100", text: "text-blue-700", border: "border-blue-300", hover: "hover:border-blue-500" },
   { bg: "bg-purple-100", text: "text-purple-700", border: "border-purple-300", hover: "hover:border-purple-500" },
@@ -107,8 +128,16 @@ export default function SchedulePage() {
   const coursesForUser = useMemo(() => {
     if (isAdmin || !isLinkedTeacher) return courses
     const ids = new Set(userTypeData?.courseIds || [])
-    return courses.filter((c) => ids.has(c.id))
-  }, [courses, isAdmin, isLinkedTeacher, userTypeData?.courseIds])
+    const teacherId = userTypeData?.teacherId
+    // Fallback חשוב: יש מקרים ש-courseIds לא חוזר מיד מהשרת, אבל teacherId כן.
+    // לכן נבדוק גם שיוך ישיר לפי teacherIds בתוך הקורס.
+    return courses.filter((c) => {
+      if (ids.has(c.id)) return true
+      if (!teacherId) return false
+      const tIds = Array.isArray(c.teacherIds) ? c.teacherIds : []
+      return tIds.includes(teacherId)
+    })
+  }, [courses, isAdmin, isLinkedTeacher, userTypeData?.courseIds, userTypeData?.teacherId])
 
   const [viewMode, setViewMode] = useState<"day" | "week" | "month">("month")
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -188,33 +217,30 @@ export default function SchedulePage() {
   const getCoursesForDate = (date: Date) => {
     const dayOfWeek = date.getDay()
     const dayName = Object.keys(weekdayToNumber).find((key) => weekdayToNumber[key] === dayOfWeek)
+    const dateYmd = ymd(date)
 
     return filteredCourses.filter((course) => {
       if (!dayName) return false
       
       // בדוק גם weekdays וגם daysOfWeek (תאימות לאחור)
-      const courseDays = course.weekdays || course.daysOfWeek || []
-      
-      if (!Array.isArray(courseDays) || courseDays.length === 0) {
-        return false
-      }
+      const courseDays = normalizeCourseDays(course.weekdays ?? course.daysOfWeek ?? [])
       
       // בדוק אם הקורס פעיל בתאריך הנתון
-      if (course.startDate && course.endDate) {
-        const startDate = new Date(course.startDate)
-        const endDate = new Date(course.endDate)
-        // התמודד עם מקרה של תאריכים הפוכים - קח את הטווח הנכון
-        const actualStart = startDate < endDate ? startDate : endDate
-        const actualEnd = startDate < endDate ? endDate : startDate
-        if (date < actualStart || date > actualEnd) return false
-      } else if (course.startDate) {
-        const startDate = new Date(course.startDate)
-        if (date < startDate) return false
-      } else if (course.endDate) {
-        const endDate = new Date(course.endDate)
-        if (date > endDate) return false
+      const startYmd = course.startDate ? ymd(new Date(course.startDate)) : null
+      const endYmd = course.endDate ? ymd(new Date(course.endDate)) : null
+      if (startYmd && endYmd) {
+        const minYmd = startYmd <= endYmd ? startYmd : endYmd
+        const maxYmd = startYmd <= endYmd ? endYmd : startYmd
+        if (dateYmd < minYmd || dateYmd > maxYmd) return false
+      } else if (startYmd) {
+        if (dateYmd < startYmd) return false
+      } else if (endYmd) {
+        if (dateYmd > endYmd) return false
       }
       
+      // אם לא הוגדרו ימים בכלל — נאפשר הופעה לפי טווח תאריכים בלבד.
+      if (courseDays.length === 0) return true
+
       // בדוק התאמה - תמיכה בשמות באנגלית ובעברית
       const dayNameEnglish = hebrewToEnglish[dayName] || dayName.toLowerCase()
       const matchesDay = courseDays.some((d: string) => {

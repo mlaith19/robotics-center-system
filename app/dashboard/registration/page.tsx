@@ -185,8 +185,8 @@ export default function RegistrationPage() {
   }
 
   const handleApprove = async (registration: { id: string; type: RegistrationType; courseId: string | null; name: string }) => {
-    if (registration.type !== "student") return
-    if (!registration.courseId) {
+    const isStudent = registration.type === "student"
+    if (isStudent && !registration.courseId) {
       toast({
         title: "לא ניתן לאשר",
         description: "לא נמצא קורס משויך לרישום הזה",
@@ -197,10 +197,11 @@ export default function RegistrationPage() {
 
     setApprovingId(registration.id)
     try {
-      const res = await fetch(`/api/students/${registration.id}/approve`, {
+      const approveUrl = isStudent ? `/api/students/${registration.id}/approve` : `/api/teachers/${registration.id}/approve`
+      const res = await fetch(approveUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ courseId: registration.courseId }),
+        body: JSON.stringify(isStudent ? { courseId: registration.courseId } : {}),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -208,7 +209,9 @@ export default function RegistrationPage() {
       }
       toast({
         title: "אושר בהצלחה",
-        description: `${registration.name} אושר ושויך לקורס`,
+        description: isStudent
+          ? `${registration.name} אושר ושויך לקורס`
+          : `${registration.name} אושר והועבר לדף המורים`,
       })
       window.location.reload()
     } catch (err) {
@@ -387,17 +390,15 @@ export default function RegistrationPage() {
                           <Eye className="h-4 w-4" />
                           צפיה
                         </Button>
-                        {registration.type === "student" && (
-                          <Button
-                            size="sm"
-                            className="gap-1"
-                            disabled={approvingId === registration.id}
-                            onClick={() => handleApprove(registration)}
-                          >
-                            {approvingId === registration.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                            אישור
-                          </Button>
-                        )}
+                        <Button
+                          size="sm"
+                          className="gap-1"
+                          disabled={approvingId === registration.id}
+                          onClick={() => handleApprove(registration)}
+                        >
+                          {approvingId === registration.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                          אישור
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>

@@ -451,6 +451,11 @@ function getRequiredPermissionForPath(pagePath: string): string | null {
   return match?.permission ?? null
 }
 
+function getNavPermissionForPath(pagePath: string): string | null {
+  const entry = Object.entries(NAV_PERM_TO_HREF).find(([, href]) => pagePath === href || pagePath.startsWith(href + "/"))
+  return entry?.[0] ?? null
+}
+
 export function canAccessPage(
   userPermissions: string[],
   userRole: RoleType,
@@ -490,6 +495,11 @@ export function canAccessPage(
 
   const requiredPerm = getRequiredPermissionForPath(pagePath)
   if (requiredPerm && hasPermission(userPermissions, requiredPerm)) return true
+  // Backward compatibility:
+  // In some users only nav permission was granted from the Users page.
+  // Allow access if the matching nav permission exists for this page.
+  const navPerm = getNavPermissionForPath(pagePath)
+  if (navPerm && hasPermission(userPermissions, navPerm)) return true
 
   if (role && role.visiblePages.some((page) => pagePath === page || pagePath.startsWith(page + "/"))) return true
 

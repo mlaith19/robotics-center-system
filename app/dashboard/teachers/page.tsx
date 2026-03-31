@@ -95,9 +95,10 @@ export default function TeachersPage() {
   }, [])
 
   const filtered = useMemo(() => {
+    const visibleTeachers = teachers.filter((t) => (t.status || "").trim() !== "מתעניין")
     const s = q.trim().toLowerCase()
-    if (!s) return teachers
-    return teachers.filter((t) => 
+    if (!s) return visibleTeachers
+    return visibleTeachers.filter((t) => 
       t.name.toLowerCase().includes(s) || 
       t.email?.toLowerCase().includes(s) ||
       t.phone?.includes(s) ||

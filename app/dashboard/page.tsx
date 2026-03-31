@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation"
 import { useUserType } from "@/lib/use-user-type"
 import { useLanguage } from "@/lib/i18n/context"
 import { useCurrentUser } from "@/lib/auth-context"
+import { hasFullAccessRole } from "@/lib/permissions"
 
 interface DashboardStats {
   totalCourses: number
@@ -46,12 +47,14 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // Pass role so admins bypass by-user API calls entirely (no loading loop)
-  const { data: userTypeData, loading: userTypeLoading } = useUserType(currentUser?.id, currentUser?.role)
+  const roleToken = (currentUser?.roleKey || currentUser?.role || "").toString()
+  const isAdmin = hasFullAccessRole(currentUser?.roleKey) || hasFullAccessRole(currentUser?.role) || hasFullAccessRole(roleToken)
+  // Pass resolved role token so admins bypass by-user API calls entirely (no loading loop)
+  const { data: userTypeData, loading: userTypeLoading } = useUserType(currentUser?.id, roleToken)
   const userPerms = currentUser?.permissions || []
   const showHomeInSidebar = userPerms.includes("settings.home")
   const showMyProfileInSidebar = userPerms.includes("nav.myProfile")
-  const isTeacherRole = currentUser?.roleKey === "teacher" || currentUser?.role === "teacher"
+  const isTeacherRole = !isAdmin && (currentUser?.roleKey === "teacher" || currentUser?.role === "teacher")
 
   // מורה: מפנה מיד לפרופיל (דרך /teachers/me) כדי לא להציג דף בית ואז להעלים – בלי להמתין ל-useUserType
   useEffect(() => {
@@ -79,9 +82,7 @@ export default function DashboardPage() {
     
     dataFetchedRef.current = true
 
-    const userIsAdmin = currentUser.role === "admin" || currentUser.role === "Administrator" || currentUser.role?.toLowerCase() === "admin"
-    
-    if (userIsAdmin) {
+    if (isAdmin) {
       // Admin sees dashboard stats
       fetch("/api/dashboard/stats")
         .then((res) => {
@@ -100,10 +101,7 @@ export default function DashboardPage() {
       // Regular user - just stop loading
       setLoading(false)
     }
-  }, [currentUser, userTypeData, userTypeLoading])
-
-  // Check if user is admin
-  const isAdmin = currentUser?.role === "admin" || currentUser?.role === "Administrator" || currentUser?.role?.toLowerCase() === "admin"
+  }, [currentUser, userTypeData, userTypeLoading, isAdmin])
 
   // מורה שמפנים לפרופיל – הצג טעינה כדי לא להראות דף בית לרגע
   if (currentUser && isTeacherRole && !showHomeInSidebar) {

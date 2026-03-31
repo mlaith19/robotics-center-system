@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -75,9 +75,44 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [showUpdatingNotice, setShowUpdatingNotice] = useState(false)
+  const [updatingMessage, setUpdatingMessage] = useState("המערכת מתעדכנת. אנא המתן כמה דקות ובצע רענון לדף.")
+  const statusFailuresRef = useRef(0)
   
   const { settings: centerSettings } = useSettings()
   const { features: enabledFeatures } = useEnabledFeatures()
+
+  useEffect(() => {
+    let cancelled = false
+    let timer: ReturnType<typeof setInterval> | null = null
+    const checkStatus = async () => {
+      try {
+        const res = await fetch("/api/system-status", { cache: "no-store", credentials: "include" })
+        if (!res.ok) throw new Error(`status=${res.status}`)
+        const data = (await res.json().catch(() => ({}))) as { updating?: boolean; message?: string }
+        if (cancelled) return
+        statusFailuresRef.current = 0
+        if (data?.updating) {
+          setShowUpdatingNotice(true)
+          if (typeof data.message === "string" && data.message.trim()) setUpdatingMessage(data.message.trim())
+        } else {
+          setShowUpdatingNotice(false)
+        }
+      } catch {
+        if (cancelled) return
+        statusFailuresRef.current += 1
+        if (statusFailuresRef.current >= 2) setShowUpdatingNotice(true)
+      }
+    }
+    checkStatus().catch(() => {})
+    timer = setInterval(() => {
+      checkStatus().catch(() => {})
+    }, 10000)
+    return () => {
+      cancelled = true
+      if (timer) clearInterval(timer)
+    }
+  }, [])
 
   useEffect(() => {
     // Session is HttpOnly; get current user from server (validates idle/absolute timeout)
@@ -204,6 +239,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex h-screen bg-background" dir={dir}>
+      {showUpdatingNotice && (
+        <div className="fixed left-1/2 top-3 z-[70] -translate-x-1/2 rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 shadow-md">
+          {updatingMessage}
+        </div>
+      )}
       {/* Mobile menu button */}
       <Button
         variant="ghost"
@@ -236,7 +276,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           {/* Navigation */}
           <nav className="flex-1 space-y-1 p-4 overflow-y-auto">
-            {isLinkedToStudent && currentUser?.roleKey !== "admin" && currentUser?.role !== "admin" && currentUser?.role !== "Administrator" ? (
+            {isLinkedToStudent && !isAdminRole ? (
               // סטודנט: פרופיל שלי או דף בית – לפי הרשאה (הדדי)
               <>
                 {showMyProfileInSidebar && studentData ? (
