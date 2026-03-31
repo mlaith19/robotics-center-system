@@ -23,10 +23,8 @@ export async function GET(request: Request) {
     Math.floor(SESSION_ABSOLUTE_MS / 1000)
   )
 
-  const MISSING = ["user", "", undefined, null]
-  const isDev = process.env.NODE_ENV !== "production"
-  const effectiveRole    = isDev && MISSING.includes(session.role    as string | null | undefined) ? "admin" : session.role
-  const effectiveRoleKey = isDev && MISSING.includes(session.roleKey as string | null | undefined) ? "admin" : session.roleKey
+  const effectiveRole = session.role
+  const effectiveRoleKey = session.roleKey
 
   let permissions = session.permissions ?? []
   if (permissions.length === 0 && effectiveRoleKey) {

@@ -206,13 +206,8 @@ export async function POST(request: NextRequest) {
     }
     let roleKey = roleKeyMap[rawKey] ?? (rawKey ? rawKey.toLowerCase() : "")
 
-    // If role is still unknown, infer from context: provisioned admin or single-user center
-    if (!roleKey || roleKey === "user" || roleKey === "other") {
-      const uname = String(user.username ?? "").toLowerCase()
-      if (uname.endsWith("_admin") || uname === "admin") {
-        roleKey = "admin"
-      }
-    }
+    // Security hardening: never infer admin role from username pattern.
+    // Role must come from explicit DB role (role key/name/text).
     if (!roleKey) roleKey = "other"
 
     // If DB permissions are empty, populate from role preset so sidebar + guards work immediately

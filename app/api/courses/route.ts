@@ -2,12 +2,21 @@ import { requireFeatureFromRequest } from "@/lib/feature-gate"
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
 import { runAutoCompleteExpiredCourses } from "@/lib/course-status"
-import { sessionRolesGrantFullAccess } from "@/lib/permissions"
+import { hasPermission, sessionRolesGrantFullAccess } from "@/lib/permissions"
 import { parseCourseDateForDb, parseCourseTimeForDb, courseTimeToDisplayValue } from "@/lib/course-db-fields"
 
 export const GET = withTenantAuth(async (req, session) => {
   const featureErr = await requireFeatureFromRequest(req, "courses", session)
-  if (featureErr) return featureErr
+  if (featureErr) {
+    // Allow schedule page consumers to read course slots even when "courses" feature
+    // is disabled in plan, as long as user explicitly has schedule visibility permission.
+    const perms = session.permissions ?? []
+    const canUseSchedule =
+      sessionRolesGrantFullAccess(session.roleKey, session.role) ||
+      hasPermission(perms, "schedule.view") ||
+      hasPermission(perms, "nav.schedule")
+    if (!canUseSchedule) return featureErr
+  }
   const [tenant, tenantErr] = await requireTenant(req)
   if (tenantErr) return tenantErr
   const db = tenant.db
