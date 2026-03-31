@@ -211,9 +211,9 @@ export default function TeachersPage() {
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
                   {t.profileImage ? (
-                    <img src={t.profileImage} alt={t.name} className="w-12 h-12 rounded-full object-cover border" />
+                    <img src={t.profileImage} alt={t.name} className="w-12 h-12 rounded-full object-contain bg-white p-1 border" />
                   ) : (
-                    <img src="/api/og-logo" alt="Center logo" className="w-12 h-12 rounded-full object-cover border" />
+                    <img src="/api/og-logo" alt="Center logo" className="w-12 h-12 rounded-full object-contain bg-white p-1 border" />
                   )}
                   <div className="text-right">
                     <h3 className="font-bold text-lg">{t.name}</h3>

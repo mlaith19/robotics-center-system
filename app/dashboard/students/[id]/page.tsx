@@ -197,9 +197,9 @@ export default function StudentViewPage() {
         <Card className="p-6">
           <div className="flex items-center gap-6">
             {student.profileImage ? (
-              <img src={student.profileImage} alt={student.name} className="h-20 w-20 rounded-full object-cover border" />
+              <img src={student.profileImage} alt={student.name} className="h-20 w-20 rounded-full object-contain bg-white p-1 border" />
             ) : (
-              <img src="/api/og-logo" alt="Center logo" className="h-20 w-20 rounded-full object-cover border" />
+              <img src="/api/og-logo" alt="Center logo" className="h-20 w-20 rounded-full object-contain bg-white p-1 border" />
             )}
             <div className="flex-1">
               <div className="flex items-center gap-3">

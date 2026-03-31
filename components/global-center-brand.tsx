@@ -35,8 +35,8 @@ export function GlobalCenterBrand() {
   }, [])
 
   return (
-    <div className="fixed top-3 left-1/2 z-40 -translate-x-1/2 pointer-events-none">
-      <div className="flex flex-col items-center rounded-2xl border border-border/80 bg-background/95 px-4 py-2 shadow-sm backdrop-blur">
+    <div className="sticky top-0 z-30 w-full border-b border-border/60 bg-background/95 backdrop-blur">
+      <div className="mx-auto flex w-fit flex-col items-center px-4 py-2">
         <img
           src={brand.logo || "/api/og-logo"}
           alt={brand.center_name}
