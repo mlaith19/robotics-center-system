@@ -210,6 +210,7 @@ export function StudentTabs({
   const [accountNumber, setAccountNumber] = useState("")
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null)
   const [paymentType, setPaymentType] = useState<"payment" | "discount" | "credit">("payment")
+  const [sessionFeedbackRows, setSessionFeedbackRows] = useState<any[]>([])
   const currentUser = useCurrentUser()
 
   const isAdmin =
@@ -238,8 +239,17 @@ export function StudentTabs({
   const showCourses = canTabCourses || (!isOwnProfile && !hasAnyTabPerm && !teacherLimitedView)
   const showPayments = canTabPayments || (!isOwnProfile && !hasAnyTabPerm && !teacherLimitedView)
   const showAttendance = canTabAttendance || (!isOwnProfile && ((!hasAnyTabPerm && !teacherLimitedView) || (!hasAnyTabPerm && isTeacher)))
+  const showSessionFeedback = isOwnProfile || isAdmin || hasPermission(userPerms, "students.tab.feedback")
   const canAddDiscount = isAdmin || hasPermission(userPerms, "cashier.discount")
   const canAddCredit = isAdmin || hasPermission(userPerms, "cashier.credit")
+
+  useEffect(() => {
+    if (!studentId) return
+    fetch(`/api/students/${studentId}/session-feedback`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((rows) => setSessionFeedbackRows(Array.isArray(rows) ? rows : []))
+      .catch(() => setSessionFeedbackRows([]))
+  }, [studentId])
 
   const israeliBanks = [
     "בנק לאומי",
@@ -402,7 +412,7 @@ export function StudentTabs({
   }
 
   const defaultTab = showProfile ? "profile" : showGeneral ? "general" : showCourses ? "courses" : showPayments ? "payments" : "attendance"
-  const tabCount = [showProfile, showGeneral, showCourses, showPayments, showAttendance].filter(Boolean).length
+  const tabCount = [showProfile, showGeneral, showCourses, showPayments, showAttendance, showSessionFeedback].filter(Boolean).length
 
   return (
     <Tabs defaultValue={defaultTab} className="w-full" dir={isEn ? "ltr" : "rtl"}>
@@ -412,6 +422,7 @@ export function StudentTabs({
         {showCourses && <TabsTrigger value="courses">{tx("קורסים","Courses","الدورات")}</TabsTrigger>}
         {showPayments && <TabsTrigger value="payments">{tx("תשלומים","Payments","الدفعات")}</TabsTrigger>}
         {showAttendance && <TabsTrigger value="attendance">{tx("נוכחות","Attendance","الحضور")}</TabsTrigger>}
+        {showSessionFeedback && <TabsTrigger value="sessionFeedback">{tx("משוב מפגשים","Session Feedback","ملاحظات الجلسات")}</TabsTrigger>}
       </TabsList>
 
       {/* Profile Tab - All student details */}
@@ -1031,6 +1042,39 @@ export function StudentTabs({
           )}
         </div>
       </TabsContent>
+      )}
+
+      {showSessionFeedback && (
+        <TabsContent value="sessionFeedback" className="space-y-4 mt-6">
+          {sessionFeedbackRows.length > 0 ? (
+            <Card className="overflow-hidden border-2">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50 hover:bg-muted/50">
+                    <TableHead className="text-right font-bold text-foreground">{isEn ? "Date" : "תאריך"}</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">{isEn ? "Course" : "קורס"}</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">{isEn ? "General Topic" : "נושא כללי"}</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">{isEn ? "Teacher Feedback" : "משוב מורה"}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sessionFeedbackRows.map((r: any) => (
+                    <TableRow key={r.id}>
+                      <TableCell>{formatDate(r.sessionDate, localeTag)}</TableCell>
+                      <TableCell>{r.courseName || "—"}</TableCell>
+                      <TableCell>{r.generalTopic || "—"}</TableCell>
+                      <TableCell>{r.feedbackText || "—"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Card>
+          ) : (
+            <Card className="p-8 text-center">
+              <p className="text-muted-foreground">{isEn ? "No session feedback yet" : "אין משוב מפגשים עדיין"}</p>
+            </Card>
+          )}
+        </TabsContent>
       )}
     </Tabs>
   )

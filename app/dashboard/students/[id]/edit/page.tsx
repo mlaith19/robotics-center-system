@@ -19,6 +19,7 @@ import { CityCombobox } from "@/components/ui/combobox-city"
 
 import { ArrowRight, User, Award as IdCard, Phone, Users, Heart, BookOpen, X, Loader2, KeyRound } from "lucide-react"
 import { useLanguage } from "@/lib/i18n/context"
+import { fileToProfileImageDataUrl } from "@/lib/profile-image-client"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -266,15 +267,11 @@ export default function EditStudentPage() {
     setHasChanges(true)
   }
 
-  const handleProfileImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleProfileImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onloadend = () => {
-      const result = typeof reader.result === "string" ? reader.result : ""
-      updateStudent({ profileImage: result })
-    }
-    reader.readAsDataURL(file)
+    const dataUrl = await fileToProfileImageDataUrl(file)
+    updateStudent({ profileImage: dataUrl })
   }
 
   if (studentError) {

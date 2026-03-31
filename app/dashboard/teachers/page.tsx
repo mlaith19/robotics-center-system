@@ -87,7 +87,7 @@ export default function TeachersPage() {
         const res = await fetch(`/api/teachers/${id}`, { method: "DELETE", credentials: "include" })
         if (!res.ok) throw new Error("Delete failed")
       },
-      confirmPolicy: "standard",
+      confirmPolicy: "dangerous",
       undoWindowMs: 10_000,
     })
   }

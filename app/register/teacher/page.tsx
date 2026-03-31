@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { User, Phone, Mail, Loader2, CheckCircle, Lock, Calendar, IdCard, MapPin, Briefcase } from "lucide-react"
+import { fileToProfileImageDataUrl } from "@/lib/profile-image-client"
 
 export default function RegisterTeacherPage() {
   const router = useRouter()
@@ -35,15 +36,11 @@ export default function RegisterTeacherPage() {
     return () => clearTimeout(timer)
   }, [success, router])
 
-  const handleProfileImageUpload = (e: ChangeEvent<HTMLInputElement>) => {
+  const handleProfileImageUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onloadend = () => {
-      const result = typeof reader.result === "string" ? reader.result : ""
-      setProfileImage(result)
-    }
-    reader.readAsDataURL(file)
+    const dataUrl = await fileToProfileImageDataUrl(file)
+    setProfileImage(dataUrl)
   }
 
   function normalizeBirthDateInput(value: string): string {

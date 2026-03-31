@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { CityCombobox } from "@/components/ui/combobox-city"
 import { ArrowRight, User, Mail, Phone, GraduationCap, FileText, Banknote, Calendar, Award as IdCard, MapPin, KeyRound, X } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
+import { fileToProfileImageDataUrl } from "@/lib/profile-image-client"
 
 export default function NewTeacherPage() {
   const router = useRouter()
@@ -95,15 +96,11 @@ export default function NewTeacherPage() {
     }
   }
 
-  const handleProfileImageUpload = (e: ChangeEvent<HTMLInputElement>) => {
+  const handleProfileImageUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onloadend = () => {
-      const result = typeof reader.result === "string" ? reader.result : ""
-      setNewTeacher((prev) => ({ ...prev, profileImage: result }))
-    }
-    reader.readAsDataURL(file)
+    const dataUrl = await fileToProfileImageDataUrl(file)
+    setNewTeacher((prev) => ({ ...prev, profileImage: dataUrl }))
   }
 
   return (

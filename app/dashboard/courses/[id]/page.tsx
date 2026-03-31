@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Textarea } from "@/components/ui/textarea"
 import { ArrowRight, Pencil, Loader2, BookOpen, Calendar, Users, BarChart3, CalendarCheck, Check, X, Thermometer, Plane } from "lucide-react"
 import { courseTimeToDisplayValue } from "@/lib/course-db-fields"
 import { useLanguage } from "@/lib/i18n/context"
@@ -43,6 +44,20 @@ interface Enrollment {
   status: string
   enrollmentDate: string
   createdByUserName?: string | null
+}
+
+interface CourseSessionFeedback {
+  id: string
+  studentId: string
+  feedbackText: string | null
+}
+
+interface CourseSessionItem {
+  id: string
+  sessionDate: string
+  generalTopic: string | null
+  teacherName?: string | null
+  feedback: CourseSessionFeedback[]
 }
 
 const levelLabels: Record<string, Record<"he" | "en" | "ar", string>> = {
@@ -114,6 +129,15 @@ export default function CourseViewPage() {
     noLinkedStudents: locale === "ar" ? "لا يوجد طلاب مرتبطون بهذه الدورة" : locale === "en" ? "No students linked to this course" : "אין תלמידים משויכים לקורס זה",
     noStudentAttendance: locale === "ar" ? "لا توجد سجلات حضور طلاب لهذه الدورة بعد." : locale === "en" ? "No student attendance records for this course yet." : "אין עדיין רשומות נוכחות תלמידים לקורס זה.",
     noTeacherAttendance: locale === "ar" ? "لا توجد سجلات حضور معلمين لهذه الدورة." : locale === "en" ? "No teacher attendance records for this course." : "אין רשומות נוכחות מורים לקורס זה.",
+    sessionsFeedback: locale === "ar" ? "الجلسات والملاحظات" : locale === "en" ? "Sessions & Feedback" : "מפגשים ומשוב",
+    newSession: locale === "ar" ? "מפגש חדש" : locale === "en" ? "New Session" : "מפגש חדש",
+    sessionDate: locale === "ar" ? "تاريخ الجلسة" : locale === "en" ? "Session Date" : "תאריך מפגש",
+    generalTopic: locale === "ar" ? "الموضوع العام" : locale === "en" ? "General Topic" : "נושא כללי",
+    addSession: locale === "ar" ? "إضافة جلسة" : locale === "en" ? "Add Session" : "הוסף מפגש",
+    saveFeedback: locale === "ar" ? "حفظ الملاحظات" : locale === "en" ? "Save Feedback" : "שמור משוב",
+    noSessionsYet: locale === "ar" ? "لا توجد جلسات بعد" : locale === "en" ? "No sessions yet" : "אין מפגשים עדיין",
+    feedbackForStudent: locale === "ar" ? "ملاحظة للطالب" : locale === "en" ? "Feedback for student" : "משוב לתלמיד",
+    yourFeedback: locale === "ar" ? "ملاحظتك" : locale === "en" ? "Your feedback" : "המשוב שלך",
   }
   const params = useParams()
   const id = params.id as string
@@ -139,10 +163,17 @@ export default function CourseViewPage() {
   const canTabPayments = isAdmin || hasPermission(userPerms, "courses.tab.payments")
   const canTabAttendanceStudents = isAdmin || hasPermission(userPerms, "courses.tab.attendance.students")
   const canTabAttendanceTeachers = isAdmin || hasPermission(userPerms, "courses.tab.attendance.teachers")
+  const canTabSessionsFeedback = isAdmin || hasPermission(userPerms, "courses.tab.feedback") || hasPermission(userPerms, "courses.tab.attendance.students")
   const [attendanceList, setAttendanceList] = useState<{ id: string; studentId: string | null; teacherId: string | null; date: string; status: string; notes?: string | null; createdByUserName?: string | null }[]>([])
   const [attendanceDate, setAttendanceDate] = useState(() => new Date().toISOString().split("T")[0])
   const [attendanceByStudent, setAttendanceByStudent] = useState<Record<string, string>>({})
   const [savingByStudent, setSavingByStudent] = useState<Record<string, boolean>>({})
+  const [sessions, setSessions] = useState<CourseSessionItem[]>([])
+  const [newSessionDate, setNewSessionDate] = useState(() => new Date().toISOString().split("T")[0])
+  const [newSessionTopic, setNewSessionTopic] = useState("")
+  const [savingSession, setSavingSession] = useState(false)
+  const [feedbackDrafts, setFeedbackDrafts] = useState<Record<string, Record<string, string>>>({})
+  const [savingFeedbackBySession, setSavingFeedbackBySession] = useState<Record<string, boolean>>({})
   useEffect(() => {
     if (!currentUser?.id) return
     fetch(`/api/students/by-user/${currentUser.id}`)
@@ -201,6 +232,64 @@ export default function CourseViewPage() {
       })
       .catch(() => setAttendanceByStudent({}))
   }, [id, attendanceDate, canTabAttendanceStudents])
+
+  useEffect(() => {
+    if (!id || !canTabSessionsFeedback) return
+    fetch(`/api/course-sessions?courseId=${id}`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((rows) => {
+        const list = Array.isArray(rows) ? rows : []
+        setSessions(list)
+        const next: Record<string, Record<string, string>> = {}
+        for (const s of list as CourseSessionItem[]) {
+          const byStudent: Record<string, string> = {}
+          for (const f of s.feedback || []) byStudent[String(f.studentId)] = String(f.feedbackText || "")
+          next[String(s.id)] = byStudent
+        }
+        setFeedbackDrafts(next)
+      })
+      .catch(() => setSessions([]))
+  }, [id, canTabSessionsFeedback])
+
+  async function handleAddSession() {
+    if (!newSessionDate || !id || savingSession) return
+    setSavingSession(true)
+    try {
+      const res = await fetch("/api/course-sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId: id, sessionDate: newSessionDate, generalTopic: newSessionTopic }),
+      })
+      if (!res.ok) throw new Error("failed")
+      const listRes = await fetch(`/api/course-sessions?courseId=${id}`)
+      const list = listRes.ok ? await listRes.json() : []
+      setSessions(Array.isArray(list) ? list : [])
+      setNewSessionTopic("")
+    } catch {
+      // ignore
+    } finally {
+      setSavingSession(false)
+    }
+  }
+
+  async function handleSaveSessionFeedback(sessionId: string) {
+    if (!id || savingFeedbackBySession[sessionId]) return
+    const byStudent = feedbackDrafts[sessionId] || {}
+    const payload = Object.entries(byStudent).map(([studentId, feedbackText]) => ({ studentId, feedbackText }))
+    setSavingFeedbackBySession((p) => ({ ...p, [sessionId]: true }))
+    try {
+      const res = await fetch(`/api/course-sessions/${sessionId}/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ feedbacks: payload }),
+      })
+      if (!res.ok) throw new Error("failed")
+    } catch {
+      // ignore
+    } finally {
+      setSavingFeedbackBySession((p) => ({ ...p, [sessionId]: false }))
+    }
+  }
 
   async function saveStudentAttendance(studentId: string, status: "present" | "absent" | "sick" | "vacation") {
     const prev = attendanceByStudent[studentId]
@@ -315,9 +404,10 @@ export default function CourseViewPage() {
       </div>
 
       {/* Tabs - לפי הרשאות טאב בכרטסת קורס */}
-      <Tabs defaultValue={canTabGeneral ? "general" : !isStudentUser && canTabStudents ? "students" : canTabPayments ? "payments" : canTabAttendanceStudents ? "attendance-students" : "attendance-teachers"} className="w-full" dir={isRtl ? "rtl" : "ltr"}>
-        <TabsList className="grid w-full mb-6" style={{ gridTemplateColumns: `repeat(${[canTabGeneral, canTabStudents, canTabPayments, canTabAttendanceStudents, canTabAttendanceTeachers].filter(Boolean).length}, 1fr)` }} dir={isRtl ? "rtl" : "ltr"}>
+      <Tabs defaultValue={canTabGeneral ? "general" : canTabSessionsFeedback ? "sessions-feedback" : !isStudentUser && canTabStudents ? "students" : canTabPayments ? "payments" : canTabAttendanceStudents ? "attendance-students" : "attendance-teachers"} className="w-full" dir={isRtl ? "rtl" : "ltr"}>
+        <TabsList className="grid w-full mb-6" style={{ gridTemplateColumns: `repeat(${[canTabGeneral, canTabSessionsFeedback, canTabStudents, canTabPayments, canTabAttendanceStudents, canTabAttendanceTeachers].filter(Boolean).length}, 1fr)` }} dir={isRtl ? "rtl" : "ltr"}>
           {canTabGeneral && <TabsTrigger value="general">{tr.general}</TabsTrigger>}
+          {canTabSessionsFeedback && <TabsTrigger value="sessions-feedback">{tr.sessionsFeedback}</TabsTrigger>}
           {!isStudentUser && canTabStudents && <TabsTrigger value="students">{tr.linkedStudents}</TabsTrigger>}
           {!isStudentUser && canTabPayments && <TabsTrigger value="payments">{tr.costPayments}</TabsTrigger>}
           {canTabAttendanceStudents && <TabsTrigger value="attendance-students">{tr.studentAttendance}</TabsTrigger>}
@@ -439,6 +529,83 @@ export default function CourseViewPage() {
             </Card>
           </div>
         </TabsContent>
+        )}
+
+        {canTabSessionsFeedback && (
+          <TabsContent value="sessions-feedback" className="space-y-4">
+            {!isStudentUser && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">{tr.newSession}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid md:grid-cols-2 gap-3">
+                    <div>
+                      <div className="text-sm text-muted-foreground mb-1">{tr.sessionDate}</div>
+                      <input
+                        type="date"
+                        value={newSessionDate}
+                        onChange={(e) => setNewSessionDate(e.target.value)}
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground mb-1">{tr.generalTopic}</div>
+                      <Textarea value={newSessionTopic} onChange={(e) => setNewSessionTopic(e.target.value)} rows={2} />
+                    </div>
+                  </div>
+                  <Button onClick={handleAddSession} disabled={savingSession}>
+                    {savingSession ? <Loader2 className="h-4 w-4 animate-spin" /> : tr.addSession}
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {sessions.length === 0 ? (
+              <Card><CardContent className="p-6 text-center text-muted-foreground">{tr.noSessionsYet}</CardContent></Card>
+            ) : sessions.map((s) => {
+              const ownFeedback = (s.feedback || [])[0]?.feedbackText || ""
+              return (
+                <Card key={s.id}>
+                  <CardHeader>
+                    <CardTitle className="text-base">
+                      {new Date(s.sessionDate).toLocaleDateString(localeTag)} - {s.generalTopic || "—"}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {isStudentUser ? (
+                      <div className="space-y-2">
+                        <div className="text-sm text-muted-foreground">{tr.yourFeedback}</div>
+                        <div className="rounded-md border p-3">{ownFeedback || "—"}</div>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {enrollments.map((enr) => (
+                          <div key={`${s.id}-${enr.studentId}`}>
+                            <div className="text-sm mb-1">{enr.studentName}</div>
+                            <Textarea
+                              rows={2}
+                              value={feedbackDrafts[s.id]?.[enr.studentId] ?? ""}
+                              onChange={(e) =>
+                                setFeedbackDrafts((prev) => ({
+                                  ...prev,
+                                  [s.id]: { ...(prev[s.id] || {}), [enr.studentId]: e.target.value },
+                                }))
+                              }
+                              placeholder={tr.feedbackForStudent}
+                            />
+                          </div>
+                        ))}
+                        <Button onClick={() => handleSaveSessionFeedback(s.id)} disabled={savingFeedbackBySession[s.id]}>
+                          {savingFeedbackBySession[s.id] ? <Loader2 className="h-4 w-4 animate-spin" /> : tr.saveFeedback}
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </TabsContent>
         )}
 
         {!isStudentUser && canTabStudents && (

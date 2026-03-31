@@ -17,6 +17,7 @@ import { CityCombobox } from "@/components/ui/combobox-city"
 import useSWR from "swr"
 import { arrayFetcher } from "@/lib/swr-fetcher"
 import { useLanguage } from "@/lib/i18n/context"
+import { fileToProfileImageDataUrl } from "@/lib/profile-image-client"
 
 type Course = { id: string | number; name: string }
 
@@ -107,15 +108,11 @@ export default function NewStudentPage() {
     }))
   }
 
-  const handleProfileImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleProfileImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onloadend = () => {
-      const result = typeof reader.result === "string" ? reader.result : ""
-      setNewStudent((prev) => ({ ...prev, profileImage: result }))
-    }
-    reader.readAsDataURL(file)
+    const dataUrl = await fileToProfileImageDataUrl(file)
+    setNewStudent((prev) => ({ ...prev, profileImage: dataUrl }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
