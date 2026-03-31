@@ -12,6 +12,7 @@ import { useCurrentUser } from "@/lib/auth-context"
 import { hasPermission, hasFullAccessRole } from "@/lib/permissions"
 import { arrayFetcher } from "@/lib/swr-fetcher"
 import { useUserType } from "@/lib/use-user-type"
+import { useLanguage } from "@/lib/i18n/context"
 
 interface Course {
   id: string
@@ -89,6 +90,26 @@ function normalizeCourseDays(raw: unknown): string[] {
   return []
 }
 
+const hebrewToArabic: Record<string, string> = {
+  ראשון: "الأحد",
+  שני: "الاثنين",
+  שלישי: "الثلاثاء",
+  רביעי: "الأربعاء",
+  חמישי: "الخميس",
+  שישי: "الجمعة",
+  שבת: "السبت",
+}
+
+function displayDayLabel(day: string, locale: "he" | "en" | "ar"): string {
+  const d = String(day || "").trim()
+  if (!d) return d
+  const lower = d.toLowerCase()
+  const heb = englishToHebrew[lower] || d
+  if (locale === "he") return heb
+  if (locale === "ar") return hebrewToArabic[heb] || heb
+  return hebrewToEnglish[heb] || lower
+}
+
 const courseColors = [
   { bg: "bg-blue-100", text: "text-blue-700", border: "border-blue-300", hover: "hover:border-blue-500" },
   { bg: "bg-purple-100", text: "text-purple-700", border: "border-purple-300", hover: "hover:border-purple-500" },
@@ -108,6 +129,7 @@ interface CurrentUser {
 
 export default function SchedulePage() {
   const currentUser = useCurrentUser()
+  const { locale } = useLanguage()
   const userPerms = currentUser?.permissions ?? []
   const isAdmin = hasFullAccessRole(currentUser?.roleKey) || hasFullAccessRole(currentUser?.role)
   const canViewStudents = isAdmin || hasPermission(userPerms, "students.view")
@@ -640,7 +662,7 @@ export default function SchedulePage() {
                 <div className="flex flex-wrap gap-2">
                   {(selectedCourse.weekdays || selectedCourse.daysOfWeek)?.map((day: string) => (
                     <span key={day} className="bg-primary/10 text-primary px-3 py-1 rounded-full text-sm">
-                      {day}
+                      {displayDayLabel(day, locale)}
                     </span>
                   )) || <span className="text-muted-foreground">לא צוין</span>}
                 </div>

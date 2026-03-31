@@ -45,7 +45,7 @@ export default function RegisterTeacherPage() {
     }
     setIsSubmitting(true)
     try {
-      const res = await fetch("/api/teachers", {
+      const res = await fetch("/api/register/teacher", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -57,8 +57,6 @@ export default function RegisterTeacherPage() {
           city: city.trim() || null,
           specialization: specialization.trim() || null,
           bio: bio.trim() || null,
-          status: "מתעניין",
-          createUserAccount: true,
           username: username.trim(),
           password,
         }),
