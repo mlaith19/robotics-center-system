@@ -164,7 +164,13 @@ export const DELETE = withTenantAuth(async (req, session, { params }: Ctx) => {
   }
 
   try {
+    const row = await db`SELECT "userId" FROM "Teacher" WHERE id = ${id} LIMIT 1`
+    const userId = row.length > 0 ? ((row[0] as { userId?: string | null }).userId ?? null) : null
+    await db`DELETE FROM "Attendance" WHERE "teacherId" = ${id}`
     await db`DELETE FROM "Teacher" WHERE id = ${id}`
+    if (userId) {
+      await db`DELETE FROM "User" WHERE id = ${userId}`
+    }
     return new Response(null, { status: 204 })
   } catch (err) {
     return handleDbError(err, "DELETE /api/teachers/[id]")

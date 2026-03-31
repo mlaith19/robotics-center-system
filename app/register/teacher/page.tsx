@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -9,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { User, Phone, Mail, Loader2, CheckCircle, Lock, Calendar, IdCard, MapPin, Briefcase } from "lucide-react"
 
 export default function RegisterTeacherPage() {
+  const router = useRouter()
   const [name, setName] = useState("")
   const [phone, setPhone] = useState("")
   const [email, setEmail] = useState("")
@@ -23,6 +25,26 @@ export default function RegisterTeacherPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!success) return
+    const timer = setTimeout(() => {
+      router.push("/login")
+    }, 5000)
+    return () => clearTimeout(timer)
+  }, [success, router])
+
+  function normalizeBirthDateInput(value: string): string {
+    const v = value.trim()
+    if (!v) return ""
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v
+    const m = v.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/)
+    if (!m) return v
+    const dd = m[1].padStart(2, "0")
+    const mm = m[2].padStart(2, "0")
+    const yyyy = m[3]
+    return `${yyyy}-${mm}-${dd}`
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -53,7 +75,7 @@ export default function RegisterTeacherPage() {
           phone: phone.trim() || null,
           email: email.trim() || null,
           idNumber: idNumber.trim() || null,
-          birthDate: birthDate || null,
+          birthDate: normalizeBirthDateInput(birthDate) || null,
           city: city.trim() || null,
           specialization: specialization.trim() || null,
           bio: bio.trim() || null,
@@ -92,6 +114,7 @@ export default function RegisterTeacherPage() {
             <CheckCircle className="h-16 w-16 text-green-600 mx-auto mb-4" />
             <h2 className="text-xl font-bold text-green-800">הרישום התקבל</h2>
             <p className="text-green-700 mt-2">נצור איתך קשר בהקדם.</p>
+            <p className="text-green-700 mt-2">מעבירים אותך לדף התחברות בעוד 5 שניות...</p>
           </CardContent>
         </Card>
       </div>
@@ -177,9 +200,10 @@ export default function RegisterTeacherPage() {
                 <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="birthDate"
-                  type="date"
+                  type="text"
                   value={birthDate}
                   onChange={(e) => setBirthDate(e.target.value)}
+                  placeholder="YYYY-MM-DD או DD/MM/YYYY"
                   className="pr-10"
                   disabled={isSubmitting}
                 />

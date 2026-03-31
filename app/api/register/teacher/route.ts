@@ -1,6 +1,18 @@
 import bcrypt from "bcryptjs"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
 
+function normalizeBirthDateInput(raw: unknown): string | null {
+  const value = typeof raw === "string" ? raw.trim() : ""
+  if (!value) return null
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+  const m = value.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/)
+  if (!m) return null
+  const dd = m[1].padStart(2, "0")
+  const mm = m[2].padStart(2, "0")
+  const yyyy = m[3]
+  return `${yyyy}-${mm}-${dd}`
+}
+
 export async function POST(req: Request) {
   const [tenant, tenantErr] = await requireTenant(req)
   if (tenantErr) return tenantErr
@@ -12,7 +24,7 @@ export async function POST(req: Request) {
     const phone = body.phone ? String(body.phone).trim() : null
     const email = body.email ? String(body.email).trim() : null
     const idNumber = body.idNumber ? String(body.idNumber).trim() : null
-    const birthDate = body.birthDate || null
+    const birthDate = normalizeBirthDateInput(body.birthDate)
     const city = body.city ? String(body.city).trim() : null
     const specialization = body.specialization ? String(body.specialization).trim() : null
     const bio = body.bio ? String(body.bio).trim() : null

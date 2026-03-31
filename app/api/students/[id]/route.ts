@@ -167,8 +167,12 @@ export const DELETE = withTenantAuth(async (req, session, { params }: Ctx) => {
     await db`DELETE FROM "Enrollment" WHERE "studentId" = ${id}`
     await db`DELETE FROM "Attendance" WHERE "studentId" = ${id}`
     await db`DELETE FROM "Payment" WHERE "studentId" = ${id}`
+    const userId = existing.length > 0 ? ((existing[0] as { userId: string | null })?.userId ?? null) : null
     const result = await db`DELETE FROM "Student" WHERE id = ${id} RETURNING id`
     if (result.length === 0) return Response.json({ error: "Student not found" }, { status: 404 })
+    if (userId) {
+      await db`DELETE FROM "User" WHERE id = ${userId}`
+    }
     return new Response(null, { status: 204 })
   } catch (err) {
     console.error("DELETE /api/students/[id] error:", err)

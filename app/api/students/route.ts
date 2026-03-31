@@ -7,6 +7,18 @@ import { requireTenant, ensureSessionMatchesTenant } from "@/lib/tenant/resolve-
 const PRIVILEGED_ROLES = ["owner", "admin", "administrator", "manager", "super_admin", "center_admin"]
 const ALLOWED_ROLES    = [...PRIVILEGED_ROLES, "teacher", "student"]
 
+function normalizeBirthDateInput(raw: unknown): string | null {
+  const value = typeof raw === "string" ? raw.trim() : ""
+  if (!value) return null
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+  const m = value.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/)
+  if (!m) return null
+  const dd = m[1].padStart(2, "0")
+  const mm = m[2].padStart(2, "0")
+  const yyyy = m[3]
+  return `${yyyy}-${mm}-${dd}`
+}
+
 function resolveRoleKey(session: { role?: string; roleKey?: string }): string {
   return (session.roleKey || session.role || "").toLowerCase()
 }
@@ -117,8 +129,14 @@ export const POST = withTenantAuth(async (req, session) => {
     if (!body.name) return Response.json({ error: "name is required" }, { status: 400 })
 
     const createUserAccount = body.createUserAccount === true
-    const username = body.username ? String(body.username).trim() : null
-    const password = body.password ? String(body.password) : null
+    const idNumberForAutoUser = body.idNumber ? String(body.idNumber).trim() : ""
+    const phoneForAutoPassword = body.phone ? String(body.phone).trim() : ""
+    const username = body.username
+      ? String(body.username).trim()
+      : (createUserAccount ? idNumberForAutoUser : null)
+    const password = body.password
+      ? String(body.password)
+      : (createUserAccount ? phoneForAutoPassword : null)
 
     if (createUserAccount) {
       if (!username) return Response.json({ error: "username is required for user account" }, { status: 400 })
@@ -156,7 +174,7 @@ export const POST = withTenantAuth(async (req, session) => {
       VALUES (
         ${studentId}, ${body.name}, ${body.email || null}, ${body.phone || null},
         ${body.address || null}, ${body.city || null},
-        ${body.status || 'מתעניין'}, ${body.birthDate || null},
+        ${body.status || 'מתעניין'}, ${normalizeBirthDateInput(body.birthDate)},
         ${body.idNumber || null}, ${body.father || null}, ${body.mother || null},
         ${body.additionalPhone || null}, ${body.healthFund || null}, ${body.allergies || null},
         ${body.totalSessions || 12},

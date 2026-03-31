@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ArrowRight, Pencil, Loader2, BookOpen, Calendar, Users, BarChart3, CalendarCheck, Check, X, Thermometer, Plane } from "lucide-react"
 import { courseTimeToDisplayValue } from "@/lib/course-db-fields"
+import { useLanguage } from "@/lib/i18n/context"
 
 interface Course {
   id: string
@@ -44,20 +45,20 @@ interface Enrollment {
   createdByUserName?: string | null
 }
 
-const levelLabels: Record<string, string> = {
-  beginner: "מתחילים",
-  intermediate: "מתקדמים",
-  advanced: "מומחים"
+const levelLabels: Record<string, Record<"he" | "en" | "ar", string>> = {
+  beginner: { he: "מתחילים", en: "Beginner", ar: "مبتدئ" },
+  intermediate: { he: "מתקדמים", en: "Intermediate", ar: "متوسط" },
+  advanced: { he: "מומחים", en: "Advanced", ar: "متقدم" },
 }
 
-const dayLabels: Record<string, string> = {
-  sunday: "ראשון",
-  monday: "שני",
-  tuesday: "שלישי",
-  wednesday: "רביעי",
-  thursday: "חמישי",
-  friday: "שישי",
-  saturday: "שבת"
+const dayLabels: Record<string, Record<"he" | "en" | "ar", string>> = {
+  sunday: { he: "ראשון", en: "Sunday", ar: "الأحد" },
+  monday: { he: "שני", en: "Monday", ar: "الاثنين" },
+  tuesday: { he: "שלישי", en: "Tuesday", ar: "الثلاثاء" },
+  wednesday: { he: "רביעי", en: "Wednesday", ar: "الأربعاء" },
+  thursday: { he: "חמישי", en: "Thursday", ar: "الخميس" },
+  friday: { he: "שישי", en: "Friday", ar: "الجمعة" },
+  saturday: { he: "שבת", en: "Saturday", ar: "السبت" },
 }
 
 import { useCurrentUser } from "@/lib/auth-context"
@@ -65,6 +66,37 @@ import { hasPermission, hasFullAccessRole } from "@/lib/permissions"
 import { getCourseStatusPresentation } from "@/lib/course-status"
 
 export default function CourseViewPage() {
+  const { locale } = useLanguage()
+  const isRtl = locale !== "en"
+  const localeTag = locale === "ar" ? "ar" : locale === "en" ? "en-GB" : "he-IL"
+  const tr = {
+    notFound: locale === "ar" ? "لم يتم العثور على الدورة" : locale === "en" ? "Course not found" : "לא נמצא קורס",
+    courseDetails: locale === "ar" ? "تفاصيل الدورة" : locale === "en" ? "Course Details" : "פרטי קורס",
+    courses: locale === "ar" ? "الدورات" : locale === "en" ? "Courses" : "קורסים",
+    editCourse: locale === "ar" ? "تعديل الدورة" : locale === "en" ? "Edit Course" : "ערוך קורס",
+    general: locale === "ar" ? "عام" : locale === "en" ? "General" : "כללי",
+    linkedStudents: locale === "ar" ? "الطلاب المرتبطون" : locale === "en" ? "Linked Students" : "ילדים משויכים",
+    costPayments: locale === "ar" ? "التكلفة والمدفوعات" : locale === "en" ? "Cost & Payments" : "עלות ותשלומים",
+    studentAttendance: locale === "ar" ? "حضور الطلاب" : locale === "en" ? "Student Attendance" : "נוכחות תלמיד",
+    teacherAttendance: locale === "ar" ? "حضور المعلمين" : locale === "en" ? "Teacher Attendance" : "נוכחות מורה",
+    courseInfo: locale === "ar" ? "معلومات الدورة" : locale === "en" ? "Course Info" : "פרטי הקורס",
+    level: locale === "ar" ? "المستوى" : locale === "en" ? "Level" : "רמה",
+    duration: locale === "ar" ? "المدة" : locale === "en" ? "Duration" : "משך",
+    weeks: locale === "ar" ? "أسابيع" : locale === "en" ? "weeks" : "שבועות",
+    status: locale === "ar" ? "الحالة" : locale === "en" ? "Status" : "סטטוס",
+    totalCoursePrice: locale === "ar" ? "السعر الإجمالي للدورة" : locale === "en" ? "Total Course Price" : "מחיר כולל לקורס",
+    pricePerStudent: locale === "ar" ? "السعر لكل طالب" : locale === "en" ? "Price Per Student" : "מחיר לתלמיד",
+    dateTime: locale === "ar" ? "التواريخ والأوقات" : locale === "en" ? "Dates & Times" : "תאריכים ושעות",
+    startDate: locale === "ar" ? "تاريخ البدء" : locale === "en" ? "Start Date" : "תאריך התחלה",
+    endDate: locale === "ar" ? "تاريخ الانتهاء" : locale === "en" ? "End Date" : "תאריך סיום",
+    startTime: locale === "ar" ? "وقت البدء" : locale === "en" ? "Start Time" : "שעות התחלה",
+    endTime: locale === "ar" ? "وقت الانتهاء" : locale === "en" ? "End Time" : "שעות סיום",
+    weekdays: locale === "ar" ? "أيام الأسبوع" : locale === "en" ? "Weekdays" : "ימי שבוע",
+    stats: locale === "ar" ? "إحصائيات" : locale === "en" ? "Statistics" : "סטטיסטיקות",
+    totalStudents: locale === "ar" ? "إجمالي الطلاب" : locale === "en" ? "Total Students" : "סה\"כ תלמידים",
+    teachers: locale === "ar" ? "المعلمون" : locale === "en" ? "Teachers" : "מורים",
+    noTeachers: locale === "ar" ? "لا يوجد معلمون مرتبطون" : locale === "en" ? "No teachers assigned" : "לא משויכים מורים",
+  }
   const params = useParams()
   const id = params.id as string
   const [course, setCourse] = useState<Course | null>(null)
@@ -214,7 +246,7 @@ export default function CourseViewPage() {
   }
 
   if (!course) {
-    return <div className="p-6 text-center">לא נמצא קורס</div>
+    return <div className="p-6 text-center">{tr.notFound}</div>
   }
 
   const courseTeachers = teachers.filter(t => 
@@ -235,7 +267,7 @@ export default function CourseViewPage() {
   })
 
   return (
-    <div dir="rtl" className="container mx-auto max-w-4xl p-6 space-y-6">
+    <div dir={isRtl ? "rtl" : "ltr"} className="container mx-auto max-w-4xl p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -245,9 +277,9 @@ export default function CourseViewPage() {
             </Button>
           </Link>
           <div>
-            <h1 className="text-3xl font-bold">פרטי קורס</h1>
+            <h1 className="text-3xl font-bold">{tr.courseDetails}</h1>
             <p className="text-muted-foreground mt-1">
-              <Link href="/dashboard/courses" className="hover:underline">קורסים</Link>
+              <Link href="/dashboard/courses" className="hover:underline">{tr.courses}</Link>
               {" > "}
               {course.name}
             </p>
@@ -258,20 +290,20 @@ export default function CourseViewPage() {
           <Link href={`/dashboard/courses/${course.id}/edit`}>
             <Button className="gap-2">
               <Pencil className="h-4 w-4" />
-              ערוך קורס
+              {tr.editCourse}
             </Button>
           </Link>
         )}
       </div>
 
       {/* Tabs - לפי הרשאות טאב בכרטסת קורס */}
-      <Tabs defaultValue={canTabGeneral ? "general" : !isStudentUser && canTabStudents ? "students" : canTabPayments ? "payments" : canTabAttendanceStudents ? "attendance-students" : "attendance-teachers"} className="w-full" dir="rtl">
-        <TabsList className="grid w-full mb-6" style={{ gridTemplateColumns: `repeat(${[canTabGeneral, canTabStudents, canTabPayments, canTabAttendanceStudents, canTabAttendanceTeachers].filter(Boolean).length}, 1fr)` }} dir="rtl">
-          {canTabGeneral && <TabsTrigger value="general">כללי</TabsTrigger>}
-          {!isStudentUser && canTabStudents && <TabsTrigger value="students">ילדים משויכים</TabsTrigger>}
-          {!isStudentUser && canTabPayments && <TabsTrigger value="payments">עלות ותשלומים</TabsTrigger>}
-          {canTabAttendanceStudents && <TabsTrigger value="attendance-students">נוכחות תלמיד</TabsTrigger>}
-          {canTabAttendanceTeachers && <TabsTrigger value="attendance-teachers">נוכחות מורה</TabsTrigger>}
+      <Tabs defaultValue={canTabGeneral ? "general" : !isStudentUser && canTabStudents ? "students" : canTabPayments ? "payments" : canTabAttendanceStudents ? "attendance-students" : "attendance-teachers"} className="w-full" dir={isRtl ? "rtl" : "ltr"}>
+        <TabsList className="grid w-full mb-6" style={{ gridTemplateColumns: `repeat(${[canTabGeneral, canTabStudents, canTabPayments, canTabAttendanceStudents, canTabAttendanceTeachers].filter(Boolean).length}, 1fr)` }} dir={isRtl ? "rtl" : "ltr"}>
+          {canTabGeneral && <TabsTrigger value="general">{tr.general}</TabsTrigger>}
+          {!isStudentUser && canTabStudents && <TabsTrigger value="students">{tr.linkedStudents}</TabsTrigger>}
+          {!isStudentUser && canTabPayments && <TabsTrigger value="payments">{tr.costPayments}</TabsTrigger>}
+          {canTabAttendanceStudents && <TabsTrigger value="attendance-students">{tr.studentAttendance}</TabsTrigger>}
+          {canTabAttendanceTeachers && <TabsTrigger value="attendance-teachers">{tr.teacherAttendance}</TabsTrigger>}
         </TabsList>
 
         {canTabGeneral && (
@@ -284,24 +316,26 @@ export default function CourseViewPage() {
                 <div className="p-2 bg-blue-100 rounded-lg">
                   <BookOpen className="h-5 w-5 text-blue-600" />
                 </div>
-                <CardTitle className="text-lg">פרטי הקורס</CardTitle>
+                <CardTitle className="text-lg">{tr.courseInfo}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-row-reverse justify-between items-center">
-                  <span className="text-muted-foreground">רמה:</span>
-                  <span className="font-medium">{levelLabels[course.level || "beginner"] || course.level || "-"}</span>
+                  <span className="text-muted-foreground">{tr.level}:</span>
+                  <span className="font-medium">{levelLabels[course.level || "beginner"]?.[locale] || course.level || "-"}</span>
                 </div>
                 <div className="flex flex-row-reverse justify-between items-center">
-                  <span className="text-muted-foreground">משך:</span>
-                  <span className="font-medium">{course.duration || 0} שבועות</span>
+                  <span className="text-muted-foreground">{tr.duration}:</span>
+                  <span className="font-medium">{course.duration || 0} {tr.weeks}</span>
                 </div>
                 <div className="flex flex-row-reverse justify-between items-center">
-                  <span className="text-muted-foreground">סטטוס:</span>
-                  <Badge className={statusPres.badgeClassName}>{statusPres.labelHe}</Badge>
+                  <span className="text-muted-foreground">{tr.status}:</span>
+                  <Badge className={statusPres.badgeClassName}>
+                    {locale === "ar" ? statusPres.labelAr : locale === "en" ? statusPres.labelEn : statusPres.labelHe}
+                  </Badge>
                 </div>
                 {!isStudentUser && currentUser?.role?.toLowerCase?.() === "admin" && (
                   <div className="flex flex-row-reverse justify-between items-center">
-                    <span className="text-muted-foreground">{isTotalPriceMode ? "מחיר כולל לקורס:" : "מחיר לתלמיד:"}</span>
+                    <span className="text-muted-foreground">{isTotalPriceMode ? `${tr.totalCoursePrice}:` : `${tr.pricePerStudent}:`}</span>
                     <span className="font-medium text-blue-600 text-xl">₪{course.price || 0}</span>
                   </div>
                 )}
@@ -314,31 +348,31 @@ export default function CourseViewPage() {
                 <div className="p-2 bg-gray-100 rounded-lg">
                   <Calendar className="h-5 w-5 text-gray-600" />
                 </div>
-                <CardTitle className="text-lg">תאריכים ושעות</CardTitle>
+                <CardTitle className="text-lg">{tr.dateTime}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-row-reverse justify-between items-center">
-                  <span className="text-muted-foreground">תאריך התחלה:</span>
-                  <span className="font-medium">{course.startDate || "-"}</span>
+                  <span className="text-muted-foreground">{tr.startDate}:</span>
+                  <span className="font-medium">{course.startDate ? new Intl.DateTimeFormat(localeTag, { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(course.startDate)) : "-"}</span>
                 </div>
                 <div className="flex flex-row-reverse justify-between items-center">
-                  <span className="text-muted-foreground">תאריך סיום:</span>
-                  <span className="font-medium">{course.endDate || "-"}</span>
+                  <span className="text-muted-foreground">{tr.endDate}:</span>
+                  <span className="font-medium">{course.endDate ? new Intl.DateTimeFormat(localeTag, { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(course.endDate)) : "-"}</span>
                 </div>
                 <div className="flex flex-row-reverse justify-between items-center">
-                  <span className="text-muted-foreground">שעות התחלה:</span>
+                  <span className="text-muted-foreground">{tr.startTime}:</span>
                   <span className="font-medium">{courseTimeToDisplayValue(course.startTime) || "-"}</span>
                 </div>
                 <div className="flex flex-row-reverse justify-between items-center">
-                  <span className="text-muted-foreground">שעות סיום:</span>
+                  <span className="text-muted-foreground">{tr.endTime}:</span>
                   <span className="font-medium">{courseTimeToDisplayValue(course.endTime) || "-"}</span>
                 </div>
                 <div className="flex flex-row-reverse justify-between items-center">
-                  <span className="text-muted-foreground">ימי שבוע:</span>
+                  <span className="text-muted-foreground">{tr.weekdays}:</span>
                   <div className="flex gap-1 flex-wrap flex-row-reverse">
                     {daysOfWeek.length > 0 ? daysOfWeek.map(day => (
                       <Badge key={day} variant="outline" className="text-xs">
-                        {dayLabels[day] || day}
+                        {dayLabels[day]?.[locale] || day}
                       </Badge>
                     )) : "-"}
                   </div>
@@ -355,11 +389,11 @@ export default function CourseViewPage() {
                 <div className="p-2 bg-gray-100 rounded-lg">
                   <BarChart3 className="h-5 w-5 text-gray-600" />
                 </div>
-                <CardTitle className="text-lg">סטטיסטיקות</CardTitle>
+                <CardTitle className="text-lg">{tr.stats}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex flex-row-reverse justify-between items-center">
-                  <span className="text-muted-foreground">סה"כ תלמידים:</span>
+                  <span className="text-muted-foreground">{tr.totalStudents}:</span>
                   <span className="font-bold text-2xl text-blue-600">{enrollments.length}</span>
                 </div>
               </CardContent>
@@ -371,7 +405,7 @@ export default function CourseViewPage() {
                 <div className="p-2 bg-gray-100 rounded-lg">
                   <Users className="h-5 w-5 text-gray-600" />
                 </div>
-                <CardTitle className="text-lg">מורים</CardTitle>
+                <CardTitle className="text-lg">{tr.teachers}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex gap-2 flex-wrap flex-row-reverse justify-start">
@@ -380,7 +414,7 @@ export default function CourseViewPage() {
                       {teacher.name}
                     </Badge>
                   )) : (
-                    <span className="text-muted-foreground">לא משויכים מורים</span>
+                    <span className="text-muted-foreground">{tr.noTeachers}</span>
                   )}
                 </div>
               </CardContent>

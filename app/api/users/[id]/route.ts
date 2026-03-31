@@ -124,6 +124,23 @@ export const DELETE = withTenantAuth(async (req, session, { params }: Ctx) => {
 
   try {
     const { id } = await params
+    const linkedStudent = await db`SELECT id FROM "Student" WHERE "userId" = ${id} LIMIT 1`
+    const linkedTeacher = await db`SELECT id FROM "Teacher" WHERE "userId" = ${id} LIMIT 1`
+
+    if (linkedStudent.length > 0) {
+      const studentId = String((linkedStudent[0] as { id: string }).id)
+      await db`DELETE FROM "Enrollment" WHERE "studentId" = ${studentId}`
+      await db`DELETE FROM "Attendance" WHERE "studentId" = ${studentId}`
+      await db`DELETE FROM "Payment" WHERE "studentId" = ${studentId}`
+      await db`DELETE FROM "Student" WHERE id = ${studentId}`
+    }
+
+    if (linkedTeacher.length > 0) {
+      const teacherId = String((linkedTeacher[0] as { id: string }).id)
+      await db`DELETE FROM "Attendance" WHERE "teacherId" = ${teacherId}`
+      await db`DELETE FROM "Teacher" WHERE id = ${teacherId}`
+    }
+
     await db`DELETE FROM "User" WHERE id = ${id}`
     return NextResponse.json({ success: true })
   } catch (err: unknown) {

@@ -18,6 +18,7 @@ import { useUserType } from "@/lib/use-user-type"
 import { getCourseStatusPresentation } from "@/lib/course-status"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
+import { useLanguage } from "@/lib/i18n/context"
 
 type Course = {
   id: string
@@ -68,6 +69,7 @@ export default function CoursesPage() {
 
   const currentUser = useCurrentUser()
   const { toast } = useToast()
+  const { t, locale } = useLanguage()
   const { data: userTypeData, loading: userTypeLoading } = useUserType(
     currentUser?.id,
     currentUser?.roleKey || currentUser?.role,
@@ -160,7 +162,7 @@ export default function CoursesPage() {
 
   const getDaysLabel = (days?: string[]) => {
     if (!days || days.length === 0) return null
-    const dayNames: Record<string, string> = {
+    const dayNamesHe: Record<string, string> = {
       sunday: "ראשון",
       monday: "שני",
       tuesday: "שלישי",
@@ -169,12 +171,38 @@ export default function CoursesPage() {
       friday: "שישי",
       saturday: "שבת"
     }
-    return days.map(d => dayNames[d] || d).join(", ")
+    const dayNamesAr: Record<string, string> = {
+      ראשון: "الأحد",
+      שני: "الاثنين",
+      שלישי: "الثلاثاء",
+      רביעי: "الأربعاء",
+      חמישי: "الخميس",
+      שישי: "الجمعة",
+      שבת: "السبت",
+    }
+    const dayNamesEn: Record<string, string> = {
+      ראשון: "Sunday",
+      שני: "Monday",
+      שלישי: "Tuesday",
+      רביעי: "Wednesday",
+      חמישי: "Thursday",
+      שישי: "Friday",
+      שבת: "Saturday",
+    }
+    return days
+      .map((d) => {
+        const heb = dayNamesHe[d.toLowerCase()] || d
+        if (locale === "ar") return dayNamesAr[heb] || heb
+        if (locale === "en") return dayNamesEn[heb] || heb
+        return heb
+      })
+      .join(", ")
   }
 
   const formatDate = (date?: string) => {
     if (!date) return null
-    return new Intl.DateTimeFormat("he-IL", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(date))
+    const localeTag = locale === "ar" ? "ar" : locale === "en" ? "en-GB" : "he-IL"
+    return new Intl.DateTimeFormat(localeTag, { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(date))
   }
 
   const copyCourseRegistrationLink = async (course: Course) => {
@@ -188,9 +216,9 @@ export default function CoursesPage() {
       await navigator.clipboard.writeText(link)
       setCopiedCourseId(course.id)
       setTimeout(() => setCopiedCourseId(null), 1800)
-      toast({ title: "הקישור הועתק", description: `קישור רישום לקורס "${course.name}" הועתק ללוח` })
+      toast({ title: t("courses.copied"), description: `${t("courses.registrationLinkCopiedFor")} "${course.name}"` })
     } catch {
-      toast({ title: "שגיאה", description: "לא ניתן להעתיק את הקישור", variant: "destructive" })
+      toast({ title: t("courses.error"), description: t("courses.copyFailed"), variant: "destructive" })
     }
   }
 
@@ -199,11 +227,11 @@ export default function CoursesPage() {
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <PageHeader
-          title="קורסים"
+          title={t("courses.title")}
           description={
             isLinkedTeacher && !isAdmin
-              ? "הקורסים שמשויכים אליך במרכז"
-              : "נהל את כל הקורסים במרכז"
+              ? t("courses.myAssigned")
+              : t("courses.manageAll")
           }
         />
 
@@ -232,7 +260,7 @@ export default function CoursesPage() {
             <Link href="/dashboard/courses/new">
               <Button className="gap-2 bg-primary">
                 <Plus className="h-4 w-4" />
-                קורס חדש
+                {t("courses.newCourse")}
               </Button>
             </Link>
           )}
@@ -245,39 +273,39 @@ export default function CoursesPage() {
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="חפש לפי שם קורס..."
+            placeholder={t("courses.searchPlaceholder")}
             className="max-w-md text-right"
             dir="rtl"
           />
           <Button variant="outline" onClick={load} className="gap-2 bg-transparent">
             <RefreshCw className="h-4 w-4" />
-            רענן
+            {t("courses.refresh")}
           </Button>
           <div className="text-sm text-muted-foreground mr-auto">
-            סה״כ: {filtered.length} קורסים
+            {t("courses.total")}: {filtered.length} {t("courses.title")}
           </div>
         </div>
       </Card>
 
       {/* Content */}
       {pageBusy ? (
-        <div className="text-muted-foreground text-center py-12">טוען...</div>
+        <div className="text-muted-foreground text-center py-12">{t("nav.loading")}</div>
       ) : err ? (
         <Card className="p-6 border-red-200 bg-red-50">
-          <div className="text-red-700 font-semibold">שגיאה</div>
+          <div className="text-red-700 font-semibold">{t("courses.error")}</div>
           <div className="text-red-700/80 mt-1">{err}</div>
           <div className="mt-4">
-            <Button variant="outline" onClick={load}>נסה שוב</Button>
+            <Button variant="outline" onClick={load}>{t("courses.retry")}</Button>
           </div>
         </Card>
       ) : filtered.length === 0 ? (
         <Card className="p-8 text-center text-muted-foreground">
-          <div className="text-lg">{isLinkedTeacher && !isAdmin ? "אין קורסים משויכים אליך" : "אין קורסים"}</div>
+          <div className="text-lg">{isLinkedTeacher && !isAdmin ? t("courses.noneAssigned") : t("courses.none")}</div>
           {canEditCourses && (
             <Link href="/dashboard/courses/new">
               <Button className="mt-4 gap-2">
                 <Plus className="h-4 w-4" />
-                הוסף קורס ראשון
+                {t("courses.addFirst")}
               </Button>
             </Link>
           )}
@@ -307,7 +335,7 @@ export default function CoursesPage() {
                     <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{c.description}</p>
                   )}
                 </div>
-                <Badge className={statusPres.badgeClassName}>{statusPres.labelHe}</Badge>
+                <Badge className={statusPres.badgeClassName}>{t(`courses.status.${statusPres.key}`) || statusPres.labelHe}</Badge>
               </div>
 
               {/* Info rows */}
@@ -315,7 +343,7 @@ export default function CoursesPage() {
                 {/* Students count */}
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Users className="h-4 w-4 text-blue-500" />
-                  <span>{c.enrollmentCount || 0} תלמידים</span>
+                  <span>{c.enrollmentCount || 0} {t("courses.students")}</span>
                 </div>
 
                 {/* Duration */}
@@ -349,7 +377,7 @@ export default function CoursesPage() {
                   <div className="bg-green-50 rounded-lg p-3 text-center">
                     <div className="flex items-center justify-center gap-1 text-green-600 text-xs mb-1">
                       <CheckCircle2 className="h-3 w-3" />
-                      <span>שילמו</span>
+                      <span>{t("courses.paid")}</span>
                     </div>
                     <div className="font-bold text-green-700">{c.paidCount || 0}/{c.enrollmentCount || 0}</div>
                   </div>
@@ -364,7 +392,7 @@ export default function CoursesPage() {
                         : "text-green-600"
                     }`}>
                       <AlertCircle className="h-3 w-3" />
-                      <span>יתרה</span>
+                      <span>{t("courses.remaining")}</span>
                     </div>
                     <div className={`font-bold ${
                       remaining > 0
@@ -383,7 +411,7 @@ export default function CoursesPage() {
                   <div className="flex items-center justify-between">
                     <span className="text-2xl font-bold text-primary">{c.price}₪</span>
                     <span className="text-sm text-muted-foreground">
-                      {isTotalPriceMode ? "מחיר כולל לקורס:" : "מחיר לתלמיד:"}
+                      {isTotalPriceMode ? t("courses.totalCoursePrice") : t("courses.pricePerStudent")}
                     </span>
                   </div>
                 )}
@@ -393,7 +421,7 @@ export default function CoursesPage() {
                     <span className="text-muted-foreground">
                       {formatDate(c.startDate)} - {formatDate(c.endDate)}
                     </span>
-                    <span className="text-muted-foreground">תאריכים:</span>
+                    <span className="text-muted-foreground">{t("courses.dates")}:</span>
                   </div>
                 )}
 
@@ -402,7 +430,7 @@ export default function CoursesPage() {
                     <span className="text-muted-foreground">
                       {c.startTime} - {c.endTime}
                     </span>
-                    <span className="text-muted-foreground">שעות:</span>
+                    <span className="text-muted-foreground">{t("courses.hours")}:</span>
                   </div>
                 )}
               </div>
@@ -423,7 +451,7 @@ export default function CoursesPage() {
                   <Link href={`/dashboard/courses/${c.id}/edit`} className="flex-1">
                     <Button variant="outline" className="w-full gap-2 bg-transparent">
                       <Pencil className="h-4 w-4" />
-                      ערוך
+                      {t("courses.edit")}
                     </Button>
                   </Link>
                 )}
@@ -431,7 +459,7 @@ export default function CoursesPage() {
                   <Link href={`/dashboard/courses/${c.id}`} className="flex-1">
                     <Button variant="outline" className="w-full gap-2 bg-transparent">
                       <Eye className="h-4 w-4" />
-                      צפה
+                      {t("courses.view")}
                     </Button>
                   </Link>
                 )}
@@ -443,7 +471,7 @@ export default function CoursesPage() {
                 onClick={() => copyCourseRegistrationLink(c)}
               >
                 {copiedCourseId === c.id ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
-                {copiedCourseId === c.id ? "הועתק" : "העתק קישור רישום לקורס"}
+                {copiedCourseId === c.id ? t("courses.copiedShort") : t("courses.copyRegistrationLink")}
               </Button>
             </Card>
             )

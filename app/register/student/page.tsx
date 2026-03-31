@@ -1,7 +1,7 @@
 "use client"
 
-import { Suspense, useState } from "react"
-import { useSearchParams } from "next/navigation"
+import { Suspense, useEffect, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -11,11 +11,13 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { User, Phone, Mail, Loader2, CheckCircle, Users, Heart } from "lucide-react"
 
 function RegisterStudentContent() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const [name, setName] = useState("")
   const [idNumber, setIdNumber] = useState("")
   const [father, setFather] = useState("")
   const [mother, setMother] = useState("")
+  const [birthDate, setBirthDate] = useState("")
   const [phone, setPhone] = useState("")
   const [email, setEmail] = useState("")
   const [healthFund, setHealthFund] = useState("")
@@ -24,16 +26,84 @@ function RegisterStudentContent() {
   const [confirmPhotoConsent, setConfirmPhotoConsent] = useState(false)
   const [noSensitivity, setNoSensitivity] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isLookupLoading, setIsLookupLoading] = useState(false)
+  const [foundExisting, setFoundExisting] = useState(false)
+  const [submittedExistingStudent, setSubmittedExistingStudent] = useState<boolean | null>(null)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  function normalizeBirthDateInput(value: string): string {
+    const v = value.trim()
+    if (!v) return ""
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v
+    const m = v.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/)
+    if (!m) return v
+    const dd = m[1].padStart(2, "0")
+    const mm = m[2].padStart(2, "0")
+    const yyyy = m[3]
+    return `${yyyy}-${mm}-${dd}`
+  }
+
   const selectedCourseId = searchParams.get("courseId")?.trim() || ""
   const selectedCourseName = searchParams.get("courseName")?.trim() || ""
+
+  useEffect(() => {
+    const id = idNumber.trim()
+    if (!id) {
+      setFoundExisting(false)
+      return
+    }
+    if (id.length < 5) return
+    const t = setTimeout(async () => {
+      try {
+        setIsLookupLoading(true)
+        const res = await fetch(`/api/register/student?idNumber=${encodeURIComponent(id)}`)
+        if (!res.ok) return
+        const data = await res.json()
+        if (!data?.found || !data?.student) {
+          setFoundExisting(false)
+          return
+        }
+        const s = data.student
+        setFoundExisting(true)
+        setName(String(s.name ?? ""))
+        setFather(String(s.father ?? ""))
+        setMother(String(s.mother ?? ""))
+        setPhone(String(s.phone ?? ""))
+        setEmail(String(s.email ?? ""))
+        setHealthFund(String(s.healthFund ?? ""))
+        setAllergies(String(s.allergies ?? ""))
+        const bd = s.birthDate ? String(s.birthDate).split("T")[0] : ""
+        setBirthDate(bd)
+      } catch {
+        // no-op
+      } finally {
+        setIsLookupLoading(false)
+      }
+    }, 350)
+    return () => clearTimeout(t)
+  }, [idNumber])
+
+  useEffect(() => {
+    if (!success) return
+    const timer = setTimeout(() => {
+      router.push("/login")
+    }, 5000)
+    return () => clearTimeout(timer)
+  }, [success, router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
     if (!name.trim()) {
       setError("יש להזין שם")
+      return
+    }
+    if (!idNumber.trim()) {
+      setError("יש להזין תעודת זהות כדי ליצור משתמש תלמיד אוטומטי")
+      return
+    }
+    if (!phone.trim()) {
+      setError("יש להזין טלפון הורה כדי ליצור סיסמה ראשונית אוטומטית")
       return
     }
     if (!confirmCenterAgreement) {
@@ -50,7 +120,7 @@ function RegisterStudentContent() {
     }
     setIsSubmitting(true)
     try {
-      const res = await fetch("/api/students", {
+      const res = await fetch("/api/register/student", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -58,6 +128,7 @@ function RegisterStudentContent() {
           idNumber: idNumber.trim() || null,
           father: father.trim() || null,
           mother: mother.trim() || null,
+          birthDate: normalizeBirthDateInput(birthDate) || null,
           phone: phone.trim() || null,
           email: email.trim() || null,
           healthFund: healthFund.trim() || null,
@@ -73,11 +144,14 @@ function RegisterStudentContent() {
         const data = await res.json().catch(() => ({}))
         throw new Error(data.error || "שגיאה ברישום")
       }
+      const data = await res.json().catch(() => ({}))
+      setSubmittedExistingStudent(data?.existingStudent === true)
       setSuccess(true)
       setName("")
       setIdNumber("")
       setFather("")
       setMother("")
+      setBirthDate("")
       setPhone("")
       setEmail("")
       setHealthFund("")
@@ -100,6 +174,21 @@ function RegisterStudentContent() {
             <CheckCircle className="h-16 w-16 text-green-600 mx-auto mb-4" />
             <h2 className="text-xl font-bold text-green-800">הרישום התקבל</h2>
             <p className="text-green-700 mt-2">נצור איתך קשר בהקדם.</p>
+            {submittedExistingStudent === true ? (
+              <p className="text-blue-800 mt-2 font-medium">זוהה תלמיד קיים — עודכנה הרשמה מחדש עם הנתונים הקיימים.</p>
+            ) : (
+              <p className="text-blue-800 mt-2 font-medium">נוצר תלמיד חדש במערכת עם משתמש התחברות אוטומטי.</p>
+            )}
+            {submittedExistingStudent !== true && (
+              <div className="mt-3 rounded-lg border border-green-300 bg-white/70 px-3 py-2 text-sm text-green-900">
+                נוצר משתמש תלמיד אוטומטי:
+                <br />
+                שם משתמש = תעודת זהות
+                <br />
+                סיסמה ראשונית = טלפון ההורה שהוזן בטופס
+              </div>
+            )}
+            <p className="text-green-700 mt-2">מעבירים אותך לדף התחברות בעוד 5 שניות...</p>
           </CardContent>
         </Card>
       </div>
@@ -150,6 +239,12 @@ function RegisterStudentContent() {
                 placeholder="הכנס תעודת זהות"
                 disabled={isSubmitting}
               />
+              {isLookupLoading && (
+                <p className="text-xs text-muted-foreground">בודק אם תלמיד כבר קיים...</p>
+              )}
+              {foundExisting && !isLookupLoading && (
+                <p className="text-xs text-blue-700">נמצא תלמיד קיים. הטופס מולא אוטומטית לפי ת״ז.</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="father">שם האב</Label>
@@ -178,6 +273,17 @@ function RegisterStudentContent() {
                   disabled={isSubmitting}
                 />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="birthDate">תאריך לידה</Label>
+              <Input
+                id="birthDate"
+                type="text"
+                value={birthDate}
+                onChange={(e) => setBirthDate(e.target.value)}
+                placeholder="YYYY-MM-DD או DD/MM/YYYY"
+                disabled={isSubmitting}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone">טלפון</Label>
