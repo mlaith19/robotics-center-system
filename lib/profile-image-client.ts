@@ -24,6 +24,36 @@ export async function fileToProfileImageDataUrl(file: File, size = 512): Promise
 
     const imageData = sourceCtx.getImageData(0, 0, img.width, img.height)
     const data = imageData.data
+
+    const idx = (x: number, y: number) => (y * img.width + x) * 4
+    const corners = [
+      [0, 0],
+      [Math.max(0, img.width - 1), 0],
+      [0, Math.max(0, img.height - 1)],
+      [Math.max(0, img.width - 1), Math.max(0, img.height - 1)],
+    ] as const
+    const samples = corners.map(([x, y]) => {
+      const i = idx(x, y)
+      return { r: data[i], g: data[i + 1], b: data[i + 2], a: data[i + 3] }
+    })
+    const avg = samples.reduce(
+      (acc, s) => ({ r: acc.r + s.r, g: acc.g + s.g, b: acc.b + s.b, a: acc.a + s.a }),
+      { r: 0, g: 0, b: 0, a: 0 }
+    )
+    const bg = {
+      r: avg.r / samples.length,
+      g: avg.g / samples.length,
+      b: avg.b / samples.length,
+      a: avg.a / samples.length,
+    }
+    const sameCornerBg = samples.every(
+      (s) =>
+        Math.abs(s.r - bg.r) < 16 &&
+        Math.abs(s.g - bg.g) < 16 &&
+        Math.abs(s.b - bg.b) < 16 &&
+        Math.abs(s.a - bg.a) < 24
+    )
+    const bgTolerance = 22
     let minX = img.width
     let minY = img.height
     let maxX = -1
@@ -31,8 +61,19 @@ export async function fileToProfileImageDataUrl(file: File, size = 512): Promise
 
     for (let y = 0; y < img.height; y++) {
       for (let x = 0; x < img.width; x++) {
-        const alpha = data[(y * img.width + x) * 4 + 3]
-        if (alpha > 10) {
+        const i = (y * img.width + x) * 4
+        const r = data[i]
+        const g = data[i + 1]
+        const b = data[i + 2]
+        const a = data[i + 3]
+        const isTransparentBg = a <= 10
+        const isSolidCornerBg =
+          sameCornerBg &&
+          a > 10 &&
+          Math.abs(r - bg.r) <= bgTolerance &&
+          Math.abs(g - bg.g) <= bgTolerance &&
+          Math.abs(b - bg.b) <= bgTolerance
+        if (!isTransparentBg && !isSolidCornerBg) {
           if (x < minX) minX = x
           if (y < minY) minY = y
           if (x > maxX) maxX = x
