@@ -222,6 +222,13 @@ export default function CourseViewPage() {
   )
 
   const daysOfWeek = Array.isArray(course.daysOfWeek) ? course.daysOfWeek : []
+  const isTotalPriceMode =
+    typeof (course as any).courseType === "string" &&
+    (
+      (course as any).courseType.endsWith("_total") ||
+      (course as any).courseType.endsWith("_session") ||
+      (course as any).courseType.endsWith("_hour")
+    )
   const statusPres = getCourseStatusPresentation({
     status: course.status,
     endDate: course.endDate,
@@ -294,7 +301,7 @@ export default function CourseViewPage() {
                 </div>
                 {!isStudentUser && currentUser?.role?.toLowerCase?.() === "admin" && (
                   <div className="flex flex-row-reverse justify-between items-center">
-                    <span className="text-muted-foreground">מחיר:</span>
+                    <span className="text-muted-foreground">{isTotalPriceMode ? "מחיר כולל לקורס:" : "מחיר לתלמיד:"}</span>
                     <span className="font-medium text-blue-600 text-xl">₪{course.price || 0}</span>
                   </div>
                 )}

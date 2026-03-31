@@ -283,45 +283,51 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </Link>
               </>
             ) : isTeacherRole ? (
-              // מורה: פרופיל; "קורסים" → דף רשימה; לוח זמנים ונוכחות (שמות קורסים בלבד בדף הקורסים, לא בסרגל)
+              // מורה: הסרגל נשלט לפי הרשאות, כדי שהתאמות בדף משתמשים יחולו בפועל.
               <>
-                <Link
-                  href={teacherData ? `/dashboard/teachers/${teacherData.id}` : "/dashboard/teachers/me"}
-                  onClick={() => setSidebarOpen(false)}
-                  className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-colors ${
-                    (teacherData && pathname.includes(`/dashboard/teachers/${teacherData.id}`)) ||
-                    (!teacherData && pathname === "/dashboard/teachers/me")
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  }`}
-                >
-                  <User className="h-5 w-5" />
-                  {t("nav.myProfile")}
-                </Link>
-                <Link
-                  href="/dashboard/schedule"
-                  onClick={() => setSidebarOpen(false)}
-                  className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-colors ${
-                    pathname === "/dashboard/schedule"
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  }`}
-                >
-                  <Calendar className="h-5 w-5" />
-                  {t("nav.schedule")}
-                </Link>
-                <Link
-                  href="/dashboard/attendance"
-                  onClick={() => setSidebarOpen(false)}
-                  className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-colors ${
-                    pathname === "/dashboard/attendance"
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  }`}
-                >
-                  <ClipboardCheck className="h-5 w-5" />
-                  {t("nav.attendance")}
-                </Link>
+                {showMyProfileInSidebar && (
+                  <Link
+                    href={teacherData ? `/dashboard/teachers/${teacherData.id}` : "/dashboard/teachers/me"}
+                    onClick={() => setSidebarOpen(false)}
+                    className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-colors ${
+                      (teacherData && pathname.includes(`/dashboard/teachers/${teacherData.id}`)) ||
+                      (!teacherData && pathname === "/dashboard/teachers/me")
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    }`}
+                  >
+                    <User className="h-5 w-5" />
+                    {t("nav.myProfile")}
+                  </Link>
+                )}
+                {canShowInSidebar(userPermissions, "teacher", "/dashboard/schedule", currentUser?.roleKey, currentUser?.role) && (
+                  <Link
+                    href="/dashboard/schedule"
+                    onClick={() => setSidebarOpen(false)}
+                    className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-colors ${
+                      pathname === "/dashboard/schedule"
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    }`}
+                  >
+                    <Calendar className="h-5 w-5" />
+                    {t("nav.schedule")}
+                  </Link>
+                )}
+                {canShowInSidebar(userPermissions, "teacher", "/dashboard/attendance", currentUser?.roleKey, currentUser?.role) && (
+                  <Link
+                    href="/dashboard/attendance"
+                    onClick={() => setSidebarOpen(false)}
+                    className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-colors ${
+                      pathname === "/dashboard/attendance"
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    }`}
+                  >
+                    <ClipboardCheck className="h-5 w-5" />
+                    {t("nav.attendance")}
+                  </Link>
+                )}
                 {/* פריטים נוספים לפי הרשאות (קורסים, תלמידים וכו') */}
                 {navItems
                   .filter((item) => {

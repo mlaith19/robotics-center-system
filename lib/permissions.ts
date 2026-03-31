@@ -370,12 +370,20 @@ export function hasFullAccessRole(role: unknown): boolean {
   if (FULL_ACCESS_ROLES.has(r)) return true
   const compact = r.replace(/[_\W]/g, "")
   if (
+    r === "centeradmin" ||
+    r === "centreadmin" ||
+    r === "centeradministrator" ||
+    r === "centreadministrator" ||
     r === "administrator" ||
     r.startsWith("admin") ||
     r.endsWith("admin") ||
     r.includes("_admin") ||
     r.includes("מנהל") ||
     r.includes("אדמין") ||
+    compact.includes("centeradmin") ||
+    compact.includes("centreadmin") ||
+    compact.includes("centeradministrator") ||
+    compact.includes("centreadministrator") ||
     compact.includes("superadmin") ||
     compact.includes("sysadmin")
   ) return true

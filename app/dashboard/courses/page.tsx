@@ -45,6 +45,13 @@ type Course = {
   teachers?: { id: string; name: string }[]
 }
 
+function isTotalCoursePricingType(courseType?: string) {
+  return (
+    typeof courseType === "string" &&
+    (courseType.endsWith("_total") || courseType.endsWith("_session") || courseType.endsWith("_hour"))
+  )
+}
+
 type Teacher = {
   id: string
   name: string
@@ -278,6 +285,11 @@ export default function CoursesPage() {
       ) : (
         <div className={viewMode === "grid" ? "grid md:grid-cols-2 lg:grid-cols-3 gap-4" : "space-y-4"}>
           {filtered.map((c) => {
+            const isTotalPriceMode = isTotalCoursePricingType(c.courseType)
+            const totalExpected = isTotalPriceMode
+              ? (c.price || 0)
+              : (c.enrollmentCount || 0) * (c.price || 0)
+            const remaining = totalExpected - (c.totalPaid || 0)
             const statusPres = getCourseStatusPresentation({
               status: c.status,
               endDate: c.endDate,
@@ -342,12 +354,12 @@ export default function CoursesPage() {
                     <div className="font-bold text-green-700">{c.paidCount || 0}/{c.enrollmentCount || 0}</div>
                   </div>
                   <div className={`rounded-lg p-3 text-center ${
-                    ((c.enrollmentCount || 0) * (c.price || 0) - (c.totalPaid || 0)) > 0 
+                    remaining > 0
                       ? "bg-red-50" 
                       : "bg-green-50"
                   }`}>
                     <div className={`flex items-center justify-center gap-1 text-xs mb-1 ${
-                      ((c.enrollmentCount || 0) * (c.price || 0) - (c.totalPaid || 0)) > 0 
+                      remaining > 0
                         ? "text-red-600" 
                         : "text-green-600"
                     }`}>
@@ -355,11 +367,11 @@ export default function CoursesPage() {
                       <span>יתרה</span>
                     </div>
                     <div className={`font-bold ${
-                      ((c.enrollmentCount || 0) * (c.price || 0) - (c.totalPaid || 0)) > 0 
+                      remaining > 0
                         ? "text-red-700" 
                         : "text-green-700"
                     }`}>
-                      {((c.enrollmentCount || 0) * (c.price || 0) - (c.totalPaid || 0)).toLocaleString()}₪
+                      {remaining.toLocaleString()}₪
                     </div>
                   </div>
                 </div>
@@ -370,7 +382,9 @@ export default function CoursesPage() {
                 {canSeeFinancial && c.price != null && (
                   <div className="flex items-center justify-between">
                     <span className="text-2xl font-bold text-primary">{c.price}₪</span>
-                    <span className="text-sm text-muted-foreground">מחיר:</span>
+                    <span className="text-sm text-muted-foreground">
+                      {isTotalPriceMode ? "מחיר כולל לקורס:" : "מחיר לתלמיד:"}
+                    </span>
                   </div>
                 )}
                 

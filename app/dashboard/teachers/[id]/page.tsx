@@ -163,11 +163,12 @@ export default function TeacherViewPage() {
   const userPerms = currentUser?.permissions || []
   /** מחיר קורס / נתונים כספיים של קורס — כמו בדף הקורסים; מורה בלי הרשאה לא רואה בפופאפ */
   const canSeeCourseFinancial = isAdmin || hasPermission(userPerms, "courses.financial")
-  // בפרופיל שלי (מורה צופה בעצמו) – הרשאות מהכרטסת "הפרופיל שלי"; אחרת – מכרטסת מורים
-  const canTabGeneral = isAdmin || (isTeacherUser ? hasPermission(userPerms, "myProfile.tab.general") : hasPermission(userPerms, "teachers.tab.general"))
-  const canTabCourses = isAdmin || (isTeacherUser ? hasPermission(userPerms, "myProfile.tab.courses") : hasPermission(userPerms, "teachers.tab.courses"))
-  const canTabPayments = isAdmin || (isTeacherUser ? hasPermission(userPerms, "myProfile.tab.payments") : hasPermission(userPerms, "teachers.tab.payments"))
-  const canTabAttendance = isAdmin || (isTeacherUser ? hasPermission(userPerms, "myProfile.tab.attendance") : hasPermission(userPerms, "teachers.tab.attendance"))
+  const hasAnyPermission = (...permissionIds: string[]) => permissionIds.some((perm) => hasPermission(userPerms, perm))
+  // בפרופיל מורה מחובר: נאפשר גם הרשאות myProfile וגם teachers כדי שלא יהיו פערים בניהול הרשאות בדף משתמשים.
+  const canTabGeneral = isAdmin || hasAnyPermission("myProfile.tab.general", "teachers.tab.general")
+  const canTabCourses = isAdmin || hasAnyPermission("myProfile.tab.courses", "teachers.tab.courses")
+  const canTabPayments = isAdmin || hasAnyPermission("myProfile.tab.payments", "teachers.tab.payments")
+  const canTabAttendance = isAdmin || hasAnyPermission("myProfile.tab.attendance", "teachers.tab.attendance")
 
   const israeliBanks = [
     "בנק לאומי",

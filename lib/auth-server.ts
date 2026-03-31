@@ -11,6 +11,7 @@ import {
   SESSION_ABSOLUTE_MS,
 } from "./session-config"
 import { verifyAndDecodeSession } from "./session-codec"
+import { hasFullAccessRole } from "@/lib/permissions"
 
 export interface SessionUser {
   id: string
@@ -169,7 +170,7 @@ const ADMIN_ROLE_KEYS = new Set([
 
 export function requireAdmin(session: SessionUser): Response | null {
   const key = (session.roleKey || session.role || "").toString().toLowerCase()
-  if (ADMIN_ROLE_KEYS.has(key)) return null
+  if (ADMIN_ROLE_KEYS.has(key) || hasFullAccessRole(session.roleKey) || hasFullAccessRole(session.role)) return null
   return new Response(JSON.stringify({ error: "errors.forbidden" }), {
     status: 403,
     headers: { "Content-Type": "application/json" },

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter, useParams } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -44,6 +44,67 @@ const DAYS_OF_WEEK = [
   { value: "saturday", label: "שבת" },
 ]
 
+const TOTAL_PRICE_SUFFIX = "_total"
+const SESSION_PRICE_SUFFIX = "_session"
+const HOURLY_PRICE_SUFFIX = "_hour"
+function normalizeCourseType(raw: string): string {
+  return raw
+    .replace(new RegExp(`${TOTAL_PRICE_SUFFIX}$`), "")
+    .replace(new RegExp(`${SESSION_PRICE_SUFFIX}$`), "")
+    .replace(new RegExp(`${HOURLY_PRICE_SUFFIX}$`), "")
+}
+function isTotalCoursePricingType(raw: string): boolean {
+  return raw.endsWith(TOTAL_PRICE_SUFFIX)
+}
+function isSessionPricingType(raw: string): boolean {
+  return raw.endsWith(SESSION_PRICE_SUFFIX)
+}
+function isHourlyPricingType(raw: string): boolean {
+  return raw.endsWith(HOURLY_PRICE_SUFFIX)
+}
+
+function mapDayKeyToJsDay(key: string): number {
+  const m: Record<string, number> = {
+    sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6,
+  }
+  return m[key] ?? -1
+}
+
+function countSessionsBetween(startYmd: string, endYmd: string, dayKeys: string[]): number {
+  if (!startYmd || !endYmd || dayKeys.length === 0) return 0
+  const wanted = new Set(dayKeys.map(mapDayKeyToJsDay).filter((d) => d >= 0))
+  if (wanted.size === 0) return 0
+  const [ys, ms, ds] = startYmd.split("-").map(Number)
+  const [ye, me, de] = endYmd.split("-").map(Number)
+  if ([ys, ms, ds, ye, me, de].some((n) => Number.isNaN(n))) return 0
+  const cur = new Date(ys, ms - 1, ds)
+  const end = new Date(ye, me - 1, de)
+  if (cur > end) return 0
+  let count = 0
+  while (cur.getTime() <= end.getTime()) {
+    if (wanted.has(cur.getDay())) count++
+    cur.setDate(cur.getDate() + 1)
+  }
+  return count
+}
+
+function hoursBetweenTimeInputs(start: string, end: string): number | null {
+  if (!start?.trim() || !end?.trim()) return null
+  const parse = (t: string) => {
+    const [hh, mm = "0"] = t.trim().split(":")
+    const h = Number(hh)
+    const m = Number(mm)
+    if (Number.isNaN(h) || Number.isNaN(m)) return null
+    return h * 60 + m
+  }
+  const s = parse(start)
+  const e = parse(end)
+  if (s == null || e == null) return null
+  const diff = e - s
+  if (diff <= 0) return null
+  return diff / 60
+}
+
 export default function EditCoursePage() {
   const params = useParams()
   const id = params.id as string
@@ -76,7 +137,28 @@ export default function EditCoursePage() {
     schoolId: "",
     gafanProgramId: "",
     validYear: new Date().getFullYear().toString(),
+    pricingMode: "perStudent" as "perStudent" | "perCourse" | "perSession" | "perHour",
   })
+  const needsSessionCount = formData.pricingMode === "perSession" || formData.pricingMode === "perHour"
+  const needsHourlyRange = formData.pricingMode === "perHour"
+  const computedSessionCount = useMemo(
+    () => (needsSessionCount ? countSessionsBetween(formData.startDate, formData.endDate, formData.daysOfWeek) : 0),
+    [needsSessionCount, formData.startDate, formData.endDate, formData.daysOfWeek],
+  )
+  const hoursPerSession = useMemo(
+    () => (needsHourlyRange ? hoursBetweenTimeInputs(formData.startTime, formData.endTime) : null),
+    [needsHourlyRange, formData.startTime, formData.endTime],
+  )
+  const computedCoursePrice = useMemo(() => {
+    if (!needsSessionCount) return 0
+    const p = Number(formData.price)
+    if (Number.isNaN(p)) return 0
+    if (needsHourlyRange) {
+      if (hoursPerSession == null || hoursPerSession <= 0) return 0
+      return Math.round(computedSessionCount * hoursPerSession * p * 100) / 100
+    }
+    return Math.round(computedSessionCount * p * 100) / 100
+  }, [needsSessionCount, needsHourlyRange, computedSessionCount, hoursPerSession, formData.price])
 
   useEffect(() => {
     Promise.all([
@@ -97,7 +179,7 @@ export default function EditCoursePage() {
             status: course.status || "active",
             courseNumber: course.courseNumber || "",
             category: course.category || "",
-            courseType: course.courseType || "regular",
+            courseType: normalizeCourseType(course.courseType || "regular"),
             location: course.location || "center",
             startDate: course.startDate?.split("T")[0] || "",
             endDate: course.endDate?.split("T")[0] || "",
@@ -108,6 +190,13 @@ export default function EditCoursePage() {
             schoolId: course.schoolId || "",
             gafanProgramId: course.gafanProgramId || "",
             validYear: course.validYear?.toString() || new Date().getFullYear().toString(),
+            pricingMode: isTotalCoursePricingType(course.courseType || "")
+              ? "perCourse"
+              : isSessionPricingType(course.courseType || "")
+                ? "perSession"
+                : isHourlyPricingType(course.courseType || "")
+                  ? "perHour"
+                  : "perStudent",
           })
         }
         if (Array.isArray(teacherList)) setTeachers(teacherList)
@@ -146,6 +235,24 @@ export default function EditCoursePage() {
       setErr("שם הקורס הוא שדה חובה")
       return
     }
+    if (needsSessionCount) {
+      if (!formData.startDate || !formData.endDate) {
+        setErr("לתמחור לפי מפגש/שעה יש למלא תאריך התחלה ותאריך סיום")
+        return
+      }
+      if (formData.daysOfWeek.length === 0) {
+        setErr("לתמחור לפי מפגש/שעה יש לבחור לפחות יום אחד בשבוע")
+        return
+      }
+      if (computedSessionCount === 0) {
+        setErr("לא נמצאו מפגשים בטווח התאריכים שנבחר")
+        return
+      }
+      if (needsHourlyRange && (hoursPerSession == null || hoursPerSession <= 0)) {
+        setErr("בתמחור לפי שעה יש למלא שעת התחלה/סיום תקינות")
+        return
+      }
+    }
     
     setSaving(true)
     setErr(null)
@@ -156,8 +263,18 @@ export default function EditCoursePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
-          duration: formData.duration ? Number(formData.duration) : null,
-          price: formData.price ? Number(formData.price) : null,
+          courseType:
+            formData.courseType === "gafan"
+              ? "gafan"
+              : formData.pricingMode === "perCourse"
+                ? `${formData.courseType}${TOTAL_PRICE_SUFFIX}`
+                : formData.pricingMode === "perSession"
+                  ? `${formData.courseType}${SESSION_PRICE_SUFFIX}`
+                  : formData.pricingMode === "perHour"
+                    ? `${formData.courseType}${HOURLY_PRICE_SUFFIX}`
+                    : formData.courseType,
+          duration: needsSessionCount ? computedSessionCount : (formData.duration ? Number(formData.duration) : null),
+          price: needsSessionCount ? computedCoursePrice : (formData.price ? Number(formData.price) : null),
         }),
       })
       if (!res.ok) {
@@ -595,13 +712,44 @@ export default function EditCoursePage() {
             תמחור
           </CardTitle>
           <CardDescription className="text-right">
-            {formData.courseType === "gafan" ? "הגדר את מחיר השעה לקורס גפ\"ן" : "הגדר את מחיר הקורס"}
+            {formData.courseType === "gafan"
+              ? "הגדר את מחיר השעה לקורס גפ\"ן"
+              : formData.pricingMode === "perCourse"
+                ? "מחיר כולל לקורס כולו"
+                : "הגדר את מחיר הקורס"}
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {formData.courseType !== "gafan" && (
+            <div className="space-y-2 mb-4">
+              <Label className="text-right block">שיטת תמחור</Label>
+              <Select
+                value={formData.pricingMode}
+                onValueChange={(value: "perStudent" | "perCourse" | "perSession" | "perHour") => setFormData({ ...formData, pricingMode: value })}
+              >
+                <SelectTrigger className="text-right" dir="rtl">
+                  <SelectValue placeholder="בחר שיטת תמחור" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="perStudent">מחיר לכל תלמיד</SelectItem>
+                  <SelectItem value="perCourse">מחיר כולל לקורס</SelectItem>
+                  <SelectItem value="perSession">מחיר לפי מפגש</SelectItem>
+                  <SelectItem value="perHour">מחיר לפי שעה</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="space-y-2">
             <Label className="text-right block">
-              {formData.courseType === "gafan" ? "מחיר לשעה (ש\"ח) *" : "מחיר הקורס (ש\"ח) *"}
+              {formData.courseType === "gafan"
+                ? "מחיר לשעה (ש\"ח) *"
+                : formData.pricingMode === "perHour"
+                  ? "מחיר לשעה (ש\"ח) *"
+                  : formData.pricingMode === "perSession"
+                    ? "מחיר למפגש (ש\"ח) *"
+                : formData.pricingMode === "perCourse"
+                  ? "מחיר כולל לקורס (ש\"ח) *"
+                  : "מחיר הקורס (ש\"ח) *"}
             </Label>
             <Input 
               type="number"
@@ -615,6 +763,19 @@ export default function EditCoursePage() {
               <p className="text-xs text-muted-foreground text-right mt-1">
                 * בקורסי גפ"ן התמחור הוא לפי שעה ולא לפי קורס שלם
               </p>
+            )}
+            {needsSessionCount && (
+              <div className="text-right space-y-1 pt-2 border-t border-emerald-200/80 mt-3">
+                <p className="text-sm text-muted-foreground">
+                  מפגשים בטווח: <span className="font-medium text-foreground">{computedSessionCount}</span>
+                  {needsHourlyRange && hoursPerSession != null && (
+                    <span className="mr-2">· {hoursPerSession.toFixed(2)} שעות למפגש</span>
+                  )}
+                </p>
+                <p className="text-base font-semibold text-emerald-800 dark:text-emerald-200">
+                  סה״כ מחושב לקורס: {computedCoursePrice > 0 ? `${computedCoursePrice} ש״ח` : "—"}
+                </p>
+              </div>
             )}
           </div>
         </CardContent>

@@ -43,8 +43,16 @@ const DAYS_OF_WEEK = [
   { value: "saturday", label: "שבת" },
 ]
 
-/** סדנה / קייטנה / שיעור פרטי — מחיר בשדה הוא למפגש, והמחיר ב-DB נשמר כסה״כ */
-const PER_SESSION_COURSE_TYPES = new Set(["workshop", "camp", "private"])
+const TOTAL_PRICE_SUFFIX = "_total"
+const SESSION_PRICE_SUFFIX = "_session"
+const HOURLY_PRICE_SUFFIX = "_hour"
+
+function normalizeCourseType(raw: string): string {
+  return raw
+    .replace(new RegExp(`${TOTAL_PRICE_SUFFIX}$`), "")
+    .replace(new RegExp(`${SESSION_PRICE_SUFFIX}$`), "")
+    .replace(new RegExp(`${HOURLY_PRICE_SUFFIX}$`), "")
+}
 
 function mapDayKeyToJsDay(key: string): number {
   const m: Record<string, number> = {
@@ -126,36 +134,38 @@ export default function NewCoursePage() {
     schoolId: "",
     gafanProgramId: "",
     validYear: new Date().getFullYear().toString(),
-    /** true = השדה "מחיר" הוא לשעה; false = למפגש שלם (סדנה/קייטנה וכו') */
-    priceIsHourly: false,
+    /** שיטת תמחור */
+    pricingMode: "perStudent" as "perStudent" | "perCourse" | "perSession" | "perHour",
   })
 
-  const isPerSessionCourse = PER_SESSION_COURSE_TYPES.has(formData.courseType)
+  const baseCourseType = normalizeCourseType(formData.courseType)
+  const needsSessionCount = formData.pricingMode === "perSession" || formData.pricingMode === "perHour"
+  const needsHourlyRange = formData.pricingMode === "perHour"
   const hoursPerSession = useMemo(
     () => hoursBetweenTimeInputs(formData.startTime, formData.endTime),
     [formData.startTime, formData.endTime],
   )
   const computedSessionCount = useMemo(
     () =>
-      isPerSessionCourse
+      needsSessionCount
         ? countSessionsBetween(formData.startDate, formData.endDate, formData.daysOfWeek)
         : 0,
-    [isPerSessionCourse, formData.startDate, formData.endDate, formData.daysOfWeek],
+    [needsSessionCount, formData.startDate, formData.endDate, formData.daysOfWeek],
   )
-  const totalStudentPrice = useMemo(() => {
-    if (!isPerSessionCourse) return 0
+  const computedCoursePrice = useMemo(() => {
+    if (!needsSessionCount) return 0
     const p = Number(formData.price)
     if (Number.isNaN(p)) return 0
-    if (formData.priceIsHourly) {
+    if (needsHourlyRange) {
       if (hoursPerSession == null || hoursPerSession <= 0) return 0
       return Math.round(computedSessionCount * hoursPerSession * p * 100) / 100
     }
     return Math.round(computedSessionCount * p * 100) / 100
   }, [
-    isPerSessionCourse,
+    needsSessionCount,
     computedSessionCount,
     formData.price,
-    formData.priceIsHourly,
+    needsHourlyRange,
     hoursPerSession,
   ])
 
@@ -216,7 +226,7 @@ export default function NewCoursePage() {
       return
     }
 
-    if (isPerSessionCourse) {
+    if (needsSessionCount) {
       if (!formData.startDate || !formData.endDate) {
         setErr("לסדנה / קייטנה / שיעור פרטי יש למלא תאריך התחלה ותאריך סיום לחישוב המפגשים")
         return
@@ -231,10 +241,10 @@ export default function NewCoursePage() {
       }
       const per = Number(formData.price)
       if (Number.isNaN(per) || per <= 0) {
-        setErr(formData.priceIsHourly ? "הזן מחיר חיובי לשעה" : "הזן מחיר חיובי למפגש")
+        setErr(needsHourlyRange ? "הזן מחיר חיובי לשעה" : "הזן מחיר חיובי למפגש")
         return
       }
-      if (formData.priceIsHourly) {
+      if (needsHourlyRange) {
         if (!formData.startTime?.trim() || !formData.endTime?.trim()) {
           setErr("בתמחור לפי שעה יש למלא שעת התחלה ושעת סיום לחישוב אורך המפגש")
           return
@@ -249,16 +259,26 @@ export default function NewCoursePage() {
     setSaving(true)
     setErr(null)
     try {
-      const durationOut = isPerSessionCourse
+      const durationOut = needsSessionCount
         ? computedSessionCount
         : formData.duration
           ? Number(formData.duration)
           : null
-      const priceOut = isPerSessionCourse
-        ? totalStudentPrice
+      const priceOut = needsSessionCount
+        ? computedCoursePrice
         : formData.price
           ? Number(formData.price)
           : null
+      const courseTypeOut =
+        baseCourseType === "gafan"
+          ? "gafan"
+          : formData.pricingMode === "perCourse"
+            ? `${baseCourseType}${TOTAL_PRICE_SUFFIX}`
+            : formData.pricingMode === "perSession"
+              ? `${baseCourseType}${SESSION_PRICE_SUFFIX}`
+              : formData.pricingMode === "perHour"
+                ? `${baseCourseType}${HOURLY_PRICE_SUFFIX}`
+                : baseCourseType
 
       const res = await fetch("/api/courses", {
         method: "POST",
@@ -266,6 +286,7 @@ export default function NewCoursePage() {
         credentials: "include",
         body: JSON.stringify({
           ...formData,
+          courseType: courseTypeOut,
           duration: durationOut,
           price: priceOut,
         }),
@@ -329,16 +350,12 @@ export default function NewCoursePage() {
             </div>
             <div className="space-y-2">
               <Label className="text-right block">סוג קורס</Label>
-              <Select value={formData.courseType} onValueChange={(value) => {
+              <Select value={baseCourseType} onValueChange={(value) => {
                 const updates: Record<string, unknown> = { courseType: value, schoolId: "", gafanProgramId: "" }
                 if (value === "gafan") {
                   updates.duration = "30"
                 }
-                if (PER_SESSION_COURSE_TYPES.has(value)) {
-                  updates.priceIsHourly = value === "private"
-                } else {
-                  updates.priceIsHourly = false
-                }
+                updates.pricingMode = value === "gafan" ? "perStudent" : formData.pricingMode
                 setFormData({ ...formData, ...updates } as typeof formData)
               }}>
                 <SelectTrigger className="text-right" dir="rtl">
@@ -571,7 +588,7 @@ export default function NewCoursePage() {
           </Select>
         </div>
         <div className="space-y-2">
-          {isPerSessionCourse ? (
+          {needsSessionCount ? (
             <>
               <Label className="text-right block">מספר מפגשים (מחושב אוטומטית)</Label>
               <div className="text-right rounded-md border bg-muted/50 px-3 py-2 text-sm min-h-[40px] flex items-center justify-end">
@@ -643,7 +660,7 @@ export default function NewCoursePage() {
           </CardTitle>
           <CardDescription className="text-right">
             הגדר את לוח הזמנים של הקורס
-            {isPerSessionCourse && (
+            {needsSessionCount && (
               <span className="block mt-1 text-amber-800 dark:text-amber-200">
                 לסדנה / קייטנה / שיעור פרטי: תאריך סיום חובה לחישוב מספר המפגשים לפי ימי השבוע שנבחרו.
               </span>
@@ -663,7 +680,7 @@ export default function NewCoursePage() {
             </div>
             <div className="space-y-2">
               <Label className="text-right block">
-                תאריך סיום{isPerSessionCourse ? " *" : " (אופציונלי)"}
+                תאריך סיום{needsSessionCount ? " *" : " (אופציונלי)"}
               </Label>
               <Input 
                 type="date"
@@ -687,7 +704,7 @@ export default function NewCoursePage() {
             <div className="space-y-2">
               <Label className="text-right block">
                 שעה סיום
-                {isPerSessionCourse && formData.priceIsHourly ? " *" : " (אופציונלי)"}
+                {needsHourlyRange ? " *" : " (אופציונלי)"}
               </Label>
               <Input 
                 type="time"
@@ -730,30 +747,44 @@ export default function NewCoursePage() {
   <CardDescription className="text-right">
     {formData.courseType === "gafan"
       ? "הגדר את מחיר השעה לקורס גפ\"ן"
-      : isPerSessionCourse
-        ? formData.priceIsHourly
+      : needsSessionCount
+        ? needsHourlyRange
           ? "מחיר לשעה × אורך מפגש × מספר מפגשים (שעות ותאריכים מהכרטיסייה למעלה)"
           : "מחיר לכל מפגש; סה״כ = מחיר למפגש × מספר מפגשים"
-        : "הגדר את מחיר הקורס"}
+        : formData.pricingMode === "perCourse"
+          ? "מחיר כולל לקורס כולו"
+          : "הגדר את מחיר הקורס"}
   </CardDescription>
   </CardHeader>
   <CardContent>
   <div className="space-y-3">
-  {isPerSessionCourse && (
-    <label className="flex cursor-pointer items-center justify-end gap-2 rounded-lg border border-emerald-200/80 bg-white/80 px-3 py-2 dark:bg-card">
-      <span className="text-sm text-right">תמחור לפי שעה (מחיר לשעה × שעות במפגש × מספר מפגשים)</span>
-      <Checkbox
-        checked={formData.priceIsHourly}
-        onCheckedChange={(v) => setFormData({ ...formData, priceIsHourly: v === true })}
-      />
-    </label>
+  {baseCourseType !== "gafan" && (
+    <div className="space-y-2">
+      <Label className="text-right block">שיטת חישוב</Label>
+      <Select
+        value={formData.pricingMode}
+        onValueChange={(value: "perStudent" | "perCourse" | "perSession" | "perHour") =>
+          setFormData({ ...formData, pricingMode: value })
+        }
+      >
+        <SelectTrigger className="text-right" dir="rtl">
+          <SelectValue placeholder="בחר שיטת חישוב" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="perStudent">מחיר לכל תלמיד</SelectItem>
+          <SelectItem value="perCourse">מחיר כולל לקורס</SelectItem>
+          <SelectItem value="perSession">מחיר לפי מפגש</SelectItem>
+          <SelectItem value="perHour">מחיר לפי שעה</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
   )}
   <div className="space-y-2">
   <Label className="text-right block">
     {formData.courseType === "gafan"
       ? "מחיר לשעה (ש\"ח) *"
-      : isPerSessionCourse
-        ? formData.priceIsHourly
+      : needsSessionCount
+        ? needsHourlyRange
           ? "מחיר לשעה (ש\"ח) *"
           : "מחיר למפגש (ש\"ח) *"
         : "מחיר הקורס (ש\"ח) *"}
@@ -764,7 +795,7 @@ export default function NewCoursePage() {
   step="0.01"
   value={formData.price}
   onChange={(e) => setFormData({...formData, price: e.target.value})}
-  placeholder={formData.courseType === "gafan" ? "לדוגמה: 50" : isPerSessionCourse ? "לדוגמה: 100" : "לדוגמה: 2500"}
+  placeholder={formData.courseType === "gafan" ? "לדוגמה: 50" : needsSessionCount ? "לדוגמה: 100" : "לדוגמה: 2500"}
   className="text-right"
   dir="rtl"
   />
@@ -773,7 +804,7 @@ export default function NewCoursePage() {
       * בקורסי גפ"ן התמחור הוא לפי שעה ולא לפי קורס שלם
     </p>
   )}
-  {isPerSessionCourse && formData.priceIsHourly && (
+  {needsSessionCount && needsHourlyRange && (
     <p className="text-xs text-muted-foreground text-right">
       אורך מפגש מחושב משעת ההתחלה ושעת הסיום. סה״כ שעות בקורס:{" "}
       {hoursPerSession != null && computedSessionCount > 0
@@ -781,19 +812,19 @@ export default function NewCoursePage() {
         : "—"}
     </p>
   )}
-  {isPerSessionCourse && (
+  {needsSessionCount && (
     <div className="text-right space-y-1 pt-2 border-t border-emerald-200/80 mt-3">
       <p className="text-sm text-muted-foreground">
         מפגשים בטווח:{" "}
         <span className="font-medium text-foreground">{computedSessionCount}</span>
-        {formData.priceIsHourly && hoursPerSession != null && (
+        {needsHourlyRange && hoursPerSession != null && (
           <span className="mr-2">
             · {hoursPerSession.toFixed(2)} שעות למפגש
           </span>
         )}
       </p>
       <p className="text-base font-semibold text-emerald-800 dark:text-emerald-200">
-        סה״כ לתלמיד: {totalStudentPrice > 0 ? `${totalStudentPrice} ש״ח` : "—"}
+        סה״כ מחושב לקורס: {computedCoursePrice > 0 ? `${computedCoursePrice} ש״ח` : "—"}
       </p>
       <p className="text-xs text-muted-foreground">
         (נשמר במערכת כמחיר מלא לקורס לצורכי תשלומים ודוחות)
