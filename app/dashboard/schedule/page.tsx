@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useCurrentUser } from "@/lib/auth-context"
 import { hasPermission, hasFullAccessRole } from "@/lib/permissions"
 import { arrayFetcher } from "@/lib/swr-fetcher"
+import { useUserType } from "@/lib/use-user-type"
 
 interface Course {
   id: string
@@ -89,14 +90,25 @@ export default function SchedulePage() {
   const userPerms = currentUser?.permissions ?? []
   const isAdmin = hasFullAccessRole(currentUser?.roleKey) || hasFullAccessRole(currentUser?.role)
   const canViewStudents = isAdmin || hasPermission(userPerms, "students.view")
+  const { data: userTypeData } = useUserType(currentUser?.id, (currentUser?.roleKey || currentUser?.role || "").toString())
+  const isLinkedTeacher = userTypeData?.isTeacher === true
 
-  const { data: rawCourses,  isLoading: coursesLoading  } = useSWR<Course[]>("/api/courses",   arrayFetcher)
+  const { data: rawCourses,  isLoading: coursesLoading  } = useSWR<Course[]>(
+    "/api/courses",
+    arrayFetcher,
+    { refreshInterval: 15000, revalidateOnFocus: true, revalidateOnReconnect: true },
+  )
   const { data: rawStudents, isLoading: studentsLoading } = useSWR<Student[]>(
     canViewStudents ? "/api/students" : null,
     arrayFetcher,
   )
   const courses  = Array.isArray(rawCourses)  ? rawCourses  : []
   const students = Array.isArray(rawStudents) ? rawStudents : []
+  const coursesForUser = useMemo(() => {
+    if (isAdmin || !isLinkedTeacher) return courses
+    const ids = new Set(userTypeData?.courseIds || [])
+    return courses.filter((c) => ids.has(c.id))
+  }, [courses, isAdmin, isLinkedTeacher, userTypeData?.courseIds])
 
   const [viewMode, setViewMode] = useState<"day" | "week" | "month">("month")
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -130,11 +142,17 @@ export default function SchedulePage() {
     const colorIndex = courseColorMap[courseId] || 0
     return courseColors[colorIndex]
   }
+  const getTeacherColor = (course: Course) => {
+    const teacherId = course.teachers?.[0]?.id
+    if (!teacherId) return getCourseColor(course.id)
+    const colorIndex = teacherColorMap[teacherId] ?? 0
+    return courseColors[colorIndex]
+  }
 
   const teachers = useMemo(() => {
     const uniqueTeachers: { id: string; name: string }[] = []
     const seenIds = new Set<string>()
-    courses.forEach((course) => {
+    coursesForUser.forEach((course) => {
       if (course.teachers && Array.isArray(course.teachers)) {
         course.teachers.forEach((teacher) => {
           if (!seenIds.has(teacher.id)) {
@@ -145,10 +163,18 @@ export default function SchedulePage() {
       }
     })
     return uniqueTeachers
-  }, [courses])
+  }, [coursesForUser])
+
+  const teacherColorMap = useMemo(() => {
+    const colorMap: Record<string, number> = {}
+    teachers.forEach((teacher, index) => {
+      colorMap[teacher.id] = index % courseColors.length
+    })
+    return colorMap
+  }, [teachers])
 
   const filteredCourses = useMemo(() => {
-    return courses.filter((course) => {
+    return coursesForUser.filter((course) => {
       if (filterCourse !== "all" && course.id !== filterCourse) return false
       if (filterTeacher !== "all") {
         if (!course.teachers || !course.teachers.some((t) => t.id === filterTeacher)) {
@@ -157,7 +183,7 @@ export default function SchedulePage() {
       }
       return true
     })
-  }, [courses, filterCourse, filterTeacher])
+  }, [coursesForUser, filterCourse, filterTeacher])
 
   const getCoursesForDate = (date: Date) => {
     const dayOfWeek = date.getDay()
@@ -283,7 +309,7 @@ export default function SchedulePage() {
                   {hourCourses.length > 0 ? (
                     <div className="space-y-2">
                       {hourCourses.map((course) => {
-                        const colors = getCourseColor(course.id)
+                        const colors = getTeacherColor(course)
                         return (
                           <Card
                             key={course.id}
@@ -343,7 +369,7 @@ export default function SchedulePage() {
                     {dayCourses.length > 0 ? (
                       <div className="space-y-1">
                         {dayCourses.map((course) => {
-                          const colors = getCourseColor(course.id)
+                          const colors = getTeacherColor(course)
                           return (
                             <Card
                               key={course.id}
@@ -418,7 +444,7 @@ export default function SchedulePage() {
                     {dayCourses.length > 0 && (
                       <div className="space-y-1">
                         {dayCourses.slice(0, 3).map((course) => {
-                          const colors = getCourseColor(course.id)
+                          const colors = getTeacherColor(course)
                           return (
                             <div
                               key={course.id}

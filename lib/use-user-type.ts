@@ -84,17 +84,12 @@ export function useUserType(userId: string | number | undefined, role?: string) 
       fetchStartedRef.current = false
     }
 
-    // Use cached data if still valid
+    // Use cached data immediately for fast UI, but keep revalidating in background
+    // so new teacher/student links (e.g. newly assigned courses) appear without re-login.
     const cached = getCachedUserType(userId)
     if (cached) {
       setData(cached)
       setLoading(false)
-      return
-    }
-
-    if (data) {
-      setLoading(false)
-      return
     }
 
     if (fetchStartedRef.current) return

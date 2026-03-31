@@ -182,8 +182,18 @@ export function getAllNavPermissions(): string[] {
   return PERMISSION_CATEGORIES.map((cat) => cat.permissions.find((p) => p.id.startsWith("nav."))?.id).filter(Boolean) as string[]
 }
 
+function permissionVariants(permission: string): string[] {
+  const p = (permission || "").trim()
+  if (!p) return []
+  const dot = p.replace(/-/g, ".")
+  const dash = p.replace(/\./g, "-")
+  return [...new Set([p, dot, dash])]
+}
+
 export function hasPermission(userPermissions: string[], permission: string): boolean {
-  return userPermissions.includes(permission)
+  if (!Array.isArray(userPermissions) || !permission) return false
+  const perms = new Set((userPermissions || []).map((x) => String(x).trim()).filter(Boolean))
+  return permissionVariants(permission).some((v) => perms.has(v))
 }
 
 export type RoleType = "admin" | "secretary" | "teacher" | "student" | "coordinator" | "other"
@@ -380,6 +390,7 @@ export function hasFullAccessRole(role: unknown): boolean {
     r.includes("_admin") ||
     r.includes("מנהל") ||
     r.includes("אדמין") ||
+    r.includes("אדמן") ||
     compact.includes("centeradmin") ||
     compact.includes("centreadmin") ||
     compact.includes("centeradministrator") ||
@@ -406,10 +417,10 @@ export function canShowInSidebar(
   sessionRoleName?: string | null,
 ): boolean {
   if (sessionRolesGrantFullAccess(sessionRoleKey, sessionRoleName) || hasFullAccessRole(userRole)) return true
-  if (href === "/dashboard") return userPermissions.includes("settings.home")
+  if (href === "/dashboard") return hasPermission(userPermissions, "settings.home")
   const navPerm = Object.entries(NAV_PERM_TO_HREF).find(([, h]) => h === href)?.[0]
   if (!navPerm) return true
-  return userPermissions.includes(navPerm)
+  return hasPermission(userPermissions, navPerm)
 }
 
 export const PAGE_REQUIRED_PERMISSION: { path: string; permission: string }[] = [
@@ -472,13 +483,13 @@ export function canAccessPage(
   }
 
   if (pagePath === "/dashboard") {
-    if (userPermissions.includes("settings.home")) return true
+    if (hasPermission(userPermissions, "settings.home")) return true
     if (role && role.visiblePages.some((p) => p === "/dashboard")) return true
     if (!role) return true
   }
 
   const requiredPerm = getRequiredPermissionForPath(pagePath)
-  if (requiredPerm && userPermissions.includes(requiredPerm)) return true
+  if (requiredPerm && hasPermission(userPermissions, requiredPerm)) return true
 
   if (role && role.visiblePages.some((page) => pagePath === page || pagePath.startsWith(page + "/"))) return true
 

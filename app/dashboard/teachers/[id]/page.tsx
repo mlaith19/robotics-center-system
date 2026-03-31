@@ -165,10 +165,21 @@ export default function TeacherViewPage() {
   const canSeeCourseFinancial = isAdmin || hasPermission(userPerms, "courses.financial")
   const hasAnyPermission = (...permissionIds: string[]) => permissionIds.some((perm) => hasPermission(userPerms, perm))
   // בפרופיל מורה מחובר: נאפשר גם הרשאות myProfile וגם teachers כדי שלא יהיו פערים בניהול הרשאות בדף משתמשים.
-  const canTabGeneral = isAdmin || hasAnyPermission("myProfile.tab.general", "teachers.tab.general")
-  const canTabCourses = isAdmin || hasAnyPermission("myProfile.tab.courses", "teachers.tab.courses")
-  const canTabPayments = isAdmin || hasAnyPermission("myProfile.tab.payments", "teachers.tab.payments")
-  const canTabAttendance = isAdmin || hasAnyPermission("myProfile.tab.attendance", "teachers.tab.attendance")
+  const hasAnyProfileTabPermission = hasAnyPermission(
+    "myProfile.tab.general",
+    "myProfile.tab.courses",
+    "myProfile.tab.payments",
+    "myProfile.tab.attendance",
+    "teachers.tab.general",
+    "teachers.tab.courses",
+    "teachers.tab.payments",
+    "teachers.tab.attendance",
+  )
+  const selfProfileFallback = isTeacherUser && !isAdmin && !hasAnyProfileTabPermission
+  const canTabGeneral = isAdmin || selfProfileFallback || hasAnyPermission("myProfile.tab.general", "teachers.tab.general")
+  const canTabCourses = isAdmin || selfProfileFallback || hasAnyPermission("myProfile.tab.courses", "teachers.tab.courses")
+  const canTabPayments = isAdmin || selfProfileFallback || hasAnyPermission("myProfile.tab.payments", "teachers.tab.payments")
+  const canTabAttendance = isAdmin || selfProfileFallback || hasAnyPermission("myProfile.tab.attendance", "teachers.tab.attendance")
 
   const israeliBanks = [
     "בנק לאומי",
@@ -570,9 +581,9 @@ export default function TeacherViewPage() {
       </div>
 
       <Card className="p-4 border-0 shadow-sm bg-white/50 dark:bg-card/50">
-        <Tabs defaultValue={canTabGeneral && !isTeacherUser ? "general" : canTabCourses ? "courses" : canTabPayments ? "payments" : "attendance"} dir="rtl" className="w-full">
-          <TabsList className="grid w-full bg-muted/50 p-1 rounded-lg" style={{ gridTemplateColumns: `repeat(${[canTabGeneral && !isTeacherUser, canTabCourses, canTabPayments, canTabAttendance].filter(Boolean).length}, 1fr)` }}>
-            {!isTeacherUser && canTabGeneral && <TabsTrigger value="general" className="data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-blue-700 rounded-md transition-all">כללי</TabsTrigger>}
+        <Tabs defaultValue={canTabGeneral ? "general" : canTabCourses ? "courses" : canTabPayments ? "payments" : "attendance"} dir="rtl" className="w-full">
+          <TabsList className="grid w-full bg-muted/50 p-1 rounded-lg" style={{ gridTemplateColumns: `repeat(${[canTabGeneral, canTabCourses, canTabPayments, canTabAttendance].filter(Boolean).length}, 1fr)` }}>
+            {canTabGeneral && <TabsTrigger value="general" className="data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-blue-700 rounded-md transition-all">כללי</TabsTrigger>}
             {canTabCourses && <TabsTrigger value="courses" className="data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-blue-700 rounded-md transition-all">קורסים</TabsTrigger>}
             {canTabPayments && <TabsTrigger value="payments" className="data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-blue-700 rounded-md transition-all">תשלומים</TabsTrigger>}
             {canTabAttendance && <TabsTrigger value="attendance" className="data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-blue-700 rounded-md transition-all">נוכחות</TabsTrigger>}
