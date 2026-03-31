@@ -142,11 +142,20 @@ export function useUserType(userId: string | number | undefined, role?: string) 
           try {
             const studentData = await studentRes.json()
             if (studentData?.id) {
+              const idsFromCourseIds = Array.isArray(studentData.courseIds)
+                ? studentData.courseIds.filter((id: unknown): id is string => typeof id === "string")
+                : []
+              const idsFromCourses = Array.isArray(studentData.courses)
+                ? studentData.courses
+                    .map((c: { id?: unknown }) => (typeof c?.id === "string" ? c.id : ""))
+                    .filter((id: string) => id.length > 0)
+                : []
+              const mergedCourseIds = [...new Set([...idsFromCourseIds, ...idsFromCourses])]
               result = {
                 isTeacher: false,
                 isStudent: true,
                 studentId: studentData.id,
-                courseIds: studentData.courseIds || [],
+                courseIds: mergedCourseIds,
                 checkedAt: Date.now(),
               }
               sessionStorage.setItem(`${CACHE_KEY}-${userId}`, JSON.stringify(result))
