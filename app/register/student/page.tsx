@@ -22,6 +22,7 @@ function RegisterStudentContent() {
   const [email, setEmail] = useState("")
   const [healthFund, setHealthFund] = useState("")
   const [allergies, setAllergies] = useState("")
+  const [profileImage, setProfileImage] = useState("")
   const [confirmCenterAgreement, setConfirmCenterAgreement] = useState(false)
   const [confirmPhotoConsent, setConfirmPhotoConsent] = useState(false)
   const [noSensitivity, setNoSensitivity] = useState(false)
@@ -72,6 +73,7 @@ function RegisterStudentContent() {
         setEmail(String(s.email ?? ""))
         setHealthFund(String(s.healthFund ?? ""))
         setAllergies(String(s.allergies ?? ""))
+        setProfileImage(String(s.profileImage ?? ""))
         const bd = s.birthDate ? String(s.birthDate).split("T")[0] : ""
         setBirthDate(bd)
       } catch {
@@ -135,6 +137,7 @@ function RegisterStudentContent() {
           allergies: noSensitivity
             ? "אין רגישות (סומן בטופס רישום)"
             : allergies.trim(),
+          profileImage: profileImage.trim() || null,
           status: "מתעניין",
           courseIds: selectedCourseId ? [selectedCourseId] : [],
           courseSessions: {},
@@ -156,6 +159,7 @@ function RegisterStudentContent() {
       setEmail("")
       setHealthFund("")
       setAllergies("")
+      setProfileImage("")
       setConfirmCenterAgreement(false)
       setConfirmPhotoConsent(false)
       setNoSensitivity(false)
@@ -282,6 +286,16 @@ function RegisterStudentContent() {
                 value={birthDate}
                 onChange={(e) => setBirthDate(e.target.value)}
                 placeholder="YYYY-MM-DD או DD/MM/YYYY"
+                disabled={isSubmitting}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="profileImage">תמונת פרופיל (קישור - אופציונלי)</Label>
+              <Input
+                id="profileImage"
+                value={profileImage}
+                onChange={(e) => setProfileImage(e.target.value)}
+                placeholder="https://example.com/photo.jpg"
                 disabled={isSubmitting}
               />
             </div>

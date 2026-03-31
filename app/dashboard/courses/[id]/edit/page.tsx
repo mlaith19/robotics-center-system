@@ -141,6 +141,7 @@ export default function EditCoursePage() {
     schoolId: "",
     gafanProgramId: "",
     validYear: new Date().getFullYear().toString(),
+    showRegistrationLink: false,
     pricingMode: "perStudent" as "perStudent" | "perCourse" | "perSession" | "perHour",
   })
   const needsSessionCount = formData.pricingMode === "perSession" || formData.pricingMode === "perHour"
@@ -194,6 +195,7 @@ export default function EditCoursePage() {
             schoolId: course.schoolId || "",
             gafanProgramId: course.gafanProgramId || "",
             validYear: course.validYear?.toString() || new Date().getFullYear().toString(),
+            showRegistrationLink: course.showRegistrationLink === true,
             pricingMode: isTotalCoursePricingType(course.courseType || "")
               ? "perCourse"
               : isSessionPricingType(course.courseType || "")
@@ -381,6 +383,21 @@ export default function EditCoursePage() {
                   <SelectItem value="other">{l("אחר", "Other", "أخرى")}</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+          </div>
+          <div className="mt-4 rounded-md border border-blue-200 bg-white/70 p-3">
+            <div
+              className="flex items-center justify-end gap-2 cursor-pointer"
+              onClick={() => setFormData((prev) => ({ ...prev, showRegistrationLink: !prev.showRegistrationLink }))}
+            >
+              <span className="text-sm">
+                {l(
+                  "הצג לינק רישום לתלמידים שלא רשומים לקורס",
+                  "Show registration link to students not enrolled in this course",
+                  "إظهار رابط التسجيل للطلاب غير المسجلين في هذه الدورة"
+                )}
+              </span>
+              <Checkbox checked={formData.showRegistrationLink} />
             </div>
           </div>
           

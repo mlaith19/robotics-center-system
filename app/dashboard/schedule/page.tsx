@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react"
 import useSWR from "swr"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { ChevronLeft, ChevronRight, Filter, Loader2 } from "lucide-react"
@@ -30,6 +31,7 @@ interface Course {
   teacherIds?: string[]
   students?: number
   enrollmentCount?: number
+  showRegistrationLink?: boolean
 }
 
 interface Student {
@@ -135,6 +137,8 @@ export default function SchedulePage() {
   const canViewStudents = isAdmin || hasPermission(userPerms, "students.view")
   const { data: userTypeData } = useUserType(currentUser?.id, (currentUser?.roleKey || currentUser?.role || "").toString())
   const isLinkedTeacher = userTypeData?.isTeacher === true
+  const isStudentUser = userTypeData?.isStudent === true
+  const studentCourseIds = useMemo(() => new Set(userTypeData?.courseIds || []), [userTypeData?.courseIds])
   const currentTeacherId = userTypeData?.teacherId
   const isTeacherOnlyView = !isAdmin && isLinkedTeacher
 
@@ -150,7 +154,11 @@ export default function SchedulePage() {
   const courses  = Array.isArray(rawCourses)  ? rawCourses  : []
   const students = Array.isArray(rawStudents) ? rawStudents : []
   const coursesForUser = useMemo(() => {
-    if (isAdmin || !isLinkedTeacher) return courses
+    if (isAdmin) return courses
+    if (isStudentUser) {
+      return courses.filter((c) => studentCourseIds.has(c.id))
+    }
+    if (!isLinkedTeacher) return courses
     const ids = new Set(userTypeData?.courseIds || [])
     const teacherId = userTypeData?.teacherId
     // Fallback חשוב: יש מקרים ש-courseIds לא חוזר מיד מהשרת, אבל teacherId כן.
@@ -161,7 +169,12 @@ export default function SchedulePage() {
       const tIds = Array.isArray(c.teacherIds) ? c.teacherIds : []
       return tIds.includes(teacherId)
     })
-  }, [courses, isAdmin, isLinkedTeacher, userTypeData?.courseIds, userTypeData?.teacherId])
+  }, [courses, isAdmin, isLinkedTeacher, isStudentUser, studentCourseIds, userTypeData?.courseIds, userTypeData?.teacherId])
+
+  const availableRegistrationCourses = useMemo(() => {
+    if (!isStudentUser) return []
+    return courses.filter((c) => c.showRegistrationLink === true && !studentCourseIds.has(c.id))
+  }, [courses, isStudentUser, studentCourseIds])
 
   const [viewMode, setViewMode] = useState<"day" | "week" | "month">("month")
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -176,17 +189,8 @@ export default function SchedulePage() {
   }, [isTeacherOnlyView, currentTeacherId])
 
   const [filterStudent, setFilterStudent] = useState<string>("all")
-  const [isStudentUser, setIsStudentUser] = useState(false)
 
   const canSeeFinancial = !!isAdmin || hasPermission(userPerms, "courses.financial")
-
-  useEffect(() => {
-    if (!currentUser?.id) return
-    fetch(`/api/students/by-user/${currentUser.id}`)
-      .then((res) => res.ok ? res.json() : null)
-      .then((data) => { if (data) setIsStudentUser(true) })
-      .catch(() => {})
-  }, [currentUser?.id])
 
   const courseColorMap = useMemo(() => {
     const colorMap: Record<string, number> = {}
@@ -585,7 +589,7 @@ export default function SchedulePage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">כל הקורסים</SelectItem>
-              {courses.map((course) => (
+              {coursesForUser.map((course) => (
                 <SelectItem key={course.id} value={course.id}>
                   {course.name}
                 </SelectItem>
@@ -632,6 +636,29 @@ export default function SchedulePage() {
           )}
         </div>
       </div>
+
+      {isStudentUser && (
+        <Card className="p-4 border-blue-200 bg-blue-50/40">
+          {availableRegistrationCourses.length > 0 ? (
+            <>
+              <div className="font-semibold mb-2">קורסים פתוחים להרשמה</div>
+              <div className="flex flex-wrap gap-2">
+                {availableRegistrationCourses.map((course) => (
+                  <Link
+                    key={course.id}
+                    href={`/register/student?courseId=${encodeURIComponent(course.id)}&courseName=${encodeURIComponent(course.name)}`}
+                    className="inline-flex items-center rounded-md border border-blue-300 bg-white px-3 py-1.5 text-sm hover:bg-blue-50"
+                  >
+                    הרשמה ל-{course.name}
+                  </Link>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="text-sm font-medium text-muted-foreground">הרישום נסגר לקורס זה</div>
+          )}
+        </Card>
+      )}
 
       {viewMode === "day" && renderDayView()}
       {viewMode === "week" && renderWeekView()}

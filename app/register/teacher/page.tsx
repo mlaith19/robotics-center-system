@@ -19,6 +19,7 @@ export default function RegisterTeacherPage() {
   const [city, setCity] = useState("")
   const [specialization, setSpecialization] = useState("")
   const [bio, setBio] = useState("")
+  const [profileImage, setProfileImage] = useState("")
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -79,6 +80,7 @@ export default function RegisterTeacherPage() {
           city: city.trim() || null,
           specialization: specialization.trim() || null,
           bio: bio.trim() || null,
+          profileImage: profileImage.trim() || null,
           username: username.trim(),
           password,
         }),
@@ -96,6 +98,7 @@ export default function RegisterTeacherPage() {
       setCity("")
       setSpecialization("")
       setBio("")
+      setProfileImage("")
       setUsername("")
       setPassword("")
       setConfirmPassword("")
@@ -149,6 +152,16 @@ export default function RegisterTeacherPage() {
                   disabled={isSubmitting}
                 />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="profileImage">תמונת פרופיל (קישור - אופציונלי)</Label>
+              <Input
+                id="profileImage"
+                value={profileImage}
+                onChange={(e) => setProfileImage(e.target.value)}
+                placeholder="https://example.com/photo.jpg"
+                disabled={isSubmitting}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone">טלפון</Label>

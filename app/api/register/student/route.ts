@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
+import { ensureProfileImageColumns, normalizeProfileImageInput, resolveProfileImageWithFallback } from "@/lib/profile-image"
 
 function normalizeBirthDateInput(raw: unknown): string | null {
   const value = typeof raw === "string" ? raw.trim() : ""
@@ -29,7 +30,7 @@ export async function GET(req: Request) {
     if (!idNumber) return Response.json({ error: "idNumber is required" }, { status: 400 })
 
     const rows = await db`
-      SELECT id, name, email, phone, "birthDate", father, mother, "healthFund", allergies, "idNumber", "userId"
+      SELECT id, name, email, phone, "birthDate", father, mother, "healthFund", allergies, "idNumber", "userId", "profileImage"
       FROM "Student"
       WHERE "idNumber" = ${idNumber}
       LIMIT 1
@@ -49,6 +50,7 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json()
+    await ensureProfileImageColumns(db as unknown as (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown[]>)
     const name = String(body.name ?? "").trim()
     const idNumber = String(body.idNumber ?? "").trim()
     const phone = body.phone ? String(body.phone).trim() : null
@@ -58,6 +60,8 @@ export async function POST(req: Request) {
     const healthFund = body.healthFund ? String(body.healthFund).trim() : null
     const allergies = body.allergies ? String(body.allergies).trim() : null
     const birthDate = normalizeBirthDateInput(body.birthDate)
+    const profileImageInput = normalizeProfileImageInput(body.profileImage)
+    const profileImageFallback = resolveProfileImageWithFallback(body.profileImage)
     const courseIds = uniqueCourseIds(body.courseIds)
     const now = new Date().toISOString()
 
@@ -89,6 +93,7 @@ export async function POST(req: Request) {
           "healthFund" = ${healthFund},
           allergies = ${allergies},
           status = 'מתעניין',
+          "profileImage" = COALESCE(${profileImageInput}, "profileImage", ${profileImageFallback}),
           "courseIds" = ${JSON.stringify(mergedCourseIds)}::jsonb,
           "updatedAt" = ${now}
         WHERE id = ${row.id}
@@ -131,11 +136,11 @@ export async function POST(req: Request) {
     await db`
       INSERT INTO "Student" (
         id, name, email, phone, status, "birthDate", "idNumber", father, mother, "healthFund", allergies,
-        "totalSessions", "courseIds", "courseSessions", "userId", "createdAt", "updatedAt"
+        "totalSessions", "courseIds", "courseSessions", "profileImage", "userId", "createdAt", "updatedAt"
       )
       VALUES (
         ${studentId}, ${name}, ${email}, ${phone}, 'מתעניין', ${birthDate}, ${idNumber}, ${father}, ${mother}, ${healthFund}, ${allergies},
-        12, ${JSON.stringify(courseIds)}::jsonb, ${JSON.stringify({})}::jsonb, ${userId}, ${now}, ${now}
+        12, ${JSON.stringify(courseIds)}::jsonb, ${JSON.stringify({})}::jsonb, ${profileImageFallback}, ${userId}, ${now}, ${now}
       )
     `
 

@@ -137,6 +137,19 @@ export const DELETE = withTenantAuth(async (req, session, { params }: Ctx) => {
 
     if (linkedTeacher.length > 0) {
       const teacherId = String((linkedTeacher[0] as { id: string }).id)
+      await db`
+        UPDATE "Course" c
+        SET "teacherIds" = COALESCE((
+          SELECT jsonb_agg(elem)
+          FROM jsonb_array_elements_text(COALESCE(c."teacherIds", '[]'::jsonb)) AS elem
+          WHERE elem <> ${teacherId}
+        ), '[]'::jsonb)
+        WHERE EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements_text(COALESCE(c."teacherIds", '[]'::jsonb)) AS elem
+          WHERE elem = ${teacherId}
+        )
+      `
       await db`DELETE FROM "Attendance" WHERE "teacherId" = ${teacherId}`
       await db`DELETE FROM "Teacher" WHERE id = ${teacherId}`
     }

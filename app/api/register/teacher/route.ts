@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
+import { ensureProfileImageColumns, resolveProfileImageWithFallback } from "@/lib/profile-image"
 
 function normalizeBirthDateInput(raw: unknown): string | null {
   const value = typeof raw === "string" ? raw.trim() : ""
@@ -20,6 +21,7 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json()
+    await ensureProfileImageColumns(db as unknown as (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown[]>)
     const name = String(body.name ?? "").trim()
     const phone = body.phone ? String(body.phone).trim() : null
     const email = body.email ? String(body.email).trim() : null
@@ -28,6 +30,7 @@ export async function POST(req: Request) {
     const city = body.city ? String(body.city).trim() : null
     const specialization = body.specialization ? String(body.specialization).trim() : null
     const bio = body.bio ? String(body.bio).trim() : null
+    const profileImage = resolveProfileImageWithFallback(body.profileImage)
     const username = body.username ? String(body.username).trim() : ""
     const password = body.password ? String(body.password) : ""
 
@@ -83,11 +86,11 @@ export async function POST(req: Request) {
     const result = await db`
       INSERT INTO "Teacher" (
         id, name, email, phone, "idNumber", "birthDate", city, specialty, status, bio,
-        "centerHourlyRate", "travelRate", "externalCourseRate", "userId", "createdAt", "updatedAt"
+        "centerHourlyRate", "travelRate", "externalCourseRate", "profileImage", "userId", "createdAt", "updatedAt"
       )
       VALUES (
         ${teacherId}, ${name}, ${email}, ${phone}, ${idNumber}, ${birthDate}, ${city}, ${specialization}, 'מתעניין', ${bio},
-        null, null, null, ${userId}, ${now}, ${now}
+        null, null, null, ${profileImage}, ${userId}, ${now}, ${now}
       )
       RETURNING id, name, status, "createdAt"
     `

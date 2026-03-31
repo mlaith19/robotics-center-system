@@ -4,6 +4,7 @@ import { requireTenant } from "@/lib/tenant/resolve-tenant"
 import { runAutoCompleteExpiredCourses } from "@/lib/course-status"
 import { hasPermission, sessionRolesGrantFullAccess } from "@/lib/permissions"
 import { parseCourseDateForDb, parseCourseTimeForDb, courseTimeToDisplayValue } from "@/lib/course-db-fields"
+import { getCourseRegistrationVisibilityMap, setCourseRegistrationVisibility } from "@/lib/course-registration-visibility"
 
 export const GET = withTenantAuth(async (req, session) => {
   const featureErr = await requireFeatureFromRequest(req, "courses", session)
@@ -63,11 +64,16 @@ export const GET = withTenantAuth(async (req, session) => {
     `
     const teachers = await db`SELECT id, name FROM "Teacher"`
     const teacherMap = new Map(teachers.map((t: any) => [t.id, t.name]))
+    const visibilityMap = await getCourseRegistrationVisibilityMap(
+      db as unknown as (strings: TemplateStringsArray, ...values: unknown[]) => Promise<any[]>,
+      courses.map((course: any) => String(course.id))
+    )
     const coursesWithTeachers = courses.map((course: any) => ({
       ...course,
       startTime: courseTimeToDisplayValue(course.startTime),
       endTime: courseTimeToDisplayValue(course.endTime),
       weekdays: course.daysOfWeek || [],
+      showRegistrationLink: visibilityMap.get(String(course.id)) === true,
       teachers: (Array.isArray(course.teacherIds) ? course.teacherIds : []).map((id: string) => ({
         id,
         name: teacherMap.get(id) || "לא ידוע"
@@ -134,6 +140,11 @@ export const POST = withTenantAuth(async (req, session) => {
       )
       RETURNING *
     `
+    await setCourseRegistrationVisibility(
+      db as unknown as (strings: TemplateStringsArray, ...values: unknown[]) => Promise<any[]>,
+      id,
+      body.showRegistrationLink === true
+    )
     return Response.json(result[0], { status: 201 })
   } catch (err: any) {
     console.error("POST /api/courses error:", err)

@@ -31,6 +31,7 @@ export default function NewTeacherPage() {
     centerHourlyRate: 50,
     travelRate: 30,
     externalCourseRate: 80,
+    profileImage: "",
   })
 
   // User account fields
@@ -69,6 +70,7 @@ export default function NewTeacherPage() {
           centerHourlyRate: newTeacher.centerHourlyRate || null,
           travelRate: newTeacher.travelRate || null,
           externalCourseRate: newTeacher.externalCourseRate || null,
+          profileImage: newTeacher.profileImage.trim() || null,
           // User account data
           createUserAccount,
           username: createUserAccount ? username.trim() : null,
@@ -199,6 +201,15 @@ export default function NewTeacherPage() {
               </div>
             </div>
 
+            <div className="grid gap-2">
+              <Label htmlFor="profileImage">תמונת פרופיל (קישור - אופציונלי)</Label>
+              <Input
+                id="profileImage"
+                value={newTeacher.profileImage}
+                onChange={(e) => setNewTeacher({ ...newTeacher, profileImage: e.target.value })}
+                placeholder="https://example.com/photo.jpg"
+              />
+            </div>
             <div className="grid gap-2">
               <Label htmlFor="city" className="flex items-center gap-2">
                 <MapPin className="h-4 w-4" />

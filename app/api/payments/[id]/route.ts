@@ -1,12 +1,32 @@
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant, ensureSessionMatchesTenant } from "@/lib/tenant/resolve-tenant"
 import { requirePerm } from "@/lib/require-perm"
+import { hasFullAccessRole, hasPermission } from "@/lib/permissions"
+
+function canReadPayments(session: { role?: string; roleKey?: string; permissions?: string[] }) {
+  if (hasFullAccessRole(session.roleKey) || hasFullAccessRole(session.role)) return true
+  const perms = Array.isArray(session.permissions) ? session.permissions : []
+  return (
+    hasPermission(perms, "cashier.view") ||
+    hasPermission(perms, "students.financial") ||
+    hasPermission(perms, "students.tab.payments") ||
+    hasPermission(perms, "myProfile.tab.payments")
+  )
+}
+
+function canWritePayments(session: { role?: string; roleKey?: string; permissions?: string[] }) {
+  if (hasFullAccessRole(session.roleKey) || hasFullAccessRole(session.role)) return true
+  const perms = Array.isArray(session.permissions) ? session.permissions : []
+  return hasPermission(perms, "cashier.income") || hasPermission(perms, "students.financial")
+}
 
 type Ctx = { params: Promise<{ id: string }> }
 
 export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
-  const permErr = requirePerm(session, "cashier.view")
-  if (permErr) return permErr
+  if (!canReadPayments(session)) {
+    const permErr = requirePerm(session, "cashier.view")
+    if (permErr) return permErr
+  }
 
   const [tenant, tenantErr] = await requireTenant(req)
   if (tenantErr) return tenantErr
@@ -26,8 +46,10 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
 })
 
 export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
-  const permErr = requirePerm(session, "cashier.income")
-  if (permErr) return permErr
+  if (!canWritePayments(session)) {
+    const permErr = requirePerm(session, "cashier.income")
+    if (permErr) return permErr
+  }
 
   const [tenant, tenantErr] = await requireTenant(req)
   if (tenantErr) return tenantErr

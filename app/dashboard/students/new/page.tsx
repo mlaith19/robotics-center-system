@@ -90,6 +90,7 @@ export default function NewStudentPage() {
     status: "מתעניין",
     totalSessions: 12,
     courseSessions: {} as Record<string, number>,
+    profileImage: "",
   })
 
   // User account fields
@@ -138,6 +139,7 @@ export default function NewStudentPage() {
         body: JSON.stringify({
           ...newStudent,
           courseSessions,
+          profileImage: newStudent.profileImage.trim() || null,
           // User account data
           createUserAccount,
           username: createUserAccount ? username.trim() : null,
@@ -278,6 +280,15 @@ export default function NewStudentPage() {
                   className="text-base h-12 bg-white"
                 />
               </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="profileImage">{isEn ? "Profile image (URL)" : "תמונת פרופיל (קישור)"}</Label>
+              <Input
+                id="profileImage"
+                value={newStudent.profileImage}
+                onChange={(e) => setNewStudent({ ...newStudent, profileImage: e.target.value })}
+                placeholder="https://example.com/photo.jpg"
+              />
             </div>
           </div>
         </Card>

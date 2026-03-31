@@ -3,6 +3,7 @@ import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
 import { runAutoCompleteExpiredCourses } from "@/lib/course-status"
 import { parseCourseDateForDb, parseCourseTimeForDb, courseTimeToDisplayValue } from "@/lib/course-db-fields"
+import { getCourseRegistrationVisibilityMap, setCourseRegistrationVisibility } from "@/lib/course-registration-visibility"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -31,10 +32,15 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
     `
     if (result.length === 0) return Response.json({ error: "Course not found" }, { status: 404 })
     const row = result[0] as Record<string, unknown>
+    const visibilityMap = await getCourseRegistrationVisibilityMap(
+      db as unknown as (strings: TemplateStringsArray, ...values: unknown[]) => Promise<any[]>,
+      [String(id)]
+    )
     return Response.json({
       ...row,
       startTime: courseTimeToDisplayValue(row.startTime as string | null | undefined),
       endTime: courseTimeToDisplayValue(row.endTime as string | null | undefined),
+      showRegistrationLink: visibilityMap.get(String(id)) === true,
     })
   } catch (err) {
     console.error("GET /api/courses/[id] error:", err)
@@ -88,6 +94,11 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
       WHERE id = ${id}
       RETURNING *
     `
+    await setCourseRegistrationVisibility(
+      db as unknown as (strings: TemplateStringsArray, ...values: unknown[]) => Promise<any[]>,
+      String(id),
+      body.showRegistrationLink === true
+    )
     if (result.length === 0) return Response.json({ error: "Course not found" }, { status: 404 })
     return Response.json(result[0])
   } catch (err) {

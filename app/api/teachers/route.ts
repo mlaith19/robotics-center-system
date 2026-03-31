@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs"
 import { requireFeatureFromRequest } from "@/lib/feature-gate"
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
+import { ensureProfileImageColumns, resolveProfileImageWithFallback } from "@/lib/profile-image"
 
 export const GET = withTenantAuth(async (req, session) => {
   const featureErr = await requireFeatureFromRequest(req, "teachers", session)
@@ -64,6 +65,7 @@ export const POST = withTenantAuth(async (req, session) => {
   const db = tenant.db
   try {
     const body = await req.json()
+    await ensureProfileImageColumns(db as unknown as (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown[]>)
     const name = String(body.name ?? "").trim()
     const email = body.email ? String(body.email).trim() : null
     const phone = body.phone ? String(body.phone).trim() : null
@@ -76,6 +78,7 @@ export const POST = withTenantAuth(async (req, session) => {
     const centerHourlyRate = body.centerHourlyRate ?? null
     const travelRate = body.travelRate ?? null
     const externalCourseRate = body.externalCourseRate ?? null
+    const profileImage = resolveProfileImageWithFallback(body.profileImage)
 
     const createUserAccount = body.createUserAccount === true
     const username = body.username ? String(body.username).trim() : null
@@ -109,11 +112,11 @@ export const POST = withTenantAuth(async (req, session) => {
     const result = await db`
       INSERT INTO "Teacher" (
         id, name, email, phone, "idNumber", "birthDate", city, specialty, status, bio,
-        "centerHourlyRate", "travelRate", "externalCourseRate", "userId", "createdAt", "updatedAt"
+        "centerHourlyRate", "travelRate", "externalCourseRate", "profileImage", "userId", "createdAt", "updatedAt"
       )
       VALUES (
         ${teacherId}, ${name}, ${email}, ${phone}, ${idNumber}, ${birthDate}, ${city}, ${specialty}, ${status}, ${bio},
-        ${centerHourlyRate}, ${travelRate}, ${externalCourseRate}, ${userId}, ${now}, ${now}
+        ${centerHourlyRate}, ${travelRate}, ${externalCourseRate}, ${profileImage}, ${userId}, ${now}, ${now}
       )
       RETURNING *
     `

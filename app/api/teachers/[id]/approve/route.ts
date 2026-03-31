@@ -1,6 +1,6 @@
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
-import { hasFullAccessRole, hasPermission } from "@/lib/permissions"
+import { getPermissionsForRole, hasFullAccessRole, hasPermission } from "@/lib/permissions"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -33,9 +33,13 @@ export const POST = withTenantAuth(async (req, session, { params }: Ctx) => {
     `
 
     if (teacher.userId) {
+      const defaultTeacherPerms = getPermissionsForRole("teacher")
       await db`
         UPDATE "User"
-        SET status = 'active', "updatedAt" = ${now}
+        SET status = 'active',
+            role = 'teacher',
+            permissions = ${JSON.stringify(defaultTeacherPerms)}::jsonb,
+            "updatedAt" = ${now}
         WHERE id = ${teacher.userId}
       `
     }

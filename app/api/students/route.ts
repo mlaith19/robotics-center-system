@@ -3,6 +3,7 @@ import { getCookieNames } from "@/lib/auth-server"
 import { requireFeatureFromRequest } from "@/lib/feature-gate"
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant, ensureSessionMatchesTenant } from "@/lib/tenant/resolve-tenant"
+import { ensureProfileImageColumns, resolveProfileImageWithFallback } from "@/lib/profile-image"
 
 const PRIVILEGED_ROLES = ["owner", "admin", "administrator", "manager", "super_admin", "center_admin"]
 const ALLOWED_ROLES    = [...PRIVILEGED_ROLES, "teacher", "student"]
@@ -126,7 +127,9 @@ export const POST = withTenantAuth(async (req, session) => {
 
   try {
     const body = await req.json()
+    await ensureProfileImageColumns(db as unknown as (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown[]>)
     if (!body.name) return Response.json({ error: "name is required" }, { status: 400 })
+    const profileImage = resolveProfileImageWithFallback(body.profileImage)
 
     const createUserAccount = body.createUserAccount === true
     const idNumberForAutoUser = body.idNumber ? String(body.idNumber).trim() : ""
@@ -169,7 +172,7 @@ export const POST = withTenantAuth(async (req, session) => {
       INSERT INTO "Student" (
         id, name, email, phone, address, city, status, "birthDate",
         "idNumber", father, mother, "additionalPhone", "healthFund", allergies,
-        "totalSessions", "courseIds", "courseSessions", "userId", "createdAt", "updatedAt"
+        "totalSessions", "courseIds", "courseSessions", "profileImage", "userId", "createdAt", "updatedAt"
       )
       VALUES (
         ${studentId}, ${body.name}, ${body.email || null}, ${body.phone || null},
@@ -180,7 +183,7 @@ export const POST = withTenantAuth(async (req, session) => {
         ${body.totalSessions || 12},
         ${JSON.stringify(body.courseIds || [])}::jsonb,
         ${JSON.stringify(body.courseSessions || {})}::jsonb,
-        ${userId}, ${now}, ${now}
+        ${profileImage}, ${userId}, ${now}, ${now}
       )
       RETURNING *
     `

@@ -1,5 +1,6 @@
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
+import { getPermissionsForRole } from "@/lib/permissions"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -69,9 +70,13 @@ export const POST = withTenantAuth(async (req, _session, { params }: Ctx) => {
     const userRows = await db`SELECT "userId" FROM "Student" WHERE id = ${studentId} LIMIT 1`
     const userId = userRows.length > 0 ? ((userRows[0] as { userId?: string | null }).userId ?? null) : null
     if (userId) {
+      const defaultStudentPerms = getPermissionsForRole("student")
       await db`
         UPDATE "User"
-        SET status = 'active', "updatedAt" = ${now}
+        SET status = 'active',
+            role = 'student',
+            permissions = ${JSON.stringify(defaultStudentPerms)}::jsonb,
+            "updatedAt" = ${now}
         WHERE id = ${userId}
       `
     }
