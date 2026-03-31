@@ -5,6 +5,7 @@ import { Geist, Geist_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { LanguageProvider } from "@/lib/i18n/context"
 import { NotifyProviders } from "@/components/providers/notify-providers"
+import { GlobalCenterBrand } from "@/components/global-center-brand"
 import "./globals.css"
 
 const _geist = Geist({ subsets: ["latin"] })
@@ -60,6 +61,7 @@ export default function RootLayout({
     <html lang="he" dir="rtl" suppressHydrationWarning>
       <body className={`font-sans antialiased`}>
         <LanguageProvider>
+          <GlobalCenterBrand />
           {children}
           <NotifyProviders />
           <Analytics />
