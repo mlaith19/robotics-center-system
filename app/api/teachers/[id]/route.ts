@@ -4,6 +4,7 @@ import { requireFeatureFromRequest } from "@/lib/feature-gate"
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
 import { hasFullAccessRole, hasPermission } from "@/lib/permissions"
+import { ensureProfileImageColumns, resolveProfileImageWithFallback } from "@/lib/profile-image"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -94,6 +95,7 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
   }
 
   try {
+    await ensureProfileImageColumns(db as unknown as (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown[]>)
     const name = String(body.name ?? "").trim()
     const email = body.email ? String(body.email).trim() : null
     const phone = body.phone ? String(body.phone).trim() : null
@@ -106,6 +108,7 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
     const centerHourlyRate = body.centerHourlyRate ?? null
     const travelRate = body.travelRate ?? null
     const externalCourseRate = body.externalCourseRate ?? null
+    const profileImage = resolveProfileImageWithFallback(body.profileImage)
     const now = new Date().toISOString()
 
     const createUserAccount = body.createUserAccount === true
@@ -134,7 +137,7 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
         "idNumber" = ${idNumber}, "birthDate" = ${birthDate}, city = ${city},
         specialty = ${specialty}, status = ${status}, bio = ${bio},
         "centerHourlyRate" = ${centerHourlyRate}, "travelRate" = ${travelRate},
-        "externalCourseRate" = ${externalCourseRate},
+        "externalCourseRate" = ${externalCourseRate}, "profileImage" = ${profileImage},
         "userId" = COALESCE(${userId}, "userId"),
         "updatedAt" = ${now}
       WHERE id = ${id}

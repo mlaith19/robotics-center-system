@@ -98,6 +98,7 @@ export default function EditStudentPage() {
     additionalPhone: "",
     healthFund: "",
     allergies: "",
+    profileImage: "",
     courseIds: [] as string[],
     status: "פעיל",
     totalSessions: 12,
@@ -126,6 +127,7 @@ export default function EditStudentPage() {
         additionalPhone: studentData.additionalPhone || "",
         healthFund: studentData.healthFund || "",
         allergies: studentData.allergies || "",
+        profileImage: studentData.profileImage || "",
         courseIds: studentData.courseIds || [],
         status: studentData.status || "פעיל",
         totalSessions: studentData.totalSessions || 12,
@@ -159,6 +161,7 @@ export default function EditStudentPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...student,
+          profileImage: student.profileImage.trim() || null,
           // User account data (only if creating new account)
           createUserAccount: createUserAccount && !hasUserAccount,
           username: createUserAccount && !hasUserAccount ? username.trim() : null,
@@ -381,6 +384,16 @@ export default function EditStudentPage() {
                   className="text-base h-12 bg-white"
                 />
               </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="profileImage" className="text-base font-medium">תמונת פרופיל (קישור)</Label>
+              <Input
+                id="profileImage"
+                value={student.profileImage}
+                onChange={(e) => updateStudent({ profileImage: e.target.value })}
+                placeholder="https://example.com/photo.jpg"
+                className="text-base h-12 bg-white"
+              />
             </div>
           </div>
         </Card>

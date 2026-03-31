@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs"
 import { requireFeatureFromRequest } from "@/lib/feature-gate"
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
+import { ensureProfileImageColumns, resolveProfileImageWithFallback } from "@/lib/profile-image"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -93,6 +94,7 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
   const body = await req.json()
 
   try {
+    await ensureProfileImageColumns(db as unknown as (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown[]>)
     const existing = await db`SELECT "userId" FROM "Student" WHERE id = ${id}`
     if (existing.length > 0) {
       const userId = (existing[0] as { userId: string | null })?.userId ?? null
@@ -101,6 +103,7 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
       }
     }
     const now = new Date().toISOString()
+    const profileImage = resolveProfileImageWithFallback(body.profileImage)
     const createUserAccount = body.createUserAccount === true
     const username = body.username ? String(body.username).trim() : null
     const password = body.password ? String(body.password) : null
@@ -133,6 +136,7 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
         "additionalPhone" = ${body.additionalPhone || null},
         "healthFund" = ${body.healthFund || null},
         allergies = ${body.allergies || null},
+        "profileImage" = ${profileImage},
         "totalSessions" = ${body.totalSessions || 12},
         "courseIds" = ${JSON.stringify(body.courseIds || [])}::jsonb,
         "courseSessions" = ${JSON.stringify(body.courseSessions || {})}::jsonb,

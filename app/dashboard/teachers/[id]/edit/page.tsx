@@ -27,6 +27,7 @@ type Teacher = {
   centerHourlyRate?: number | null
   travelRate?: number | null
   externalCourseRate?: number | null
+  profileImage?: string | null
   userId?: string | null
 }
 
@@ -58,6 +59,7 @@ export default function EditTeacherPage() {
     centerHourlyRate: 0,
     travelRate: 0,
     externalCourseRate: 0,
+    profileImage: "",
   })
 
   useEffect(() => {
@@ -89,6 +91,7 @@ export default function EditTeacherPage() {
             centerHourlyRate: t.centerHourlyRate ?? 0,
             travelRate: t.travelRate ?? 0,
             externalCourseRate: t.externalCourseRate ?? 0,
+            profileImage: t.profileImage ?? "",
           })
           // Check if teacher has user account
           setHasUserAccount(!!t.userId)
@@ -137,6 +140,7 @@ export default function EditTeacherPage() {
           centerHourlyRate: form.centerHourlyRate || null,
           travelRate: form.travelRate || null,
           externalCourseRate: form.externalCourseRate || null,
+          profileImage: form.profileImage.trim() || null,
           // User account data
           createUserAccount: createUserAccount && !hasUserAccount,
           username: createUserAccount && !hasUserAccount ? username.trim() : null,
@@ -272,6 +276,15 @@ export default function EditTeacherPage() {
                   onChange={(e) => setForm({ ...form, birthDate: e.target.value })}
                 />
               </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="profileImage">תמונת פרופיל (קישור - אופציונלי)</Label>
+              <Input
+                id="profileImage"
+                value={form.profileImage}
+                onChange={(e) => setForm({ ...form, profileImage: e.target.value })}
+                placeholder="https://example.com/photo.jpg"
+              />
             </div>
 
             <div className="grid gap-2">
