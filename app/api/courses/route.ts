@@ -28,11 +28,17 @@ export const GET = withTenantAuth(async (req, session) => {
     })
 
     let teacherScopeId: string | null = null
+    const roleToken = (session.roleKey ?? session.role ?? "").toString().trim().toLowerCase()
+    const isTeacherSession = roleToken === "teacher" || roleToken.includes("teacher") || roleToken.includes("מורה")
     if (!sessionRolesGrantFullAccess(session.roleKey, session.role)) {
       const tr = await db`
         SELECT id FROM "Teacher" WHERE "userId" = ${session.id} LIMIT 1
       `
       if (tr.length > 0) teacherScopeId = (tr[0] as { id: string }).id
+      // Non-admin teacher without linked Teacher profile must not see all courses.
+      if (!teacherScopeId && isTeacherSession) {
+        return Response.json([])
+      }
     }
 
     const teacherWhere =

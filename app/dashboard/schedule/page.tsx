@@ -135,6 +135,8 @@ export default function SchedulePage() {
   const canViewStudents = isAdmin || hasPermission(userPerms, "students.view")
   const { data: userTypeData } = useUserType(currentUser?.id, (currentUser?.roleKey || currentUser?.role || "").toString())
   const isLinkedTeacher = userTypeData?.isTeacher === true
+  const currentTeacherId = userTypeData?.teacherId
+  const isTeacherOnlyView = !isAdmin && isLinkedTeacher
 
   const { data: rawCourses,  isLoading: coursesLoading  } = useSWR<Course[]>(
     "/api/courses",
@@ -168,6 +170,11 @@ export default function SchedulePage() {
 
   const [filterCourse, setFilterCourse] = useState<string>("all")
   const [filterTeacher, setFilterTeacher] = useState<string>("all")
+  useEffect(() => {
+    if (!isTeacherOnlyView || !currentTeacherId) return
+    setFilterTeacher(currentTeacherId)
+  }, [isTeacherOnlyView, currentTeacherId])
+
   const [filterStudent, setFilterStudent] = useState<string>("all")
   const [isStudentUser, setIsStudentUser] = useState(false)
 
@@ -226,6 +233,12 @@ export default function SchedulePage() {
 
   const filteredCourses = useMemo(() => {
     return coursesForUser.filter((course) => {
+      if (isTeacherOnlyView && currentTeacherId) {
+        const hasViaTeachers = Array.isArray(course.teachers) && course.teachers.some((t) => t.id === currentTeacherId)
+        const ids = Array.isArray(course.teacherIds) ? course.teacherIds : []
+        const hasViaIds = ids.includes(currentTeacherId)
+        if (!hasViaTeachers && !hasViaIds) return false
+      }
       if (filterCourse !== "all" && course.id !== filterCourse) return false
       if (filterTeacher !== "all") {
         if (!course.teachers || !course.teachers.some((t) => t.id === filterTeacher)) {
@@ -234,7 +247,7 @@ export default function SchedulePage() {
       }
       return true
     })
-  }, [coursesForUser, filterCourse, filterTeacher])
+  }, [coursesForUser, filterCourse, filterTeacher, isTeacherOnlyView, currentTeacherId])
 
   const getCoursesForDate = (date: Date) => {
     const dayOfWeek = date.getDay()
@@ -580,22 +593,24 @@ export default function SchedulePage() {
             </SelectContent>
           </Select>
 
-          <Select value={filterTeacher} onValueChange={setFilterTeacher}>
-            <SelectTrigger className="w-[180px]">
-              <div className="flex items-center gap-2">
-                <Filter className="h-4 w-4" />
-                <SelectValue placeholder="כל המורים" />
-              </div>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">כל המורים</SelectItem>
-              {teachers.map((teacher) => (
-                <SelectItem key={teacher.id} value={teacher.id}>
-                  {teacher.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {!isTeacherOnlyView && (
+            <Select value={filterTeacher} onValueChange={setFilterTeacher}>
+              <SelectTrigger className="w-[180px]">
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4" />
+                  <SelectValue placeholder="כל המורים" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">כל המורים</SelectItem>
+                {teachers.map((teacher) => (
+                  <SelectItem key={teacher.id} value={teacher.id}>
+                    {teacher.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
 
           {canViewStudents && (
             <Select value={filterStudent} onValueChange={setFilterStudent}>
