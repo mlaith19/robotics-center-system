@@ -8,6 +8,7 @@ import { requireMaster } from "@/lib/master-auth"
 import { sql } from "@/lib/db"
 import { runMigrationsPerCenter } from "@/lib/master/migrations/run-per-center"
 import { APP_SCHEMA_VERSION } from "@/lib/schema-version"
+import { bumpGlobalSessionRevision } from "@/lib/session-revision"
 import * as crypto from "crypto"
 
 export const dynamic = "force-dynamic"
@@ -49,6 +50,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   await ensureMigrationTables()
 
   const runId = crypto.randomUUID()
+  await bumpGlobalSessionRevision(session.id, `master center migrate centerId=${id} runId=${runId}`).catch(() => {})
   const summary = { runId, startedAt: new Date().toISOString(), totalCenters: 1, centerId: id }
 
   await sql`

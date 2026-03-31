@@ -12,6 +12,7 @@ import {
 } from "./session-config"
 import { verifyAndDecodeSession } from "./session-codec"
 import { hasFullAccessRole } from "@/lib/permissions"
+import { getGlobalSessionRevision } from "@/lib/session-revision"
 
 export interface SessionUser {
   id: string
@@ -21,6 +22,7 @@ export interface SessionUser {
   roleKey?: string
   permissions?: string[]
   centerId?: string
+  sessionRevision?: number
   loginTime: string
   lastActivity: string
 }
@@ -50,6 +52,7 @@ async function parseSessionCookie(req: Request): Promise<SessionUser | null> {
     roleKey:     session.roleKey != null ? String(session.roleKey) : undefined,
     permissions: Array.isArray(session.permissions) ? session.permissions as string[] : undefined,
     centerId:    typeof session.centerId === "string" ? session.centerId : undefined,
+    sessionRevision: typeof session.sessionRevision === "number" ? session.sessionRevision : 0,
     loginTime,
     lastActivity,
   }
@@ -64,6 +67,9 @@ export async function getSession(req: Request): Promise<SessionUser | null> {
   if (Number.isNaN(loginAt) || Number.isNaN(lastAt)) return null
   if (now - lastAt  > SESSION_IDLE_MS)     return null
   if (now - loginAt > SESSION_ABSOLUTE_MS) return null
+  const globalRevision = await getGlobalSessionRevision().catch(() => 0)
+  const localRevision = typeof session.sessionRevision === "number" ? session.sessionRevision : 0
+  if (localRevision < globalRevision) return null
   return session
 }
 

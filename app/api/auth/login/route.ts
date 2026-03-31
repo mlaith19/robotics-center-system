@@ -15,6 +15,7 @@ import {
 } from "@/lib/login-attempts"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
 import { getPermissionsForRole, hasFullAccessRole, type RoleType } from "@/lib/permissions"
+import { getGlobalSessionRevision } from "@/lib/session-revision"
 
 const ACCOUNT_LOCKED = "החשבון ננעל לאחר ניסיונות כושלים. נסה שוב מאוחר יותר."
 
@@ -232,6 +233,7 @@ export async function POST(request: NextRequest) {
     const resolvedRole = (user.role_name || user.user_role_text || (user as Record<string,unknown>).role || roleKey || "user") as string
 
     const now = new Date().toISOString()
+    const sessionRevision = await getGlobalSessionRevision().catch(() => 0)
     const sessionPayload = {
       id: user.id,
       username: user.username,
@@ -243,6 +245,7 @@ export async function POST(request: NextRequest) {
       centerId,
       centerSlug,
       centerName,
+      sessionRevision,
       loginTime: now,
       lastActivity: now,
     }

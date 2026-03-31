@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireMaster } from "@/lib/master-auth"
 import { sql } from "@/lib/db"
 import { runMigrationsPerCenter, type RunResult } from "@/lib/master/migrations/run-per-center"
+import { bumpGlobalSessionRevision } from "@/lib/session-revision"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
@@ -127,6 +128,7 @@ export async function POST(req: NextRequest) {
 
   const centers = await getCentersForMode(mode, centerId, centerIds)
   const runId = crypto.randomUUID()
+  await bumpGlobalSessionRevision(session.id, `master ops migrate (${mode}) runId=${runId}`).catch(() => {})
 
   const summary = {
     runId,

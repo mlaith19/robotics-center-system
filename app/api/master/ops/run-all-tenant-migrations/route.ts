@@ -9,6 +9,7 @@ import { requireMaster } from "@/lib/master-auth"
 import { sql } from "@/lib/db"
 import { runMigrationsPerCenter } from "@/lib/master/migrations/run-per-center"
 import { APP_SCHEMA_VERSION } from "@/lib/schema-version"
+import { bumpGlobalSessionRevision } from "@/lib/session-revision"
 import * as crypto from "crypto"
 
 export const dynamic = "force-dynamic"
@@ -47,6 +48,7 @@ export async function POST(req: NextRequest) {
   ` as { id: string; name: string; tenant_db_url: string }[]
 
   const runId = crypto.randomUUID()
+  await bumpGlobalSessionRevision(session.id, `master run-all migrations runId=${runId}`).catch(() => {})
   const summary = { runId, startedAt: new Date().toISOString(), totalCenters: centers.length }
 
   await sql`
