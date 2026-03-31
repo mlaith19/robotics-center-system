@@ -14,7 +14,7 @@ import {
   clearUserLock,
 } from "@/lib/login-attempts"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
-import { getPermissionsForRole, type RoleType } from "@/lib/permissions"
+import { getPermissionsForRole, hasFullAccessRole, type RoleType } from "@/lib/permissions"
 
 const ACCOUNT_LOCKED = "החשבון ננעל לאחר ניסיונות כושלים. נסה שוב מאוחר יותר."
 
@@ -222,6 +222,11 @@ export async function POST(request: NextRequest) {
         permissions = [...roleDefaults]
         console.log(`[AUTH] permissions empty, filled from role preset "${roleKey}" (${permissions.length} perms)`)
       }
+    }
+    if (hasFullAccessRole(roleKey) || hasFullAccessRole(user.role_name) || hasFullAccessRole(user.user_role_text)) {
+      // Full-access users do not require storing explicit permissions in cookie.
+      // This keeps Set-Cookie header small and avoids upstream header-size failures.
+      permissions = []
     }
 
     const resolvedRole = (user.role_name || user.user_role_text || (user as Record<string,unknown>).role || roleKey || "user") as string
