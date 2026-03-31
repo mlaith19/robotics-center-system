@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ChangeEvent } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -34,6 +34,17 @@ export default function RegisterTeacherPage() {
     }, 5000)
     return () => clearTimeout(timer)
   }, [success, router])
+
+  const handleProfileImageUpload = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      const result = typeof reader.result === "string" ? reader.result : ""
+      setProfileImage(result)
+    }
+    reader.readAsDataURL(file)
+  }
 
   function normalizeBirthDateInput(value: string): string {
     const v = value.trim()
@@ -154,14 +165,29 @@ export default function RegisterTeacherPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="profileImage">תמונת פרופיל (קישור - אופציונלי)</Label>
-              <Input
-                id="profileImage"
-                value={profileImage}
-                onChange={(e) => setProfileImage(e.target.value)}
-                placeholder="https://example.com/photo.jpg"
-                disabled={isSubmitting}
-              />
+              <Label htmlFor="profileImageUpload">תמונת פרופיל</Label>
+              <div className="flex items-center gap-3">
+                {profileImage ? (
+                  <img src={profileImage} alt="profile preview" className="h-16 w-16 rounded-full object-cover border" />
+                ) : (
+                  <div className="h-16 w-16 rounded-full border-2 border-dashed bg-muted" />
+                )}
+                <div className="flex-1 space-y-2">
+                  <Input
+                    id="profileImageUpload"
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleProfileImageUpload}
+                    disabled={isSubmitting}
+                  />
+                  {profileImage && (
+                    <Button type="button" variant="outline" size="sm" onClick={() => setProfileImage("")} disabled={isSubmitting}>
+                      הסר תמונה
+                    </Button>
+                  )}
+                </div>
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone">טלפון</Label>

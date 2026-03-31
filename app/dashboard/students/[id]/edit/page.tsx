@@ -266,6 +266,17 @@ export default function EditStudentPage() {
     setHasChanges(true)
   }
 
+  const handleProfileImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      const result = typeof reader.result === "string" ? reader.result : ""
+      updateStudent({ profileImage: result })
+    }
+    reader.readAsDataURL(file)
+  }
+
   if (studentError) {
     return (
       <div className="container mx-auto max-w-4xl p-6" dir={isRtl ? "rtl" : "ltr"}>
@@ -386,14 +397,23 @@ export default function EditStudentPage() {
               </div>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="profileImage" className="text-base font-medium">תמונת פרופיל (קישור)</Label>
-              <Input
-                id="profileImage"
-                value={student.profileImage}
-                onChange={(e) => updateStudent({ profileImage: e.target.value })}
-                placeholder="https://example.com/photo.jpg"
-                className="text-base h-12 bg-white"
-              />
+              <Label htmlFor="profileImageUpload" className="text-base font-medium">תמונת פרופיל</Label>
+              <div className="flex items-center gap-3">
+                {student.profileImage ? (
+                  <img src={student.profileImage} alt="profile preview" className="h-16 w-16 rounded-full object-cover border" />
+                ) : (
+                  <div className="h-16 w-16 rounded-full border-2 border-dashed bg-muted" />
+                )}
+                <div className="flex-1 space-y-2">
+                  <Input id="profileImageUpload" type="file" accept="image/*" capture="environment" onChange={handleProfileImageUpload} className="bg-white" />
+                  {student.profileImage && (
+                    <Button type="button" variant="outline" size="sm" onClick={() => updateStudent({ profileImage: "" })}>
+                      <X className="h-4 w-4 mr-1" />
+                      הסר תמונה
+                    </Button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </Card>

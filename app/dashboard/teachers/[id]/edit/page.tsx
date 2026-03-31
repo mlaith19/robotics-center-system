@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ChangeEvent } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { CityCombobox } from "@/components/ui/combobox-city"
-import { ArrowRight, User, Mail, Phone, GraduationCap, FileText, Banknote, Calendar, Award as IdCard, MapPin, Save, Loader2, KeyRound } from "lucide-react"
+import { ArrowRight, User, Mail, Phone, GraduationCap, FileText, Banknote, Calendar, Award as IdCard, MapPin, Save, Loader2, KeyRound, X } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 
 type Teacher = {
@@ -161,6 +161,17 @@ export default function EditTeacherPage() {
     }
   }
 
+  const handleProfileImageUpload = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      const result = typeof reader.result === "string" ? reader.result : ""
+      setForm((prev) => ({ ...prev, profileImage: result }))
+    }
+    reader.readAsDataURL(file)
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -278,13 +289,23 @@ export default function EditTeacherPage() {
               </div>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="profileImage">תמונת פרופיל (קישור - אופציונלי)</Label>
-              <Input
-                id="profileImage"
-                value={form.profileImage}
-                onChange={(e) => setForm({ ...form, profileImage: e.target.value })}
-                placeholder="https://example.com/photo.jpg"
-              />
+              <Label htmlFor="profileImageUpload">תמונת פרופיל</Label>
+              <div className="flex items-center gap-3">
+                {form.profileImage ? (
+                  <img src={form.profileImage} alt="profile preview" className="h-16 w-16 rounded-full object-cover border" />
+                ) : (
+                  <div className="h-16 w-16 rounded-full border-2 border-dashed bg-muted" />
+                )}
+                <div className="flex-1 space-y-2">
+                  <Input id="profileImageUpload" type="file" accept="image/*" capture="environment" onChange={handleProfileImageUpload} />
+                  {form.profileImage && (
+                    <Button type="button" variant="outline" size="sm" onClick={() => setForm((prev) => ({ ...prev, profileImage: "" }))}>
+                      <X className="h-4 w-4 mr-1" />
+                      הסר תמונה
+                    </Button>
+                  )}
+                </div>
+              </div>
             </div>
 
             <div className="grid gap-2">

@@ -107,6 +107,17 @@ export default function NewStudentPage() {
     }))
   }
 
+  const handleProfileImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      const result = typeof reader.result === "string" ? reader.result : ""
+      setNewStudent((prev) => ({ ...prev, profileImage: result }))
+    }
+    reader.readAsDataURL(file)
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -282,13 +293,23 @@ export default function NewStudentPage() {
               </div>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="profileImage">{isEn ? "Profile image (URL)" : "תמונת פרופיל (קישור)"}</Label>
-              <Input
-                id="profileImage"
-                value={newStudent.profileImage}
-                onChange={(e) => setNewStudent({ ...newStudent, profileImage: e.target.value })}
-                placeholder="https://example.com/photo.jpg"
-              />
+              <Label htmlFor="profileImageUpload">{isEn ? "Profile image" : "תמונת פרופיל"}</Label>
+              <div className="flex items-center gap-3">
+                {newStudent.profileImage ? (
+                  <img src={newStudent.profileImage} alt="profile preview" className="h-16 w-16 rounded-full object-cover border" />
+                ) : (
+                  <div className="h-16 w-16 rounded-full border-2 border-dashed bg-muted" />
+                )}
+                <div className="flex-1 space-y-2">
+                  <Input id="profileImageUpload" type="file" accept="image/*" capture="environment" onChange={handleProfileImageUpload} />
+                  {newStudent.profileImage && (
+                    <Button type="button" variant="outline" size="sm" onClick={() => setNewStudent((prev) => ({ ...prev, profileImage: "" }))}>
+                      <X className="h-4 w-4 mr-1" />
+                      {isEn ? "Remove photo" : "הסר תמונה"}
+                    </Button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </Card>
