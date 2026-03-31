@@ -110,6 +110,7 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
       name: teacher.name,
       email: teacher.email,
       phone: teacher.phone,
+      profileImage: teacher.profileImage ?? null,
       specialization: teacher.specialty,
       courseIds,
       courses,

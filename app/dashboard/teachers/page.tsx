@@ -30,6 +30,8 @@ type Teacher = {
   travelRate?: number | null
   externalCourseRate?: number | null
   totalPaid?: number | null
+  balance?: number | null
+  profileImage?: string | null
   createdAt?: string
 }
 
@@ -208,9 +210,11 @@ export default function TeachersPage() {
               {/* Header with status and avatar */}
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                    <User className="h-6 w-6 text-blue-600" />
-                  </div>
+                  {t.profileImage ? (
+                    <img src={t.profileImage} alt={t.name} className="w-12 h-12 rounded-full object-cover border" />
+                  ) : (
+                    <img src="/api/og-logo" alt="Center logo" className="w-12 h-12 rounded-full object-cover border" />
+                  )}
                   <div className="text-right">
                     <h3 className="font-bold text-lg">{t.name}</h3>
                     {t.specialization && (
@@ -245,26 +249,18 @@ export default function TeachersPage() {
                 )}
               </div>
 
-              {/* Balance - Paid minus Owed */}
+              {/* Remaining balance to pay teacher */}
               <div className={`rounded-lg p-3 text-center ${
-                (t.balance || 0) > 0 
-                  ? "bg-green-50 dark:bg-green-950/20" 
-                  : (t.balance || 0) < 0
-                    ? "bg-red-50 dark:bg-red-950/20"
-                    : "bg-slate-50 dark:bg-slate-800"
+                (t.balance || 0) < 0 ? "bg-red-50 dark:bg-red-950/20" : "bg-green-50 dark:bg-green-950/20"
               }`}>
                 <div className="flex items-center justify-center gap-1 text-xs mb-1 text-muted-foreground">
                   <span className="font-bold">₪</span>
-                  <span>יתרה</span>
+                  <span>{(t.balance || 0) < 0 ? "יתרה לתשלום" : "יתרת זכות"}</span>
                 </div>
                 <div className={`font-bold text-lg ${
-                  (t.balance || 0) > 0 
-                    ? "text-green-700 dark:text-green-400" 
-                    : (t.balance || 0) < 0
-                      ? "text-red-700 dark:text-red-400"
-                      : "text-muted-foreground"
+                  (t.balance || 0) < 0 ? "text-red-700 dark:text-red-400" : "text-green-700 dark:text-green-400"
                 }`}>
-                  {Math.round(t.balance || 0).toLocaleString()} ₪
+                  {Math.round(Math.abs(t.balance || 0)).toLocaleString()} ₪
                 </div>
               </div>
 

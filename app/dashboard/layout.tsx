@@ -74,6 +74,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { t, dir } = useLanguage()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
+  const [userProfileImage, setUserProfileImage] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [showUpdatingNotice, setShowUpdatingNotice] = useState(false)
   const [updatingMessage, setUpdatingMessage] = useState("המערכת מתעדכנת. אנא המתן כמה דקות ובצע רענון לדף.")
@@ -161,6 +162,41 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const showMyProfileInSidebar =
     userPermissions.includes("nav.myProfile") ||
     ((isLinkedToTeacher || isLinkedToStudent || isTeacherRole) && !showHomeInSidebar)
+
+  useEffect(() => {
+    if (!currentUser?.id) return
+    if (!userTypeData) return
+    let cancelled = false
+
+    const loadProfileImage = async () => {
+      try {
+        if (userTypeData.isTeacher) {
+          const res = await fetch(`/api/teachers/by-user/${currentUser.id}`, { credentials: "include" })
+          if (!res.ok) return
+          const data = await res.json()
+          const img = typeof data?.profileImage === "string" && data.profileImage.trim() ? data.profileImage.trim() : null
+          if (!cancelled) setUserProfileImage(img)
+          return
+        }
+        if (userTypeData.isStudent) {
+          const res = await fetch(`/api/students/by-user/${currentUser.id}`, { credentials: "include" })
+          if (!res.ok) return
+          const data = await res.json()
+          const img = typeof data?.profileImage === "string" && data.profileImage.trim() ? data.profileImage.trim() : null
+          if (!cancelled) setUserProfileImage(img)
+          return
+        }
+        if (!cancelled) setUserProfileImage(null)
+      } catch {
+        if (!cancelled) setUserProfileImage(null)
+      }
+    }
+
+    loadProfileImage()
+    return () => {
+      cancelled = true
+    }
+  }, [currentUser?.id, userTypeData])
 
   // Check page access permissions
   useEffect(() => {
@@ -456,9 +492,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <LanguageSelector className="flex-row" />
             </div>
             <div className="flex items-center gap-3 rounded-lg bg-muted p-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-semibold">
-                {currentUser.full_name?.charAt(0) || currentUser.username.charAt(0).toUpperCase()}
-              </div>
+              {userProfileImage ? (
+                <img src={userProfileImage} alt="Profile" className="h-10 w-10 rounded-full object-cover border" />
+              ) : (
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-semibold">
+                  {currentUser.full_name?.charAt(0) || currentUser.username.charAt(0).toUpperCase()}
+                </div>
+              )}
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-foreground truncate">
                   {currentUser.full_name || currentUser.username}

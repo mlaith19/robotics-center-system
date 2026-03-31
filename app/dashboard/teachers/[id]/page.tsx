@@ -31,6 +31,7 @@ type Teacher = {
   externalCourseRate?: number | null
   createdAt?: string
   updatedAt?: string
+  profileImage?: string | null
   teacherCourses?: { 
     course: { 
       id: string
@@ -552,9 +553,11 @@ export default function TeacherViewPage() {
           <Button variant="ghost" size="icon" onClick={() => router.back()} className="bg-transparent hover:bg-white/50">
             <ArrowRight className="h-5 w-5" />
           </Button>
-          <div className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
-            <User className="h-6 w-6 text-white" />
-          </div>
+          {teacher.profileImage ? (
+            <img src={teacher.profileImage} alt={teacher.name} className="h-12 w-12 rounded-full object-cover border shadow-lg" />
+          ) : (
+            <img src="/api/og-logo" alt="Center logo" className="h-12 w-12 rounded-full object-cover border shadow-lg" />
+          )}
           <div>
             <div className="text-xl font-bold text-foreground">{teacher.name}</div>
             <div className="flex items-center gap-4 text-sm text-muted-foreground">
@@ -761,14 +764,14 @@ export default function TeacherViewPage() {
                 </div>
                 <div className="text-2xl font-bold text-orange-700 dark:text-orange-400">{owedToTeacher.toLocaleString("he-IL")} ₪</div>
               </Card>
-              {/* Balance - paid minus debt */}
-              <Card className={`p-4 ${expensesSum - owedToTeacher >= 0 ? "bg-blue-50 dark:bg-blue-950/20" : "bg-red-50 dark:bg-red-950/20"}`}>
+              {/* Balance - remaining amount to pay teacher */}
+              <Card className={`p-4 ${pendingSum > 0 ? "bg-red-50 dark:bg-red-950/20" : "bg-green-50 dark:bg-green-950/20"}`}>
                 <div className="flex items-center gap-2 mb-2">
-                  <span className={`font-bold ${expensesSum - owedToTeacher >= 0 ? "text-blue-600" : "text-red-600"}`}>₪</span>
-                  <span className={`text-xs ${expensesSum - owedToTeacher >= 0 ? "text-blue-700 dark:text-blue-400" : "text-red-700 dark:text-red-400"}`}>יתרה</span>
+                  <span className={`font-bold ${pendingSum > 0 ? "text-red-600" : "text-green-600"}`}>₪</span>
+                  <span className={`text-xs ${pendingSum > 0 ? "text-red-700 dark:text-red-400" : "text-green-700 dark:text-green-400"}`}>יתרה לתשלום</span>
                 </div>
-                <div className={`text-2xl font-bold ${expensesSum - owedToTeacher >= 0 ? "text-blue-700 dark:text-blue-400" : "text-red-700 dark:text-red-400"}`}>
-                  {(expensesSum - owedToTeacher).toLocaleString("he-IL")} ₪
+                <div className={`text-2xl font-bold ${pendingSum > 0 ? "text-red-700 dark:text-red-400" : "text-green-700 dark:text-green-400"}`}>
+                  {pendingSum.toLocaleString("he-IL")} ₪
                 </div>
               </Card>
             </div>

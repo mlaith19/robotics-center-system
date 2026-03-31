@@ -26,6 +26,7 @@ interface Student {
   mother?: string | null
   additionalPhone?: string | null
   healthFund?: string | null
+  profileImage?: string | null
   createdAt?: string
 }
 
@@ -202,9 +203,11 @@ export default function StudentsPage() {
                 {/* Header with Avatar and Status - RTL */}
                 <div className="flex items-start justify-between mb-4 flex-row-reverse">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                      <User className="h-6 w-6 text-blue-600" />
-                    </div>
+                    {student.profileImage ? (
+                      <img src={student.profileImage} alt={student.name} className="w-12 h-12 rounded-full object-cover border" />
+                    ) : (
+                      <img src="/api/og-logo" alt="Center logo" className="w-12 h-12 rounded-full object-cover border" />
+                    )}
                     <div className="text-right">
                       <h3 className="font-semibold text-lg">{student.name}</h3>
                       {student.city && (

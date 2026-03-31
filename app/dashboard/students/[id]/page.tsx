@@ -40,6 +40,7 @@ interface Student {
   enrollments: any[]
   payments: any[]
   attendances: any[]
+  profileImage?: string | null
 }
 
 const statusColors: Record<string, string> = {
@@ -195,9 +196,11 @@ export default function StudentViewPage() {
         {/* Student Name Header */}
         <Card className="p-6">
           <div className="flex items-center gap-6">
-            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-blue-100">
-              <User className="h-10 w-10 text-blue-600" />
-            </div>
+            {student.profileImage ? (
+              <img src={student.profileImage} alt={student.name} className="h-20 w-20 rounded-full object-cover border" />
+            ) : (
+              <img src="/api/og-logo" alt="Center logo" className="h-20 w-20 rounded-full object-cover border" />
+            )}
             <div className="flex-1">
               <div className="flex items-center gap-3">
                 <h2 className="text-2xl font-bold text-foreground">{student.name}</h2>

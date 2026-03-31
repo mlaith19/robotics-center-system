@@ -165,6 +165,7 @@ type Student = {
   healthFund: string | null
   allergies: string | null
   status: string
+  profileImage?: string | null
 }
 
 function safeText(v: any) {
@@ -265,8 +266,8 @@ export function StudentTabs({
     }, 0)
     // Calculate total course costs (charges) from enrollments
     const charges = enrollments.reduce((sum, e) => sum + Number(e.coursePrice || 0), 0)
-    // Balance = paid - charges (negative means owes money, positive means credit)
-    const balance = paid - charges
+    // Balance = charges - paid (positive means student still owes)
+    const balance = charges - paid
     return { paid, charges, balance }
   }, [payments, enrollments])
 
@@ -839,12 +840,12 @@ export function StudentTabs({
             <p className="text-2xl font-bold text-orange-700 dark:text-orange-400">{paymentsSummary.charges.toLocaleString()} ₪</p>
           </Card>
 
-          <Card className={`p-4 ${paymentsSummary.balance >= 0 ? "bg-green-50 dark:bg-green-950/20" : "bg-red-50 dark:bg-red-950/20"}`}>
+          <Card className={`p-4 ${paymentsSummary.balance > 0 ? "bg-red-50 dark:bg-red-950/20" : "bg-green-50 dark:bg-green-950/20"}`}>
             <div className="flex items-center gap-2 mb-2">
-              <span className={`font-bold ${paymentsSummary.balance >= 0 ? "text-green-600" : "text-red-600"}`}>₪</span>
-              <p className={`text-xs ${paymentsSummary.balance >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}`}>{isEn ? "Balance" : "יתרה"}</p>
+              <span className={`font-bold ${paymentsSummary.balance > 0 ? "text-red-600" : "text-green-600"}`}>₪</span>
+              <p className={`text-xs ${paymentsSummary.balance > 0 ? "text-red-700 dark:text-red-400" : "text-green-700 dark:text-green-400"}`}>{isEn ? "Remaining Balance" : "יתרה לתשלום"}</p>
             </div>
-            <p className={`text-2xl font-bold ${paymentsSummary.balance >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}`}>
+            <p className={`text-2xl font-bold ${paymentsSummary.balance > 0 ? "text-red-700 dark:text-red-400" : "text-green-700 dark:text-green-400"}`}>
               {paymentsSummary.balance.toLocaleString()} ₪
             </p>
           </Card>
