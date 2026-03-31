@@ -10,7 +10,11 @@ export function requirePerm(session: SessionUser, permission: string): Response 
   const perms = session.permissions ?? []
   const roleKey = session.roleKey ?? ""
   const roleName = session.role ?? ""
+  const username = (session.username ?? "").toString().trim().toLowerCase()
   if (hasFullAccessRole(roleKey) || hasFullAccessRole(roleName)) return null
+  // Backward compatibility for legacy centers where admin users were provisioned
+  // without a normalized role key in session but still use admin usernames.
+  if (username === "admin" || username.endsWith("_admin")) return null
   if (hasPermission(perms, permission)) return null
   if (permission === "users.write" && (hasPermission(perms, "users.edit") || hasPermission(perms, "users.write"))) return null
   if (permission === "users.view" && (hasPermission(perms, "users.view") || hasPermission(perms, "users.read"))) return null

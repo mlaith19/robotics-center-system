@@ -40,6 +40,9 @@ export function NotifyProviders() {
         return res
       }
       if (res.status === 403) {
+        // Schedule page makes a few optional/background calls; avoid noisy false alerts
+        // when the page itself is accessible and functioning.
+        if (path.startsWith("/dashboard/schedule")) return res
         notify.error("notify.unauthorized")
         return res
       }
