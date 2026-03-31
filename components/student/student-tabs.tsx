@@ -27,6 +27,7 @@ import { Badge } from "@/components/ui/badge"
 import { CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { hasPermission } from "@/lib/permissions"
 import { useCurrentUser } from "@/lib/auth-context"
+import { useLanguage } from "@/lib/i18n/context"
 
 type Course = {
   id: string
@@ -67,24 +68,30 @@ type Attendance = {
   createdByUserName?: string | null
 }
 
-function formatDate(dateString?: string) {
+function formatDate(dateString?: string, localeTag = "he-IL") {
   if (!dateString) return "-"
   const d = new Date(dateString)
   if (Number.isNaN(d.getTime())) return "-"
-  return new Intl.DateTimeFormat("he-IL").format(d)
+  return new Intl.DateTimeFormat(localeTag).format(d)
 }
 
-function formatDateTime(dateString?: string) {
+function formatDateTime(dateString?: string, localeTag = "he-IL") {
   if (!dateString) return "-"
   const d = new Date(dateString)
   if (Number.isNaN(d.getTime())) return "-"
-  return new Intl.DateTimeFormat("he-IL", { dateStyle: "short", timeStyle: "short" }).format(d)
+  return new Intl.DateTimeFormat(localeTag, { dateStyle: "short", timeStyle: "short" }).format(d)
 }
 
 function paymentStatusHe(s: Payment["status"]) {
   if (s === "PAID") return "שולם"
   if (s === "PENDING") return "ממתין"
   return "בוטל"
+}
+function paymentStatusLabel(s: Payment["status"], isEn: boolean) {
+  if (!isEn) return paymentStatusHe(s)
+  if (s === "PAID") return "Paid"
+  if (s === "PENDING") return "Pending"
+  return "Canceled"
 }
 
 function paymentMethodHe(m?: string) {
@@ -106,12 +113,40 @@ function paymentMethodHe(m?: string) {
       return "מזומן"
   }
 }
+function paymentMethodLabel(m: string | undefined, isEn: boolean) {
+  if (!isEn) return paymentMethodHe(m)
+  switch (m?.toLowerCase()) {
+    case "cash":
+      return "Cash"
+    case "credit":
+      return "Credit Card"
+    case "transfer":
+    case "bank_transfer":
+      return "Bank Transfer"
+    case "check":
+      return "Check"
+    case "bit":
+      return "Bit"
+    case "paybox":
+      return "PayBox"
+    default:
+      return "Cash"
+  }
+}
 
 function attendanceStatusHe(s: string) {
   if (s === "present" || s === "PRESENT") return "נוכח"
   if (s === "absent" || s === "ABSENT") return "נעדר"
   if (s === "sick") return "חולה"
   if (s === "vacation") return "חופש"
+  return s
+}
+function attendanceStatusLabel(s: string, isEn: boolean) {
+  if (!isEn) return attendanceStatusHe(s)
+  if (s === "present" || s === "PRESENT") return "Present"
+  if (s === "absent" || s === "ABSENT") return "Absent"
+  if (s === "sick") return "Sick"
+  if (s === "vacation") return "Vacation"
   return s
 }
 
@@ -157,6 +192,11 @@ export function StudentTabs({
   /** כשהתלמיד צופה בפרופיל שלו – הרשאות מהכרטסת "הפרופיל שלי" */
   isOwnProfile?: boolean
 }) {
+  const { locale } = useLanguage()
+  const isEn = locale === "en"
+  const isAr = locale === "ar"
+  const tx = (he: string, en: string, ar: string) => (isEn ? en : isAr ? ar : he)
+  const localeTag = isEn ? "en-GB" : isAr ? "ar" : "he-IL"
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false)
   const [isAddingPayment, setIsAddingPayment] = useState(false)
   const [paymentAmount, setPaymentAmount] = useState("")
@@ -364,13 +404,13 @@ export function StudentTabs({
   const tabCount = [showProfile, showGeneral, showCourses, showPayments, showAttendance].filter(Boolean).length
 
   return (
-    <Tabs defaultValue={defaultTab} className="w-full" dir="rtl">
+    <Tabs defaultValue={defaultTab} className="w-full" dir={isEn ? "ltr" : "rtl"}>
       <TabsList className={`grid w-full grid-cols-${Math.min(tabCount, 5)}`} style={{ gridTemplateColumns: `repeat(${tabCount}, 1fr)` }}>
-        {showProfile && <TabsTrigger value="profile">פרופיל</TabsTrigger>}
-        {showGeneral && <TabsTrigger value="general">כללי</TabsTrigger>}
-        {showCourses && <TabsTrigger value="courses">קורסים</TabsTrigger>}
-        {showPayments && <TabsTrigger value="payments">תשלומים</TabsTrigger>}
-        {showAttendance && <TabsTrigger value="attendance">נוכחות</TabsTrigger>}
+        {showProfile && <TabsTrigger value="profile">{tx("פרופיל","Profile","الملف الشخصي")}</TabsTrigger>}
+        {showGeneral && <TabsTrigger value="general">{tx("כללי","General","عام")}</TabsTrigger>}
+        {showCourses && <TabsTrigger value="courses">{tx("קורסים","Courses","الدورات")}</TabsTrigger>}
+        {showPayments && <TabsTrigger value="payments">{tx("תשלומים","Payments","الدفعات")}</TabsTrigger>}
+        {showAttendance && <TabsTrigger value="attendance">{tx("נוכחות","Attendance","الحضور")}</TabsTrigger>}
       </TabsList>
 
       {/* Profile Tab - All student details */}
@@ -384,23 +424,23 @@ export function StudentTabs({
               <div className="p-2 bg-green-100 rounded-lg">
                 <CreditCard className="h-5 w-5 text-green-600" />
               </div>
-              <CardTitle className="text-lg">מידע אישי</CardTitle>
+              <CardTitle className="text-lg">{isEn ? "Personal Info" : "מידע אישי"}</CardTitle>
             </CardHeader>
             <CardContent className="pt-4 space-y-4">
               <div className="flex flex-row-reverse justify-between items-center">
-                <span className="text-muted-foreground">תעודת זהות:</span>
+                <span className="text-muted-foreground">{isEn ? "ID Number:" : "תעודת זהות:"}</span>
                 <span className="font-medium">{safeText(student?.idNumber)}</span>
               </div>
               <div className="flex flex-row-reverse justify-between items-center">
-                <span className="text-muted-foreground">תאריך לידה:</span>
-                <span className="font-medium">{formatDate(student?.birthDate || undefined)}</span>
+                <span className="text-muted-foreground">{isEn ? "Birth Date:" : "תאריך לידה:"}</span>
+                <span className="font-medium">{formatDate(student?.birthDate || undefined, localeTag)}</span>
               </div>
               <div className="flex flex-row-reverse justify-between items-center">
-                <span className="text-muted-foreground">כתובת:</span>
+                <span className="text-muted-foreground">{isEn ? "Address:" : "כתובת:"}</span>
                 <span className="font-medium">{safeText(student?.address)}</span>
               </div>
               <div className="flex flex-row-reverse justify-between items-center">
-                <span className="text-muted-foreground">עיר:</span>
+                <span className="text-muted-foreground">{isEn ? "City:" : "עיר:"}</span>
                 <span className="font-medium">{safeText(student?.city)}</span>
               </div>
             </CardContent>
@@ -412,19 +452,19 @@ export function StudentTabs({
               <div className="p-2 bg-blue-100 rounded-lg">
                 <Phone className="h-5 w-5 text-blue-600" />
               </div>
-              <CardTitle className="text-lg">פרטי קשר</CardTitle>
+              <CardTitle className="text-lg">{isEn ? "Contact Details" : "פרטי קשר"}</CardTitle>
             </CardHeader>
             <CardContent className="pt-4 space-y-4">
               <div className="flex flex-row-reverse justify-between items-center">
-                <span className="text-muted-foreground">טלפון:</span>
+                <span className="text-muted-foreground">{isEn ? "Phone:" : "טלפון:"}</span>
                 <span className="font-medium">{safeText(student?.phone)}</span>
               </div>
               <div className="flex flex-row-reverse justify-between items-center">
-                <span className="text-muted-foreground">אימייל:</span>
+                <span className="text-muted-foreground">{isEn ? "Email:" : "אימייל:"}</span>
                 <span className="font-medium">{safeText(student?.email)}</span>
               </div>
               <div className="flex flex-row-reverse justify-between items-center">
-                <span className="text-muted-foreground">טלפון נוסף:</span>
+                <span className="text-muted-foreground">{isEn ? "Additional Phone:" : "טלפון נוסף:"}</span>
                 <span className="font-medium">{safeText(student?.additionalPhone)}</span>
               </div>
             </CardContent>
@@ -436,19 +476,19 @@ export function StudentTabs({
               <div className="p-2 bg-emerald-100 rounded-lg">
                 <Users className="h-5 w-5 text-emerald-600" />
               </div>
-              <CardTitle className="text-lg">פרטי הורים</CardTitle>
+              <CardTitle className="text-lg">{isEn ? "Parents" : "פרטי הורים"}</CardTitle>
             </CardHeader>
             <CardContent className="pt-4 space-y-4">
               <div className="flex flex-row-reverse justify-between items-center">
-                <span className="text-muted-foreground">שם האב:</span>
+                <span className="text-muted-foreground">{isEn ? "Father:" : "שם האב:"}</span>
                 <span className="font-medium">{safeText(student?.father)}</span>
               </div>
               <div className="flex flex-row-reverse justify-between items-center">
-                <span className="text-muted-foreground">שם האם:</span>
+                <span className="text-muted-foreground">{isEn ? "Mother:" : "שם האם:"}</span>
                 <span className="font-medium">{safeText(student?.mother)}</span>
               </div>
               <div className="flex flex-row-reverse justify-between items-center">
-                <span className="text-muted-foreground">טלפון הורה:</span>
+                <span className="text-muted-foreground">{isEn ? "Parent Phone:" : "טלפון הורה:"}</span>
                 <span className="font-medium">{safeText(student?.additionalPhone)}</span>
               </div>
             </CardContent>
@@ -460,15 +500,15 @@ export function StudentTabs({
               <div className="p-2 bg-red-100 rounded-lg">
                 <Heart className="h-5 w-5 text-red-600" />
               </div>
-              <CardTitle className="text-lg">מידע רפואי</CardTitle>
+              <CardTitle className="text-lg">{isEn ? "Medical Info" : "מידע רפואי"}</CardTitle>
             </CardHeader>
             <CardContent className="pt-4 space-y-4">
               <div className="flex flex-row-reverse justify-between items-center">
-                <span className="text-muted-foreground">קופת חולים:</span>
+                <span className="text-muted-foreground">{isEn ? "Health Fund:" : "קופת חולים:"}</span>
                 <span className="font-medium">{safeText(student?.healthFund)}</span>
               </div>
               <div className="flex flex-row-reverse justify-between items-center">
-                <span className="text-muted-foreground">רגישויות ואלרגיות:</span>
+                <span className="text-muted-foreground">{isEn ? "Allergies:" : "רגישויות ואלרגיות:"}</span>
                 <span className="font-medium">{safeText(student?.allergies)}</span>
               </div>
             </CardContent>
@@ -481,7 +521,7 @@ export function StudentTabs({
             <div className="p-2 bg-purple-100 rounded-lg">
               <BookOpen className="h-5 w-5 text-purple-600" />
             </div>
-            <CardTitle className="text-lg">קורסים משויכים</CardTitle>
+              <CardTitle className="text-lg">{isEn ? "Assigned Courses" : "קורסים משויכים"}</CardTitle>
           </CardHeader>
           <CardContent className="pt-4">
             {enrolledCourseNames.length > 0 ? (
@@ -493,7 +533,7 @@ export function StudentTabs({
                 ))}
               </div>
             ) : (
-              <p className="text-muted-foreground">לא משויך לקורסים</p>
+              <p className="text-muted-foreground">{isEn ? "No assigned courses" : "לא משויך לקורסים"}</p>
             )}
           </CardContent>
         </Card>
@@ -503,18 +543,18 @@ export function StudentTabs({
       {showGeneral && (
       <TabsContent value="general" className="space-y-4 mt-6">
         <Card className="p-5">
-          <div className="text-sm text-muted-foreground">סיכום מהיר</div>
+          <div className="text-sm text-muted-foreground">{tx("סיכום מהיר","Quick Summary","ملخص سريع")}</div>
           <div className="mt-3 grid grid-cols-3 gap-3">
             <div className="border rounded-lg p-4">
-              <div className="text-xs text-muted-foreground">קורסים פעילים</div>
+              <div className="text-xs text-muted-foreground">{isEn ? "Active Courses" : "קורסים פעילים"}</div>
               <div className="text-2xl font-bold">{enrollments.length}</div>
             </div>
             <div className="border rounded-lg p-4">
-              <div className="text-xs text-muted-foreground">שולם</div>
+              <div className="text-xs text-muted-foreground">{isEn ? "Paid" : "שולם"}</div>
               <div className="text-2xl font-bold">{paymentsSummary.paid.toLocaleString()} ₪</div>
             </div>
             <div className="border rounded-lg p-4">
-              <div className="text-xs text-muted-foreground">נוכחות</div>
+              <div className="text-xs text-muted-foreground">{isEn ? "Attendance" : "נוכחות"}</div>
               <div className="text-2xl font-bold">{attendanceSummary.percent}%</div>
             </div>
           </div>
@@ -525,22 +565,22 @@ export function StudentTabs({
       {showCourses && (
       <TabsContent value="courses" className="space-y-4 mt-6">
         <div className="space-y-3">
-          <h4 className="font-semibold text-foreground text-lg">קורסים רשומים</h4>
+          <h4 className="font-semibold text-foreground text-lg">{tx("קורסים רשומים","Registered Courses","الدورات المسجّلة")}</h4>
 
           {enrollments.length > 0 ? (
             <Card className="overflow-hidden border-2">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
-                    <TableHead className="text-right font-bold text-foreground">שם הקורס</TableHead>
-                    <TableHead className="text-right font-bold text-foreground">תאריך הצטרפות</TableHead>
-                    <TableHead className="text-right font-bold text-foreground">מחיר</TableHead>
-                    <TableHead className="text-right font-bold text-foreground">שולם</TableHead>
-                    <TableHead className="text-right font-bold text-foreground">יתרה</TableHead>
-                    <TableHead className="text-right font-bold text-foreground">סה״כ מפגשים</TableHead>
-                    <TableHead className="text-right font-bold text-foreground">יתרת מפגשים</TableHead>
-                    <TableHead className="text-right font-bold text-foreground">סטטוס</TableHead>
-                    <TableHead className="text-right font-bold text-foreground">בוצע על ידי</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">{isEn ? "Course" : "שם הקורס"}</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">{isEn ? "Joined At" : "תאריך הצטרפות"}</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">{isEn ? "Price" : "מחיר"}</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">{isEn ? "Paid" : "שולם"}</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">{isEn ? "Balance" : "יתרה"}</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">{isEn ? "Total Sessions" : "סה״כ מפגשים"}</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">{isEn ? "Sessions Left" : "יתרת מפגשים"}</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">{isEn ? "Status" : "סטטוס"}</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">{isEn ? "Created By" : "בוצע על ידי"}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -554,8 +594,8 @@ export function StudentTabs({
                     
                     return (
                       <TableRow key={enr.id} className="hover:bg-muted/30">
-                        <TableCell className="font-semibold">{enr.courseName || "קורס לא ידוע"}</TableCell>
-                        <TableCell>{formatDate(enr.enrollmentDate || enr.joinedAt)}</TableCell>
+                        <TableCell className="font-semibold">{enr.courseName || (isEn ? "Unknown Course" : "קורס לא ידוע")}</TableCell>
+                        <TableCell>{formatDate(enr.enrollmentDate || enr.joinedAt, localeTag)}</TableCell>
                         <TableCell className="font-medium">{coursePrice.toLocaleString()} ₪</TableCell>
                         <TableCell>
                           <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
@@ -583,7 +623,7 @@ export function StudentTabs({
                               ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
                               : "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400"
                           }`}>
-                            {enr.status === "active" ? "פעיל" : enr.status}
+                            {enr.status === "active" ? (isEn ? "Active" : "פעיל") : enr.status}
                           </span>
                         </TableCell>
                         <TableCell className="text-muted-foreground">{enr.createdByUserName || "—"}</TableCell>
@@ -596,7 +636,7 @@ export function StudentTabs({
           ) : (
             <Card className="p-8 text-center">
               <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-2" />
-              <p className="text-muted-foreground">התלמיד אינו רשום לאף קורס כרגע</p>
+              <p className="text-muted-foreground">{isEn ? "Student is not enrolled in any course right now" : "התלמיד אינו רשום לאף קורס כרגע"}</p>
             </Card>
           )}
         </div>
@@ -619,13 +659,13 @@ export function StudentTabs({
               </DialogTrigger>
               <DialogContent className="sm:max-w-md" dir="rtl">
                 <DialogHeader>
-                  <DialogTitle>הוספת תשלום חדש</DialogTitle>
-                  <DialogDescription>הזן את פרטי התשלום</DialogDescription>
+                  <DialogTitle>{tx("הוספת תשלום חדש","Add New Payment","إضافة دفعة جديدة")}</DialogTitle>
+                  <DialogDescription>{tx("הזן את פרטי התשלום","Enter payment details","أدخل تفاصيل الدفعة")}</DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 mt-4">
                   {/* Payment Type Selection */}
                   <div className="space-y-2">
-                    <Label>סוג פעולה</Label>
+                    <Label>{tx("סוג פעולה","Action Type","نوع العملية")}</Label>
                     <div className="flex gap-2">
                       <Button
                         type="button"
@@ -634,7 +674,7 @@ export function StudentTabs({
                         onClick={() => setPaymentType("payment")}
                         className={paymentType === "payment" ? "" : "bg-transparent"}
                       >
-                        תשלום
+                        {tx("תשלום","Payment","دفعة")}
                       </Button>
                       <Button
                         type="button"
@@ -645,7 +685,7 @@ export function StudentTabs({
                         className={paymentType === "discount" ? "bg-orange-500 hover:bg-orange-600" : "bg-transparent"}
                         title={!canAddDiscount ? "נדרשת הרשאה 'הנחה (תשלומים)' בדף משתמשים" : ""}
                       >
-                        הנחה
+                        {tx("הנחה","Discount","خصم")}
                         {!canAddDiscount && <span className="mr-1 text-xs">(הרשאה)</span>}
                       </Button>
                       <Button
@@ -657,7 +697,7 @@ export function StudentTabs({
                         className={paymentType === "credit" ? "bg-purple-500 hover:bg-purple-600" : "bg-transparent"}
                         title={!canAddCredit ? "נדרשת הרשאה 'זיכוי (תשלומים)' בדף משתמשים" : ""}
                       >
-                        זיכוי
+                        {tx("זיכוי","Credit","إشعار دائن")}
                         {!canAddCredit && <span className="mr-1 text-xs">(הרשאה)</span>}
                       </Button>
                     </div>
@@ -667,7 +707,7 @@ export function StudentTabs({
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="payment-amount">סכום *</Label>
+                    <Label htmlFor="payment-amount">{tx("סכום *","Amount *","المبلغ *")}</Label>
                     <Input
                       id="payment-amount"
                       type="number"
@@ -678,7 +718,7 @@ export function StudentTabs({
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="payment-date">תאריך</Label>
+                    <Label htmlFor="payment-date">{tx("תאריך","Date","التاريخ")}</Label>
                     <Input
                       id="payment-date"
                       type="date"
@@ -689,17 +729,17 @@ export function StudentTabs({
 
                   {paymentType === "payment" && (
                     <div className="space-y-2">
-                      <Label htmlFor="payment-method">אמצעי תשלום</Label>
+                      <Label htmlFor="payment-method">{tx("אמצעי תשלום","Payment Method","طريقة الدفع")}</Label>
                       <Select value={paymentMethod} onValueChange={(v: any) => setPaymentMethod(v)}>
                         <SelectTrigger id="payment-method">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="cash">מזומן</SelectItem>
-                          <SelectItem value="credit">אשראי</SelectItem>
-                          <SelectItem value="transfer">העברה בנקאית</SelectItem>
-                          <SelectItem value="check">שיק</SelectItem>
-                          <SelectItem value="bit">ביט</SelectItem>
+                          <SelectItem value="cash">{isEn ? "Cash" : "מזומן"}</SelectItem>
+                          <SelectItem value="credit">{isEn ? "Credit Card" : "אשראי"}</SelectItem>
+                          <SelectItem value="transfer">{isEn ? "Bank Transfer" : "העברה בנקאית"}</SelectItem>
+                          <SelectItem value="check">{isEn ? "Check" : "שיק"}</SelectItem>
+                          <SelectItem value="bit">{isEn ? "Bit" : "ביט"}</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -757,10 +797,10 @@ export function StudentTabs({
                   )}
 
                   <div className="space-y-2">
-                    <Label htmlFor="payment-description">תיאור</Label>
+                      <Label htmlFor="payment-description">{tx("תיאור","Description","الوصف")}</Label>
                     <Input
                       id="payment-description"
-                      placeholder="תיאור התשלום (אופציונלי)"
+                      placeholder={isEn ? "Payment description (optional)" : "תיאור התשלום (אופציונלי)"}
                       value={paymentDescription}
                       onChange={(e) => setPaymentDescription(e.target.value)}
                     />
@@ -774,10 +814,10 @@ export function StudentTabs({
                     {isAddingPayment ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin ml-2" />
-                        שומר...
+                        {isEn ? "Saving..." : "שומר..."}
                       </>
                     ) : (
-                      paymentType === "payment" ? "הוסף תשלום" : paymentType === "discount" ? "הוסף הנחה" : "הוסף זיכוי"
+                      paymentType === "payment" ? (isEn ? "Add Payment" : "הוסף תשלום") : paymentType === "discount" ? (isEn ? "Add Discount" : "הוסף הנחה") : (isEn ? "Add Credit" : "הוסף זיכוי")
                     )}
                   </Button>
                 </div>
@@ -786,7 +826,7 @@ export function StudentTabs({
 
             <div className="flex items-center gap-2 mb-2">
               <span className="text-green-600 font-bold">₪</span>
-              <p className="text-xs text-green-700 dark:text-green-400">שולם</p>
+              <p className="text-xs text-green-700 dark:text-green-400">{isEn ? "Paid" : "שולם"}</p>
             </div>
             <p className="text-2xl font-bold text-green-700 dark:text-green-400">{paymentsSummary.paid.toLocaleString()} ₪</p>
           </Card>
@@ -794,7 +834,7 @@ export function StudentTabs({
           <Card className="p-4 bg-orange-50 dark:bg-orange-950/20">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-orange-600 font-bold">₪</span>
-              <p className="text-xs text-orange-700 dark:text-orange-400">חיובים</p>
+              <p className="text-xs text-orange-700 dark:text-orange-400">{isEn ? "Charges" : "חיובים"}</p>
             </div>
             <p className="text-2xl font-bold text-orange-700 dark:text-orange-400">{paymentsSummary.charges.toLocaleString()} ₪</p>
           </Card>
@@ -802,7 +842,7 @@ export function StudentTabs({
           <Card className={`p-4 ${paymentsSummary.balance >= 0 ? "bg-green-50 dark:bg-green-950/20" : "bg-red-50 dark:bg-red-950/20"}`}>
             <div className="flex items-center gap-2 mb-2">
               <span className={`font-bold ${paymentsSummary.balance >= 0 ? "text-green-600" : "text-red-600"}`}>₪</span>
-              <p className={`text-xs ${paymentsSummary.balance >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}`}>יתרה</p>
+              <p className={`text-xs ${paymentsSummary.balance >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}`}>{isEn ? "Balance" : "יתרה"}</p>
             </div>
             <p className={`text-2xl font-bold ${paymentsSummary.balance >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}`}>
               {paymentsSummary.balance.toLocaleString()} ₪
@@ -811,27 +851,27 @@ export function StudentTabs({
         </div>
 
         <div className="space-y-3">
-          <h4 className="font-semibold text-foreground text-lg">היסטוריית תשלומים</h4>
+          <h4 className="font-semibold text-foreground text-lg">{tx("היסטוריית תשלומים","Payment History","سجل الدفعات")}</h4>
 
           {payments.length > 0 ? (
             <Card className="overflow-hidden border-2">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
-                    <TableHead className="text-right font-bold text-foreground">תאריך</TableHead>
-                    <TableHead className="text-right font-bold text-foreground">סוג</TableHead>
-                    <TableHead className="text-right font-bold text-foreground">סכום</TableHead>
-                    <TableHead className="text-right font-bold text-foreground">אמצעי תשלום</TableHead>
-                    <TableHead className="text-right font-bold text-foreground">הערה</TableHead>
-                    <TableHead className="text-right font-bold text-foreground">סטטוס</TableHead>
-                    <TableHead className="text-right font-bold text-foreground">בוצע על ידי</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">{isEn ? "Date" : "תאריך"}</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">{isEn ? "Type" : "סוג"}</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">{isEn ? "Amount" : "סכום"}</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">{isEn ? "Method" : "אמצעי תשלום"}</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">{isEn ? "Note" : "הערה"}</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">{isEn ? "Status" : "סטטוס"}</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">{isEn ? "Created By" : "בוצע על ידי"}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {payments.map((p) => {
                     const isDiscount = p.paymentType === "discount"
                     const isCredit = p.paymentType === "credit"
-                    const typeLabel = isDiscount ? "הנחה" : isCredit ? "זיכוי" : "תשלום"
+                    const typeLabel = isDiscount ? (isEn ? "Discount" : "הנחה") : isCredit ? (isEn ? "Credit" : "זיכוי") : (isEn ? "Payment" : "תשלום")
                     const typeStyle = isDiscount 
                       ? "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400"
                       : isCredit 
@@ -840,7 +880,7 @@ export function StudentTabs({
                     
                     return (
                       <TableRow key={p.id} className="hover:bg-muted/30">
-                        <TableCell className="font-medium">{formatDate(p.paymentDate)}</TableCell>
+                        <TableCell className="font-medium">{formatDate(p.paymentDate, localeTag)}</TableCell>
                         <TableCell>
                           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${typeStyle}`}>
                             {typeLabel}
@@ -849,11 +889,11 @@ export function StudentTabs({
                         <TableCell className={`font-bold ${isDiscount || isCredit ? "text-orange-600" : "text-primary"}`}>
                           {Number(p.amount).toLocaleString()} ₪
                         </TableCell>
-                        <TableCell>{isDiscount || isCredit ? "—" : paymentMethodHe(p.paymentType)}</TableCell>
+                        <TableCell>{isDiscount || isCredit ? "—" : paymentMethodLabel(p.paymentType, isEn)}</TableCell>
                         <TableCell className="text-muted-foreground">{p.description || "—"}</TableCell>
                         <TableCell>
                           <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
-                            {isDiscount ? "אושר" : isCredit ? "זוכה" : "שולם"}
+                            {isDiscount ? (isEn ? "Approved" : "אושר") : isCredit ? (isEn ? "Credited" : "זוכה") : paymentStatusLabel(p.status, isEn)}
                           </span>
                         </TableCell>
                         <TableCell className="text-muted-foreground">{p.createdByUserName || "—"}</TableCell>
@@ -866,7 +906,7 @@ export function StudentTabs({
           ) : (
             <Card className="p-8 text-center">
               <Receipt className="h-12 w-12 text-muted-foreground mx-auto mb-2" />
-              <p className="text-muted-foreground">אין תשלומים לתלמיד הזה עדיין</p>
+              <p className="text-muted-foreground">{isEn ? "No payments for this student yet" : "אין תשלומים לתלמיד הזה עדיין"}</p>
             </Card>
           )}
         </div>
@@ -877,21 +917,21 @@ export function StudentTabs({
       <TabsContent value="attendance" className="space-y-4 mt-6">
         {/* Course Selection Dropdown */}
         <div className="flex items-center gap-3 mb-4">
-          <span className="text-sm text-muted-foreground">סנן לפי קורס:</span>
+              <span className="text-sm text-muted-foreground">{tx("סנן לפי קורס:","Filter by course:","تصفية حسب الدورة:")}</span>
           <Select 
             value={selectedCourseId || "all"} 
             onValueChange={(value) => setSelectedCourseId(value === "all" ? null : value)}
           >
             <SelectTrigger className="w-48">
-              <SelectValue placeholder="כל הקורסים" />
+              <SelectValue placeholder={isEn ? "All courses" : "כל הקורסים"} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">כל הקורסים</SelectItem>
+              <SelectItem value="all">{isEn ? "All courses" : "כל הקורסים"}</SelectItem>
               {enrollments.map((enr: any) => {
                 const courseId = enr.courseId || enr.courseIdRef
                 return (
                   <SelectItem key={courseId || enr.id} value={courseId || enr.id}>
-                    {enr.courseName || "קורס"}
+                    {enr.courseName || (isEn ? "Course" : "קורס")}
                   </SelectItem>
                 )
               })}
@@ -905,7 +945,7 @@ export function StudentTabs({
             <div className="flex items-center justify-between">
               <div>
                 <h4 className="font-semibold text-primary">{selectedCourse.name}</h4>
-                <p className="text-sm text-muted-foreground">מספר מפגשים בקורס: {selectedCourse.duration || 0}</p>
+                <p className="text-sm text-muted-foreground">{isEn ? "Course sessions:" : "מספר מפגשים בקורס:"} {selectedCourse.duration || 0}</p>
               </div>
             </div>
           </Card>
@@ -915,7 +955,7 @@ export function StudentTabs({
           <Card className="p-4 bg-green-50 dark:bg-green-950/20">
             <div className="flex items-center gap-2 mb-2">
               <CalendarCheck className="h-4 w-4 text-green-600" />
-              <p className="text-xs text-green-700 dark:text-green-400">נוכחות</p>
+              <p className="text-xs text-green-700 dark:text-green-400">{isEn ? "Attendance" : "נוכחות"}</p>
             </div>
             <p className="text-2xl font-bold text-green-700 dark:text-green-400">{attendanceSummary.percent}%</p>
           </Card>
@@ -923,7 +963,7 @@ export function StudentTabs({
           <Card className="p-4 bg-blue-50 dark:bg-blue-950/20">
             <div className="flex items-center gap-2 mb-2">
               <CalendarCheck className="h-4 w-4 text-blue-600" />
-              <p className="text-xs text-blue-700 dark:text-blue-400">מפגשים</p>
+              <p className="text-xs text-blue-700 dark:text-blue-400">{isEn ? "Sessions" : "מפגשים"}</p>
             </div>
             <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">
               {attendanceSummary.present}/{attendanceSummary.totalSessions}
@@ -933,25 +973,25 @@ export function StudentTabs({
           <Card className="p-4 bg-orange-50 dark:bg-orange-950/20">
             <div className="flex items-center gap-2 mb-2">
               <CalendarCheck className="h-4 w-4 text-orange-600" />
-              <p className="text-xs text-orange-700 dark:text-orange-400">יתרת מפגשים</p>
+              <p className="text-xs text-orange-700 dark:text-orange-400">{isEn ? "Sessions Left" : "יתרת מפגשים"}</p>
             </div>
             <p className="text-2xl font-bold text-orange-700 dark:text-orange-400">{attendanceSummary.remaining}</p>
           </Card>
         </div>
 
         <div className="space-y-3">
-          <h4 className="font-semibold text-foreground text-lg">רשומות נוכחות</h4>
+          <h4 className="font-semibold text-foreground text-lg">{tx("רשומות נוכחות","Attendance Records","سجلات الحضور")}</h4>
 
           {filteredAttendances.length > 0 ? (
             <Card className="overflow-hidden border-2">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
-                    <TableHead className="text-right font-bold text-foreground">תאריך</TableHead>
-                    {!selectedCourseId && <TableHead className="text-right font-bold text-foreground">קורס</TableHead>}
-                    <TableHead className="text-right font-bold text-foreground">הערה</TableHead>
-                    <TableHead className="text-right font-bold text-foreground">סטטוס</TableHead>
-                    <TableHead className="text-right font-bold text-foreground">בוצע על ידי</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">{isEn ? "Date" : "תאריך"}</TableHead>
+                    {!selectedCourseId && <TableHead className="text-right font-bold text-foreground">{isEn ? "Course" : "קורס"}</TableHead>}
+                    <TableHead className="text-right font-bold text-foreground">{isEn ? "Note" : "הערה"}</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">{isEn ? "Status" : "סטטוס"}</TableHead>
+                    <TableHead className="text-right font-bold text-foreground">{isEn ? "Created By" : "בוצע על ידי"}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -967,12 +1007,12 @@ export function StudentTabs({
                     
                     return (
                       <TableRow key={a.id} className="hover:bg-muted/30">
-                        <TableCell className="font-medium">{formatDateTime(a.date)}</TableCell>
+                        <TableCell className="font-medium">{formatDateTime(a.date, localeTag)}</TableCell>
                         {!selectedCourseId && <TableCell>{a.courseName || "—"}</TableCell>}
                         <TableCell className="text-muted-foreground">{a.note || "—"}</TableCell>
                         <TableCell>
                           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${statusStyle}`}>
-                            {attendanceStatusHe(a.status)}
+                            {attendanceStatusLabel(a.status, isEn)}
                           </span>
                         </TableCell>
                         <TableCell className="text-muted-foreground">{a.createdByUserName || "—"}</TableCell>
@@ -985,7 +1025,7 @@ export function StudentTabs({
           ) : (
             <Card className="p-8 text-center">
               <CalendarCheck className="h-12 w-12 text-muted-foreground mx-auto mb-2" />
-              <p className="text-muted-foreground">אין נוכחות לתלמיד הזה עדיין</p>
+              <p className="text-muted-foreground">{isEn ? "No attendance records for this student yet" : "אין נוכחות לתלמיד הזה עדיין"}</p>
             </Card>
           )}
         </div>

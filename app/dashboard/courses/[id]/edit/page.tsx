@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { ArrowRight, BookOpen, Save, Calendar, Users, MessageSquare, Loader2, DollarSign } from "lucide-react"
 import { courseTimeToInputValue } from "@/lib/course-db-fields"
+import { useLanguage } from "@/lib/i18n/context"
 
 interface Teacher {
   id: string
@@ -106,6 +107,9 @@ function hoursBetweenTimeInputs(start: string, end: string): number | null {
 }
 
 export default function EditCoursePage() {
+  const { locale } = useLanguage()
+  const isRtl = locale !== "en"
+  const l = (he: string, en: string, ar: string) => (locale === "en" ? en : locale === "ar" ? ar : he)
   const params = useParams()
   const id = params.id as string
   const router = useRouter()
@@ -207,7 +211,7 @@ export default function EditCoursePage() {
       })
       .catch(err => {
         console.error(err)
-        setErr("Failed to load course")
+        setErr(l("שגיאה בטעינת קורס", "Failed to load course", "فشل تحميل الدورة"))
         setLoading(false)
       })
   }, [id])
@@ -232,7 +236,7 @@ export default function EditCoursePage() {
 
   async function save() {
     if (!formData.name.trim()) {
-      setErr("שם הקורס הוא שדה חובה")
+      setErr(l("שם הקורס הוא שדה חובה", "Course name is required", "اسم الدورة مطلوب"))
       return
     }
     if (needsSessionCount) {
@@ -283,7 +287,7 @@ export default function EditCoursePage() {
       }
       router.push("/dashboard/courses")
     } catch (e: any) {
-      setErr(e?.message ?? "Failed to update")
+      setErr(e?.message ?? l("שגיאה בעדכון קורס", "Failed to update", "فشل تحديث الدورة"))
     } finally {
       setSaving(false)
     }
@@ -298,7 +302,7 @@ export default function EditCoursePage() {
   }
 
   return (
-    <div dir="rtl" className="container mx-auto max-w-4xl p-6 space-y-6">
+    <div dir={isRtl ? "rtl" : "ltr"} className="container mx-auto max-w-4xl p-6 space-y-6">
       <div className="flex items-center gap-3">
         <Link href="/dashboard/courses">
           <Button variant="ghost" size="icon">
@@ -306,14 +310,14 @@ export default function EditCoursePage() {
           </Button>
         </Link>
         <div>
-          <h1 className="text-3xl font-bold">עריכת קורס</h1>
-          <p className="text-muted-foreground mt-1">עדכן את פרטי הקורס</p>
+          <h1 className="text-3xl font-bold">{l("עריכת קורס", "Edit Course", "تعديل الدورة")}</h1>
+          <p className="text-muted-foreground mt-1">{l("עדכן את פרטי הקורס", "Update course details", "حدّث تفاصيل الدورة")}</p>
         </div>
       </div>
 
       {err && (
         <Card className="p-4 border-red-200 bg-red-50 text-red-700">
-          שגיאה: {err}
+          {l("שגיאה", "Error", "خطأ")}: {err}
         </Card>
       )}
 
@@ -322,28 +326,28 @@ export default function EditCoursePage() {
         <CardHeader className="text-right">
           <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
             <MessageSquare className="h-5 w-5 text-blue-600" />
-            סטטוס הקורס
+            {l("סטטוס הקורס", "Course Status", "حالة الدورة")}
           </CardTitle>
-          <CardDescription className="text-right">בחר את סטטוס הקורס והגדרות בסיסיות</CardDescription>
+          <CardDescription className="text-right">{l("בחר את סטטוס הקורס והגדרות בסיסיות", "Choose course status and basic settings", "اختر حالة الدورة والإعدادات الأساسية")}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
-              <Label className="text-right block">סטטוס</Label>
+              <Label className="text-right block">{l("סטטוס", "Status", "الحالة")}</Label>
               <Select value={formData.status} onValueChange={(value) => setFormData({...formData, status: value})}>
                 <SelectTrigger className="text-right" dir="rtl">
-                  <SelectValue placeholder="בחר סטטוס" />
+                  <SelectValue placeholder={l("בחר סטטוס", "Choose status", "اختر الحالة")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="active">פעיל</SelectItem>
-                  <SelectItem value="completed">הושלם</SelectItem>
-                  <SelectItem value="inactive">לא פעיל</SelectItem>
-                  <SelectItem value="draft">טיוטה</SelectItem>
+                  <SelectItem value="active">{l("פעיל", "Active", "نشط")}</SelectItem>
+                  <SelectItem value="completed">{l("הושלם", "Completed", "مكتمل")}</SelectItem>
+                  <SelectItem value="inactive">{l("לא פעיל", "Inactive", "غير نشط")}</SelectItem>
+                  <SelectItem value="draft">{l("טיוטה", "Draft", "مسودة")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label className="text-right block">סוג קורס</Label>
+              <Label className="text-right block">{l("סוג קורס", "Course Type", "نوع الدورة")}</Label>
               <Select value={formData.courseType} onValueChange={(value) => {
                 const updates: any = { courseType: value, schoolId: "", gafanProgramId: "" }
                 // כשנבחר גפ"ן, מספר המפגשים הופך ל-30 כברירת מחדל
@@ -353,28 +357,28 @@ export default function EditCoursePage() {
                 setFormData({...formData, ...updates})
               }}>
                 <SelectTrigger className="text-right" dir="rtl">
-                  <SelectValue placeholder="בחר סוג" />
+                  <SelectValue placeholder={l("בחר סוג", "Choose type", "اختر النوع")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="regular">קורס רגיל</SelectItem>
-                  <SelectItem value="workshop">סדנה</SelectItem>
-                  <SelectItem value="camp">קייטנה</SelectItem>
-                  <SelectItem value="private">שיעור פרטי</SelectItem>
+                  <SelectItem value="regular">{l("קורס רגיל", "Regular Course", "دورة عادية")}</SelectItem>
+                  <SelectItem value="workshop">{l("סדנה", "Workshop", "ورشة")}</SelectItem>
+                  <SelectItem value="camp">{l("קייטנה", "Camp", "مخيّم")}</SelectItem>
+                  <SelectItem value="private">{l("שיעור פרטי", "Private Lesson", "درس خاص")}</SelectItem>
                   <SelectItem value="gafan">גפ"ן</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label className="text-right block">מיקום</Label>
+              <Label className="text-right block">{l("מיקום", "Location", "الموقع")}</Label>
               <Select value={formData.location} onValueChange={(value) => setFormData({...formData, location: value})}>
                 <SelectTrigger className="text-right" dir="rtl">
-                  <SelectValue placeholder="בחר מיקום" />
+                  <SelectValue placeholder={l("בחר מיקום", "Choose location", "اختر الموقع")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="center">במרכז</SelectItem>
-                  <SelectItem value="school">בבית ספר</SelectItem>
-                  <SelectItem value="online">אונליין</SelectItem>
-                  <SelectItem value="other">אחר</SelectItem>
+                  <SelectItem value="center">{l("במרכז", "At Center", "في المركز")}</SelectItem>
+                  <SelectItem value="school">{l("בבית ספר", "At School", "في المدرسة")}</SelectItem>
+                  <SelectItem value="online">{l("אונליין", "Online", "أونلاين")}</SelectItem>
+                  <SelectItem value="other">{l("אחר", "Other", "أخرى")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -603,9 +607,9 @@ export default function EditCoursePage() {
         <CardHeader className="text-right">
           <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
             <Users className="h-5 w-5 text-purple-600" />
-            מורים
+            {l("מורים", "Teachers", "المعلمون")}
           </CardTitle>
-          <CardDescription className="text-right">בחר את המורים שילמדו בקורס</CardDescription>
+          <CardDescription className="text-right">{l("בחר את המורים שילמדו בקורס", "Select teachers for this course", "اختر المعلمين لهذه الدورة")}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -624,7 +628,7 @@ export default function EditCoursePage() {
               </div>
             ))}
             {teachers.length === 0 && (
-              <p className="text-muted-foreground col-span-full text-center py-4">לא נמצאו מורים במערכת</p>
+              <p className="text-muted-foreground col-span-full text-center py-4">{l("לא נמצאו מורים במערכת", "No teachers found", "لم يتم العثور على معلمين")}</p>
             )}
           </div>
         </CardContent>
@@ -635,7 +639,7 @@ export default function EditCoursePage() {
         <CardHeader className="text-right">
           <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
             <Calendar className="h-5 w-5 text-orange-600" />
-            תאריכים וזמנים
+            {l("תאריכים וזמנים", "Dates & Times", "التواريخ والأوقات")}
           </CardTitle>
           <CardDescription className="text-right">הגדר את לוח הזמנים של הקורס</CardDescription>
         </CardHeader>
@@ -785,10 +789,10 @@ export default function EditCoursePage() {
       <div className="flex gap-3 justify-start">
         <Button onClick={save} disabled={!formData.name.trim() || saving} className="gap-2 bg-primary">
           <Save className="h-4 w-4" />
-          {saving ? "שומר..." : "שמור שינויים"}
+          {saving ? l("שומר...", "Saving...", "جارٍ الحفظ...") : l("שמור שינויים", "Save Changes", "حفظ التغييرات")}
         </Button>
         <Button variant="outline" onClick={() => router.back()} className="bg-transparent">
-          ביטול
+          {l("ביטול", "Cancel", "إلغاء")}
         </Button>
       </div>
     </div>

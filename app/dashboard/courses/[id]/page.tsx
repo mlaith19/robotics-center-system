@@ -96,6 +96,24 @@ export default function CourseViewPage() {
     totalStudents: locale === "ar" ? "إجمالي الطلاب" : locale === "en" ? "Total Students" : "סה\"כ תלמידים",
     teachers: locale === "ar" ? "المعلمون" : locale === "en" ? "Teachers" : "מורים",
     noTeachers: locale === "ar" ? "لا يوجد معلمون مرتبطون" : locale === "en" ? "No teachers assigned" : "לא משויכים מורים",
+    enrolledStudents: locale === "ar" ? "الطلاب المسجلون في الدورة" : locale === "en" ? "Students Enrolled In Course" : "תלמידים רשומים לקורס",
+    student: locale === "ar" ? "الطالب" : locale === "en" ? "Student" : "תלמיד",
+    enrollmentDate: locale === "ar" ? "تاريخ التسجيل" : locale === "en" ? "Enrollment Date" : "תאריך רישום",
+    performedBy: locale === "ar" ? "تم بواسطة" : locale === "en" ? "Performed By" : "בוצע על ידי",
+    noneStudents: locale === "ar" ? "لا يوجد طلاب مسجلون في هذه الدورة" : locale === "en" ? "No students enrolled in this course" : "אין תלמידים רשומים לקורס זה",
+    paymentInfoPlaceholder: locale === "ar" ? "سيتم عرض معلومات التكلفة والمدفوعات هنا" : locale === "en" ? "Cost and payment details will be shown here" : "פרטי עלות ותשלומים יוצגו כאן",
+    studentAttendanceTitle: locale === "ar" ? "حضور الطلاب في الدورة" : locale === "en" ? "Course Student Attendance" : "נוכחות תלמידים בקורס",
+    teacherAttendanceTitle: locale === "ar" ? "حضور المعلمين في الدورة" : locale === "en" ? "Course Teacher Attendance" : "נוכחות מורים בקורס",
+    date: locale === "ar" ? "التاريخ" : locale === "en" ? "Date" : "תאריך",
+    note: locale === "ar" ? "ملاحظة" : locale === "en" ? "Note" : "הערה",
+    attendanceStatus: locale === "ar" ? "حالة الحضور" : locale === "en" ? "Attendance Status" : "סטטוס נוכחות",
+    present: locale === "ar" ? "حاضر" : locale === "en" ? "Present" : "נוכח",
+    absent: locale === "ar" ? "غائب" : locale === "en" ? "Absent" : "לא נוכח",
+    sick: locale === "ar" ? "مريض" : locale === "en" ? "Sick" : "חולה",
+    vacation: locale === "ar" ? "إجازة" : locale === "en" ? "Vacation" : "חופש",
+    noLinkedStudents: locale === "ar" ? "لا يوجد طلاب مرتبطون بهذه الدورة" : locale === "en" ? "No students linked to this course" : "אין תלמידים משויכים לקורס זה",
+    noStudentAttendance: locale === "ar" ? "لا توجد سجلات حضور طلاب لهذه الدورة بعد." : locale === "en" ? "No student attendance records for this course yet." : "אין עדיין רשומות נוכחות תלמידים לקורס זה.",
+    noTeacherAttendance: locale === "ar" ? "لا توجد سجلات حضور معلمين لهذه الدورة." : locale === "en" ? "No teacher attendance records for this course." : "אין רשומות נוכחות מורים לקורס זה.",
   }
   const params = useParams()
   const id = params.id as string
@@ -427,7 +445,7 @@ export default function CourseViewPage() {
         <TabsContent value="students">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">תלמידים רשומים לקורס ({enrollments.length})</CardTitle>
+              <CardTitle className="text-lg">{tr.enrolledStudents} ({enrollments.length})</CardTitle>
             </CardHeader>
             <CardContent>
               {enrollments.length > 0 ? (
@@ -435,23 +453,23 @@ export default function CourseViewPage() {
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-muted/50">
-                        <TableHead className="text-right">תלמיד</TableHead>
-                        <TableHead className="text-right">סטטוס</TableHead>
-                        <TableHead className="text-right">תאריך רישום</TableHead>
-                        <TableHead className="text-right">בוצע על ידי</TableHead>
+                        <TableHead className="text-right">{tr.student}</TableHead>
+                        <TableHead className="text-right">{tr.status}</TableHead>
+                        <TableHead className="text-right">{tr.enrollmentDate}</TableHead>
+                        <TableHead className="text-right">{tr.performedBy}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {enrollments.map((enrollment) => (
                         <TableRow key={enrollment.id}>
-                          <TableCell className="font-medium text-right">{enrollment.studentName || "תלמיד לא ידוע"}</TableCell>
+                          <TableCell className="font-medium text-right">{enrollment.studentName || (locale === "en" ? "Unknown student" : locale === "ar" ? "طالب غير معروف" : "תלמיד לא ידוע")}</TableCell>
                           <TableCell className="text-right">
                             <Badge className={enrollment.status === "active" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}>
-                              {enrollment.status === "active" ? "פעיל" : enrollment.status}
+                              {enrollment.status === "active" ? (locale === "en" ? "Active" : locale === "ar" ? "نشط" : "פעיל") : enrollment.status}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right text-muted-foreground">
-                            {enrollment.enrollmentDate ? new Date(enrollment.enrollmentDate).toLocaleDateString("he-IL") : "-"}
+                            {enrollment.enrollmentDate ? new Date(enrollment.enrollmentDate).toLocaleDateString(localeTag) : "-"}
                           </TableCell>
                           <TableCell className="text-right text-muted-foreground">{enrollment.createdByUserName || "—"}</TableCell>
                         </TableRow>
@@ -461,7 +479,7 @@ export default function CourseViewPage() {
                 </div>
               ) : (
                 <p className="text-center text-muted-foreground py-8">
-                  אין תלמידים רשומים לקורס זה
+                  {tr.noneStudents}
                 </p>
               )}
             </CardContent>
@@ -473,7 +491,7 @@ export default function CourseViewPage() {
         <TabsContent value="payments">
           <Card>
             <CardContent className="p-6 text-center text-muted-foreground">
-              פרטי עלות ותשלומים יוצגו כאן
+              {tr.paymentInfoPlaceholder}
             </CardContent>
           </Card>
         </TabsContent>
@@ -486,11 +504,11 @@ export default function CourseViewPage() {
               <div className="p-2 bg-purple-100 rounded-lg">
                 <CalendarCheck className="h-5 w-5 text-purple-600" />
               </div>
-              <CardTitle className="text-lg">נוכחות תלמידים בקורס</CardTitle>
+              <CardTitle className="text-lg">{tr.studentAttendanceTitle}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="mb-4 flex items-center gap-3">
-                <span className="text-sm text-muted-foreground">תאריך:</span>
+                <span className="text-sm text-muted-foreground">{tr.date}:</span>
                 <input
                   type="date"
                   value={attendanceDate}
@@ -502,8 +520,8 @@ export default function CourseViewPage() {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50">
-                      <TableHead className="text-right">תלמיד</TableHead>
-                      <TableHead className="text-right">סטטוס נוכחות</TableHead>
+                      <TableHead className="text-right">{tr.student}</TableHead>
+                      <TableHead className="text-right">{tr.attendanceStatus}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -512,17 +530,17 @@ export default function CourseViewPage() {
                         <TableCell className="text-right font-medium">{enrollment.studentName || "—"}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">
-                            {attendanceStatusButton(enrollment.studentId, "present", "נוכח", Check)}
-                            {attendanceStatusButton(enrollment.studentId, "absent", "לא נוכח", X)}
-                            {attendanceStatusButton(enrollment.studentId, "sick", "חולה", Thermometer)}
-                            {attendanceStatusButton(enrollment.studentId, "vacation", "חופש", Plane)}
+                            {attendanceStatusButton(enrollment.studentId, "present", tr.present, Check)}
+                            {attendanceStatusButton(enrollment.studentId, "absent", tr.absent, X)}
+                            {attendanceStatusButton(enrollment.studentId, "sick", tr.sick, Thermometer)}
+                            {attendanceStatusButton(enrollment.studentId, "vacation", tr.vacation, Plane)}
                           </div>
                         </TableCell>
                       </TableRow>
                     )) : (
                       <TableRow>
                         <TableCell className="text-center text-muted-foreground" colSpan={2}>
-                          אין תלמידים משויכים לקורס זה
+                          {tr.noLinkedStudents}
                         </TableCell>
                       </TableRow>
                     )}
@@ -536,21 +554,21 @@ export default function CourseViewPage() {
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-muted/50">
-                          <TableHead className="text-right">תאריך</TableHead>
-                          <TableHead className="text-right">תלמיד</TableHead>
-                          <TableHead className="text-right">סטטוס</TableHead>
-                          <TableHead className="text-right">הערה</TableHead>
-                          <TableHead className="text-right">מי ביצע</TableHead>
+                          <TableHead className="text-right">{tr.date}</TableHead>
+                          <TableHead className="text-right">{tr.student}</TableHead>
+                          <TableHead className="text-right">{tr.status}</TableHead>
+                          <TableHead className="text-right">{tr.note}</TableHead>
+                          <TableHead className="text-right">{tr.performedBy}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {studentAttendance.map((a) => {
                           const enrollment = enrollments.find((e) => e.studentId === a.studentId)
                           const studentName = enrollment?.studentName ?? "—"
-                          const statusLabel = a.status === "present" || a.status === "PRESENT" ? "נוכח" : a.status === "absent" || a.status === "ABSENT" ? "נעדר" : a.status
+                          const statusLabel = a.status === "present" || a.status === "PRESENT" ? tr.present : a.status === "absent" || a.status === "ABSENT" ? tr.absent : a.status
                           return (
                             <TableRow key={a.id}>
-                              <TableCell className="text-right">{new Date(a.date).toLocaleDateString("he-IL")}</TableCell>
+                              <TableCell className="text-right">{new Date(a.date).toLocaleDateString(localeTag)}</TableCell>
                               <TableCell className="text-right">{studentName}</TableCell>
                               <TableCell className="text-right">{statusLabel}</TableCell>
                               <TableCell className="text-right text-muted-foreground">{a.notes ?? "—"}</TableCell>
@@ -562,7 +580,7 @@ export default function CourseViewPage() {
                     </Table>
                   </div>
                 ) : (
-                  <p className="text-center text-muted-foreground py-6">אין עדיין רשומות נוכחות תלמידים לקורס זה.</p>
+                  <p className="text-center text-muted-foreground py-6">{tr.noStudentAttendance}</p>
                 )
               })()}
             </CardContent>
@@ -577,7 +595,7 @@ export default function CourseViewPage() {
               <div className="p-2 bg-purple-100 rounded-lg">
                 <CalendarCheck className="h-5 w-5 text-purple-600" />
               </div>
-              <CardTitle className="text-lg">נוכחות מורים בקורס</CardTitle>
+              <CardTitle className="text-lg">{tr.teacherAttendanceTitle}</CardTitle>
             </CardHeader>
             <CardContent>
               {(() => {
@@ -587,21 +605,21 @@ export default function CourseViewPage() {
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-muted/50">
-                          <TableHead className="text-right">תאריך</TableHead>
-                          <TableHead className="text-right">מורה</TableHead>
-                          <TableHead className="text-right">סטטוס</TableHead>
-                          <TableHead className="text-right">הערה</TableHead>
-                          <TableHead className="text-right">מי ביצע</TableHead>
+                          <TableHead className="text-right">{tr.date}</TableHead>
+                          <TableHead className="text-right">{tr.teachers}</TableHead>
+                          <TableHead className="text-right">{tr.status}</TableHead>
+                          <TableHead className="text-right">{tr.note}</TableHead>
+                          <TableHead className="text-right">{tr.performedBy}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {teacherAttendance.map((a) => {
                           const teacher = teachers.find((t) => t.id === a.teacherId)
                           const teacherName = teacher?.name ?? "—"
-                          const statusLabel = a.status === "present" || a.status === "PRESENT" ? "נוכח" : a.status === "absent" || a.status === "ABSENT" ? "נעדר" : a.status
+                          const statusLabel = a.status === "present" || a.status === "PRESENT" ? tr.present : a.status === "absent" || a.status === "ABSENT" ? tr.absent : a.status
                           return (
                             <TableRow key={a.id}>
-                              <TableCell className="text-right">{new Date(a.date).toLocaleDateString("he-IL")}</TableCell>
+                              <TableCell className="text-right">{new Date(a.date).toLocaleDateString(localeTag)}</TableCell>
                               <TableCell className="text-right">{teacherName}</TableCell>
                               <TableCell className="text-right">{statusLabel}</TableCell>
                               <TableCell className="text-right text-muted-foreground">{a.notes ?? "—"}</TableCell>
@@ -613,7 +631,7 @@ export default function CourseViewPage() {
                     </Table>
                   </div>
                 ) : (
-                  <p className="text-center text-muted-foreground py-6">אין רשומות נוכחות מורים לקורס זה.</p>
+                  <p className="text-center text-muted-foreground py-6">{tr.noTeacherAttendance}</p>
                 )
               })()}
             </CardContent>

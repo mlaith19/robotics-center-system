@@ -94,6 +94,14 @@ export async function POST(req: Request) {
         WHERE id = ${row.id}
       `
 
+      if (row.userId) {
+        await db`
+          UPDATE "User"
+          SET status = 'disabled', "updatedAt" = ${now}
+          WHERE id = ${row.userId}
+        `
+      }
+
       return Response.json({ success: true, existingStudent: true, studentId: row.id })
     }
 
@@ -116,7 +124,7 @@ export async function POST(req: Request) {
 
     await db`
       INSERT INTO "User" (id, name, email, username, password, phone, status, role, permissions, "createdAt", "updatedAt")
-      VALUES (${userId}, ${name}, ${email}, ${username}, ${hashedPassword}, ${phone}, 'active', 'student',
+      VALUES (${userId}, ${name}, ${email}, ${username}, ${hashedPassword}, ${phone}, 'disabled', 'student',
               ${JSON.stringify(["settings.home", "schedule.view"])}, ${now}, ${now})
     `
 

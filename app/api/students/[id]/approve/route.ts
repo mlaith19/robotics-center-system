@@ -66,6 +66,16 @@ export const POST = withTenantAuth(async (req, _session, { params }: Ctx) => {
       WHERE id = ${studentId}
     `
 
+    const userRows = await db`SELECT "userId" FROM "Student" WHERE id = ${studentId} LIMIT 1`
+    const userId = userRows.length > 0 ? ((userRows[0] as { userId?: string | null }).userId ?? null) : null
+    if (userId) {
+      await db`
+        UPDATE "User"
+        SET status = 'active', "updatedAt" = ${now}
+        WHERE id = ${userId}
+      `
+    }
+
     return Response.json({ ok: true, studentId, courseId })
   } catch (err) {
     console.error("POST /api/students/[id]/approve error:", err)

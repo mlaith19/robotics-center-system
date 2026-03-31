@@ -83,6 +83,15 @@ export const translations = {
         upcoming: "בקרוב",
       },
     },
+    students: {
+      title: "תלמידים",
+      manageAll: "נהל את כל התלמידים במרכז",
+      newStudent: "תלמיד חדש",
+      searchPlaceholder: "חיפוש תלמידים...",
+      none: "אין תלמידים",
+      noneMatchSearch: "לא נמצאו תלמידים התואמים את החיפוש",
+      addFirst: "הוסף תלמיד חדש",
+    },
     errors: {
       forbidden: "אין לך הרשאה לביצוע פעולה זו",
       forbiddenReport: "אין לך הרשאה לגשת לדוח זה",
@@ -237,6 +246,15 @@ export const translations = {
         upcoming: "قريبًا",
       },
     },
+    students: {
+      title: "الطلاب",
+      manageAll: "إدارة جميع الطلاب في المركز",
+      newStudent: "طالب جديد",
+      searchPlaceholder: "ابحث عن الطلاب...",
+      none: "لا يوجد طلاب",
+      noneMatchSearch: "لم يتم العثور على طلاب مطابقين للبحث",
+      addFirst: "إضافة طالب جديد",
+    },
     errors: {
       forbidden: "ليس لديك صلاحية لتنفيذ هذه العملية",
       forbiddenReport: "ليس لديك صلاحية للوصول إلى هذا التقرير",
@@ -390,6 +408,15 @@ export const translations = {
         draft: "Draft",
         upcoming: "Upcoming",
       },
+    },
+    students: {
+      title: "Students",
+      manageAll: "Manage all students in the center",
+      newStudent: "New Student",
+      searchPlaceholder: "Search students...",
+      none: "No students",
+      noneMatchSearch: "No students match your search",
+      addFirst: "Add new student",
     },
     errors: {
       forbidden: "You do not have permission to perform this action",

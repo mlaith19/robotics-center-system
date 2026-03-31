@@ -16,10 +16,54 @@ import { useRouter } from "next/navigation"
 import { CityCombobox } from "@/components/ui/combobox-city"
 import useSWR from "swr"
 import { arrayFetcher } from "@/lib/swr-fetcher"
+import { useLanguage } from "@/lib/i18n/context"
 
 type Course = { id: string | number; name: string }
 
 export default function NewStudentPage() {
+  const { locale } = useLanguage()
+  const isEn = locale === "en"
+  const isAr = locale === "ar"
+  const isRtl = !isEn
+  const tr = {
+    title: isEn ? "New Student" : isAr ? "طالب جديد" : "תלמיד חדש",
+    subtitle: isEn ? "Add a new student to the system" : isAr ? "أضف طالباً جديداً إلى النظام" : "הוסף תלמיד חדש למערכת הרובוטיקה",
+    success: isEn ? "Student added successfully!" : isAr ? "تمت إضافة الطالب بنجاح!" : "התלמיד נוסף בהצלחה!",
+    redirecting: isEn ? "Redirecting to students list..." : isAr ? "جاري التحويل إلى قائمة الطلاب..." : "מעביר לרשימת התלמידים...",
+    error: isEn ? "Error" : isAr ? "خطأ" : "שגיאה",
+    addStudent: isEn ? "Add Student" : isAr ? "إضافة طالب" : "הוסף תלמיד",
+    saving: isEn ? "Saving..." : isAr ? "جارٍ الحفظ..." : "שומר...",
+    cancel: isEn ? "Cancel" : isAr ? "إلغاء" : "ביטול",
+    status: isEn ? "Student Status" : isAr ? "حالة الطالب" : "סטטוס התלמיד",
+    personalInfo: isEn ? "Personal Information" : "מידע אישי",
+    contactInfo: isEn ? "Contact Information" : "פרטי קשר",
+    parentInfo: isEn ? "Parent Information" : "פרטי הורים",
+    medicalInfo: isEn ? "Medical Information" : "מידע רפואי",
+    courses: isEn ? "Courses" : "קורסים",
+    userAccount: isEn ? "User Account" : "חשבון משתמש",
+    fullName: isEn ? "Full Name *" : "שם מלא *",
+    idNumber: isEn ? "ID Number" : "תעודת זהות",
+    birthDate: isEn ? "Birth Date" : "תאריך לידה",
+    email: isEn ? "Email (optional)" : "אימייל (אופציונלי)",
+    mobile: isEn ? "Mobile Number" : "מספר נייד",
+    extraMobile: isEn ? "Additional Mobile Number" : "מספר נייד נוסף",
+    city: isEn ? "City" : "עיר",
+    address: isEn ? "Address" : "כתובת",
+    fatherName: isEn ? "Father Name" : "שם האב",
+    motherName: isEn ? "Mother Name" : "שם האם",
+    healthFund: isEn ? "Health Fund" : "קופת חולים",
+    allergies: isEn ? "Allergies / Sensitivities" : "רגישויות ואלרגיות",
+    sessions: isEn ? "Number of sessions" : "כמות מפגשים",
+    availableCoursesNone: isEn ? "No courses available in system" : "אין קורסים זמינים במערכת",
+    selectedCourses: isEn ? "Selected courses:" : "קורסים נבחרים:",
+    createAccount: isEn ? "Create user account for student" : "צור חשבון משתמש לתלמיד (יאפשר לתלמיד להתחבר למערכת)",
+    username: isEn ? "Username *" : "שם משתמש *",
+    password: isEn ? "Password *" : "סיסמה *",
+    pending: isEn ? "Pending" : isAr ? "قيد الانتظار" : "מתעניין",
+    active: isEn ? "Active" : isAr ? "نشط" : "פעיל",
+    paused: isEn ? "Paused" : isAr ? "مجمّد" : "השהיה",
+    completed: isEn ? "Completed" : isAr ? "منتهي" : "סיים",
+  }
   const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -75,10 +119,10 @@ export default function NewStudentPage() {
       // Validate user account fields if creating account
       if (createUserAccount) {
         if (!username.trim()) {
-          throw new Error("יש להזין שם משתמש")
+          throw new Error(isEn ? "Username is required" : "יש להזין שם משתמש")
         }
         if (!password || password.length < 4) {
-          throw new Error("הסיסמה חייבת להכיל לפחות 4 תווים")
+          throw new Error(isEn ? "Password must be at least 4 characters" : "הסיסמה חייבת להכיל לפחות 4 תווים")
         }
       }
 
@@ -124,14 +168,14 @@ export default function NewStudentPage() {
       // Navigate immediately
       window.location.href = "/dashboard/students"
     } catch (err: any) {
-      setSubmitError(err?.message ?? "שגיאה בהוספת תלמיד")
+      setSubmitError(err?.message ?? (isEn ? "Failed to add student" : "שגיאה בהוספת תלמיד"))
     } finally {
       setIsSubmitting(false)
     }
   }
 
   return (
-    <div className="container mx-auto max-w-4xl p-6 space-y-6" dir="rtl">
+    <div className="container mx-auto max-w-4xl p-6 space-y-6" dir={isRtl ? "rtl" : "ltr"}>
       <div className="flex items-center gap-4">
         <Link href="/dashboard/students">
           <Button variant="ghost" size="icon">
@@ -139,21 +183,21 @@ export default function NewStudentPage() {
           </Button>
         </Link>
         <div>
-          <h1 className="text-3xl font-bold text-foreground">תלמיד חדש</h1>
-          <p className="text-muted-foreground mt-1">הוסף תלמיד חדש למערכת הרובוטיקה</p>
+          <h1 className="text-3xl font-bold text-foreground">{tr.title}</h1>
+          <p className="text-muted-foreground mt-1">{tr.subtitle}</p>
         </div>
       </div>
 
       {submitSuccess && (
         <Card className="border-2 border-green-200 bg-green-50 p-4">
-          <div className="font-medium text-green-700">התלמיד נוסף בהצלחה!</div>
-          <div className="text-sm text-green-700/80 mt-1">מעביר לרשימת התלמידים...</div>
+          <div className="font-medium text-green-700">{tr.success}</div>
+          <div className="text-sm text-green-700/80 mt-1">{tr.redirecting}</div>
         </Card>
       )}
 
       {submitError && (
         <Card className="border-2 border-red-200 bg-red-50 p-4">
-          <div className="font-medium text-red-700">שגיאה</div>
+          <div className="font-medium text-red-700">{tr.error}</div>
           <div className="text-sm text-red-700/80 mt-1">{submitError}</div>
         </Card>
       )}
@@ -164,17 +208,17 @@ export default function NewStudentPage() {
             <User className="h-6 w-6" />
           </div>
           <div className="flex-1">
-            <h3 className="font-semibold text-lg mb-2">סטטוס התלמיד</h3>
-            <p className="text-sm text-muted-foreground mb-3">בחר את סטטוס התלמיד הנוכחי</p>
+            <h3 className="font-semibold text-lg mb-2">{tr.status}</h3>
+            <p className="text-sm text-muted-foreground mb-3">{isEn ? "Choose current student status" : "בחר את סטטוס התלמיד הנוכחי"}</p>
             <Select value={newStudent.status} onValueChange={(value) => setNewStudent({ ...newStudent, status: value })}>
               <SelectTrigger className="w-full bg-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="מתעניין">מתעניין</SelectItem>
-                <SelectItem value="פעיל">פעיל</SelectItem>
-                <SelectItem value="השהיה">השהיה</SelectItem>
-                <SelectItem value="סיים">סיים</SelectItem>
+                <SelectItem value="מתעניין">{tr.pending}</SelectItem>
+                <SelectItem value="פעיל">{tr.active}</SelectItem>
+                <SelectItem value="השהיה">{tr.paused}</SelectItem>
+                <SelectItem value="סיים">{tr.completed}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -188,21 +232,21 @@ export default function NewStudentPage() {
               <IdCard className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="font-semibold text-lg">מידע אישי</h3>
-              <p className="text-sm text-muted-foreground">פרטים בסיסיים על התלמיד</p>
+              <h3 className="font-semibold text-lg">{tr.personalInfo}</h3>
+              <p className="text-sm text-muted-foreground">{isEn ? "Basic student details" : "פרטים בסיסיים על התלמיד"}</p>
             </div>
           </div>
 
           <div className="grid gap-4">
             <div className="grid gap-2">
               <Label htmlFor="name" className="text-base font-medium">
-                שם מלא *
+                {tr.fullName}
               </Label>
               <Input
                 id="name"
                 value={newStudent.name}
                 onChange={(e) => setNewStudent({ ...newStudent, name: e.target.value })}
-                placeholder="לדוגמה: יוסי כהן"
+                  placeholder={isEn ? "e.g. John Doe" : "לדוגמה: יוסי כהן"}
                 className="text-base h-12 bg-white"
                 required
               />
@@ -211,7 +255,7 @@ export default function NewStudentPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="idNumber" className="text-base font-medium">
-                  תעודת זהות
+                  {tr.idNumber}
                 </Label>
                 <Input
                   id="idNumber"
@@ -224,7 +268,7 @@ export default function NewStudentPage() {
 
               <div className="grid gap-2">
                 <Label htmlFor="birthDate" className="text-base font-medium">
-                  תאריך לידה
+                  {tr.birthDate}
                 </Label>
                 <Input
                   id="birthDate"
@@ -244,15 +288,15 @@ export default function NewStudentPage() {
               <Phone className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="font-semibold text-lg">פרטי קשר</h3>
-              <p className="text-sm text-muted-foreground">מידע ליצירת קשר</p>
+              <h3 className="font-semibold text-lg">{tr.contactInfo}</h3>
+              <p className="text-sm text-muted-foreground">{isEn ? "Contact details" : "מידע ליצירת קשר"}</p>
             </div>
           </div>
 
           <div className="grid gap-4">
             <div className="grid gap-2">
               <Label htmlFor="email" className="text-base font-medium">
-                אימייל (אופציונלי)
+                {tr.email}
               </Label>
               <Input
                 id="email"
@@ -267,7 +311,7 @@ export default function NewStudentPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="phone" className="text-base font-medium">
-                  מספר נייד
+                  {tr.mobile}
                 </Label>
                 <Input
                   id="phone"
@@ -280,7 +324,7 @@ export default function NewStudentPage() {
 
               <div className="grid gap-2">
                 <Label htmlFor="additionalPhone" className="text-base font-medium">
-                  מספר נייד נוסף
+                  {tr.extraMobile}
                 </Label>
                 <Input
                   id="additionalPhone"
@@ -294,25 +338,25 @@ export default function NewStudentPage() {
 
             <div className="grid gap-2">
               <Label htmlFor="city" className="text-base font-medium">
-                עיר
+                {tr.city}
               </Label>
               <CityCombobox
                 value={newStudent.city}
                 onChange={(value) => setNewStudent({ ...newStudent, city: value })}
-                placeholder="בחר עיר"
+                placeholder={isEn ? "Choose city" : "בחר עיר"}
                 className="bg-white"
               />
             </div>
 
             <div className="grid gap-2">
               <Label htmlFor="address" className="text-base font-medium">
-                כתובת
+                {tr.address}
               </Label>
               <Input
                 id="address"
                 value={newStudent.address}
                 onChange={(e) => setNewStudent({ ...newStudent, address: e.target.value })}
-                placeholder="רחוב 123"
+                  placeholder={isEn ? "Street 123" : "רחוב 123"}
                 className="text-base h-12 bg-white"
               />
             </div>
@@ -325,15 +369,15 @@ export default function NewStudentPage() {
               <Users className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="font-semibold text-lg">פרטי הורים</h3>
-              <p className="text-sm text-muted-foreground">מידע על הורי התלמיד</p>
+              <h3 className="font-semibold text-lg">{tr.parentInfo}</h3>
+              <p className="text-sm text-muted-foreground">{isEn ? "Parent details" : "מידע על הורי התלמיד"}</p>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="father" className="text-base font-medium">
-                שם האב
+                {tr.fatherName}
               </Label>
               <Input
                 id="father"
@@ -346,7 +390,7 @@ export default function NewStudentPage() {
 
             <div className="grid gap-2">
               <Label htmlFor="mother" className="text-base font-medium">
-                שם האם
+                {tr.motherName}
               </Label>
               <Input
                 id="mother"
@@ -366,8 +410,8 @@ export default function NewStudentPage() {
               <KeyRound className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="font-semibold text-lg">חשבון משתמש</h3>
-              <p className="text-sm text-muted-foreground">יצירת חשבון התחברות לתלמיד במערכת</p>
+              <h3 className="font-semibold text-lg">{tr.userAccount}</h3>
+              <p className="text-sm text-muted-foreground">{isEn ? "Create login account for student" : "יצירת חשבון התחברות לתלמיד במערכת"}</p>
             </div>
           </div>
 
@@ -379,31 +423,31 @@ export default function NewStudentPage() {
                 onCheckedChange={(checked) => setCreateUserAccount(checked === true)}
               />
               <Label htmlFor="createUserAccount" className="cursor-pointer text-base">
-                צור חשבון משתמש לתלמיד (יאפשר לתלמיד להתחבר למערכת)
+                {tr.createAccount}
               </Label>
             </div>
 
             {createUserAccount && (
               <div className="grid gap-4 pt-4 border-t">
                 <div className="grid gap-2">
-                  <Label htmlFor="username" className="text-base font-medium">שם משתמש *</Label>
+                  <Label htmlFor="username" className="text-base font-medium">{tr.username}</Label>
                   <Input
                     id="username"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    placeholder="שם משתמש להתחברות"
+                    placeholder={isEn ? "Login username" : "שם משתמש להתחברות"}
                     dir="ltr"
                     className="text-base h-12 bg-white"
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="password" className="text-base font-medium">סיסמה *</Label>
+                  <Label htmlFor="password" className="text-base font-medium">{tr.password}</Label>
                   <Input
                     id="password"
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="לפחות 4 תווים"
+                    placeholder={isEn ? "At least 4 characters" : "לפחות 4 תווים"}
                     dir="ltr"
                     className="text-base h-12 bg-white"
                   />
@@ -419,22 +463,22 @@ export default function NewStudentPage() {
               <Heart className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="font-semibold text-lg">מידע רפואי</h3>
-              <p className="text-sm text-muted-foreground">רגישויות וקופת חולים</p>
+              <h3 className="font-semibold text-lg">{tr.medicalInfo}</h3>
+              <p className="text-sm text-muted-foreground">{isEn ? "Health fund and sensitivities" : "רגישויות וקופת חולים"}</p>
             </div>
           </div>
 
           <div className="grid gap-4">
             <div className="grid gap-2">
               <Label htmlFor="healthFund" className="text-base font-medium">
-                קופת חולים
+                {tr.healthFund}
               </Label>
               <Select
                 value={newStudent.healthFund}
                 onValueChange={(value) => setNewStudent({ ...newStudent, healthFund: value })}
               >
                 <SelectTrigger id="healthFund" className="h-12 bg-white">
-                  <SelectValue placeholder="בחר קופת חולים" />
+                  <SelectValue placeholder={isEn ? "Choose health fund" : "בחר קופת חולים"} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="כללית">כללית</SelectItem>
@@ -447,13 +491,13 @@ export default function NewStudentPage() {
 
             <div className="grid gap-2">
               <Label htmlFor="allergies" className="text-base font-medium">
-                רגישויות ואלרגיות
+                {tr.allergies}
               </Label>
               <Textarea
                 id="allergies"
                 value={newStudent.allergies}
                 onChange={(e) => setNewStudent({ ...newStudent, allergies: e.target.value })}
-                placeholder="פרט כל רגישות או אלרגיה רלוונטית..."
+                placeholder={isEn ? "Describe any relevant sensitivity or allergy..." : "פרט כל רגישות או אלרגיה רלוונטית..."}
                 rows={4}
                 className="text-base resize-none bg-white"
               />
@@ -467,14 +511,14 @@ export default function NewStudentPage() {
               <BookOpen className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="font-semibold text-lg">קורסים</h3>
-              <p className="text-sm text-muted-foreground">בחר קורסים עבור התלמיד</p>
+              <h3 className="font-semibold text-lg">{tr.courses}</h3>
+              <p className="text-sm text-muted-foreground">{isEn ? "Select courses for student" : "בחר קורסים עבור התלמיד"}</p>
             </div>
           </div>
 
           <div className="mb-4">
             <Label htmlFor="totalSessions" className="text-base font-medium">
-              כמות מפגשים
+              {tr.sessions}
             </Label>
             <Input
               id="totalSessions"
@@ -484,7 +528,7 @@ export default function NewStudentPage() {
               onChange={(e) => setNewStudent({ ...newStudent, totalSessions: Number.parseInt(e.target.value) || 12 })}
               className="text-base h-12 bg-white mt-2"
             />
-            <p className="text-sm text-muted-foreground mt-1">כמות המפגשים שתוקצה לכל קורס (ברירת מחדל: 12)</p>
+            <p className="text-sm text-muted-foreground mt-1">{isEn ? "Sessions allocated per course (default: 12)" : "כמות המפגשים שתוקצה לכל קורס (ברירת מחדל: 12)"}</p>
           </div>
 
           <div className="border-2 border-purple-200 rounded-lg p-5 bg-white">
@@ -514,7 +558,7 @@ export default function NewStudentPage() {
 
                 {newStudent.courseIds.length > 0 && (
                   <div className="pt-4 border-t-2 border-purple-100">
-                    <p className="text-sm font-medium text-muted-foreground mb-3">קורסים נבחרים:</p>
+                    <p className="text-sm font-medium text-muted-foreground mb-3">{tr.selectedCourses}</p>
                     <div className="flex flex-wrap gap-2">
                       {newStudent.courseIds.map((courseId) => {
                         const course = courses.find((c) => c.id.toString() === courseId)
@@ -539,7 +583,7 @@ export default function NewStudentPage() {
                 )}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground text-center py-4">אין קורסים זמינים במערכת</p>
+              <p className="text-sm text-muted-foreground text-center py-4">{tr.availableCoursesNone}</p>
             )}
           </div>
         </Card>
@@ -551,12 +595,12 @@ export default function NewStudentPage() {
             className="h-12 px-8 text-base"
             disabled={isSubmitting || submitSuccess || !newStudent.name}
           >
-            {submitSuccess ? "נשמר בהצלחה!" : isSubmitting ? "שומר..." : "הוסף תלמיד"}
+            {submitSuccess ? (isEn ? "Saved successfully!" : "נשמר בהצלחה!") : isSubmitting ? tr.saving : tr.addStudent}
           </Button>
 
           <Link href="/dashboard/students">
             <Button type="button" variant="outline" size="lg" className="h-12 px-8 text-base bg-transparent">
-              ביטול
+              {tr.cancel}
             </Button>
           </Link>
         </div>

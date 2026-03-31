@@ -18,6 +18,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { CityCombobox } from "@/components/ui/combobox-city"
 
 import { ArrowRight, User, Award as IdCard, Phone, Users, Heart, BookOpen, X, Loader2, KeyRound } from "lucide-react"
+import { useLanguage } from "@/lib/i18n/context"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,6 +31,45 @@ import {
 } from "@/components/ui/alert-dialog"
 
 export default function EditStudentPage() {
+  const { locale } = useLanguage()
+  const isEn = locale === "en"
+  const isAr = locale === "ar"
+  const isRtl = !isEn
+  const tr = {
+    title: isEn ? "Edit Student" : isAr ? "تعديل الطالب" : "ערוך תלמיד",
+    subtitle: isEn ? "Update student details" : isAr ? "تحديث بيانات الطالب" : "עדכן את פרטי התלמיד במערכת",
+    save: isEn ? "Save Changes" : isAr ? "حفظ التغييرات" : "שמור שינויים",
+    cancel: isEn ? "Cancel" : isAr ? "إلغاء" : "ביטול",
+    saving: isEn ? "Saving..." : isAr ? "جارٍ الحفظ..." : "שומר...",
+    saved: isEn ? "Saved successfully!" : isAr ? "تم الحفظ بنجاح!" : "נשמר בהצלחה!",
+    loadError: isEn ? "Error loading student" : isAr ? "خطأ في تحميل الطالب" : "שגיאה בטעינת התלמיד",
+    unsavedTitle: isEn ? "You have unsaved changes" : isAr ? "لديك تغييرات غير محفوظة" : "יש שינויים שלא נשמרו",
+    unsavedDesc: isEn ? "Are you sure you want to leave? Unsaved changes will be lost." : isAr ? "هل أنت متأكد من الخروج؟ سيتم فقدان كل التغييرات غير المحفوظة." : "האם אתה בטוח שברצונך לצאת? כל השינויים שלא נשמרו יאבדו.",
+    continueEdit: isEn ? "Continue editing" : isAr ? "متابعة التعديل" : "המשך לערוך",
+    leaveWithoutSave: isEn ? "Leave without saving" : isAr ? "خروج بدون حفظ" : "צא בלי לשמור",
+    status: isEn ? "Student Status" : "סטטוס התלמיד",
+    chooseStatus: isEn ? "Choose current student status" : "בחר את סטטוס התלמיד הנוכחי",
+    personalInfo: isEn ? "Personal Information" : "מידע אישי",
+    contactInfo: isEn ? "Contact Information" : "פרטי קשר",
+    parentInfo: isEn ? "Parent Information" : "פרטי הורים",
+    medicalInfo: isEn ? "Medical Information" : "מידע רפואי",
+    courses: isEn ? "Courses" : "קורסים",
+    userAccount: isEn ? "User Account" : "חשבון משתמש",
+    fullName: isEn ? "Full Name *" : "שם מלא *",
+    idNumber: isEn ? "ID Number" : "תעודת זהות",
+    birthDate: isEn ? "Birth Date" : "תאריך לידה",
+    city: isEn ? "City" : "עיר",
+    address: isEn ? "Address" : "כתובת",
+    fatherName: isEn ? "Father Name" : "שם האב",
+    motherName: isEn ? "Mother Name" : "שם האם",
+    sessionsDefault: isEn ? "Default Sessions" : "כמות מפגשים בררת מחדל",
+    selectedCourses: isEn ? "Selected courses:" : "קורסים נבחרים:",
+    noCourses: isEn ? "No courses available in system" : "אין קורסים זמינים במערכת",
+    pending: isEn ? "Pending" : isAr ? "قيد الانتظار" : "מתעניין",
+    active: isEn ? "Active" : isAr ? "نشط" : "פעיל",
+    paused: isEn ? "Paused" : isAr ? "مجمّد" : "השהיה",
+    completed: isEn ? "Completed" : isAr ? "منتهي" : "סיים",
+  }
   const router = useRouter()
   const params = useParams<{ id: string }>()
   const id = useMemo(() => (typeof params?.id === "string" ? params.id : ""), [params?.id])
@@ -107,10 +147,10 @@ export default function EditStudentPage() {
       // Validate user account fields if creating account
       if (createUserAccount && !hasUserAccount) {
         if (!username.trim()) {
-          throw new Error("יש להזין שם משתמש")
+          throw new Error(isEn ? "Username is required" : "יש להזין שם משתמש")
         }
         if (!password || password.length < 4) {
-          throw new Error("הסיסמה חייבת להכיל לפחות 4 תווים")
+          throw new Error(isEn ? "Password must be at least 4 characters" : "הסיסמה חייבת להכיל לפחות 4 תווים")
         }
       }
 
@@ -185,7 +225,7 @@ export default function EditStudentPage() {
       // Navigate immediately
       window.location.href = "/dashboard/students"
     } catch (err: any) {
-      setSubmitError(err?.message ?? "שגיאה בעדכון תלמיד")
+      setSubmitError(err?.message ?? (isEn ? "Failed to update student" : "שגיאה בעדכון תלמיד"))
       setIsSubmitting(false)
     }
   }
@@ -225,16 +265,16 @@ export default function EditStudentPage() {
 
   if (studentError) {
     return (
-      <div className="container mx-auto max-w-4xl p-6" dir="rtl">
+      <div className="container mx-auto max-w-4xl p-6" dir={isRtl ? "rtl" : "ltr"}>
         <Card className="border-2 border-red-200 bg-red-50 p-4">
-          <div className="font-medium text-red-700">שגיאה בטעינת התלמיד</div>
+          <div className="font-medium text-red-700">{tr.loadError}</div>
         </Card>
       </div>
     )
   }
 
   return (
-    <div className="container mx-auto max-w-4xl p-6 space-y-6" dir="rtl">
+    <div className="container mx-auto max-w-4xl p-6 space-y-6" dir={isRtl ? "rtl" : "ltr"}>
       <div className="flex items-center gap-4">
         <Link href={id ? `/dashboard/students/${id}` : "/dashboard/students"}>
           <Button variant="ghost" size="icon">
@@ -242,8 +282,8 @@ export default function EditStudentPage() {
           </Button>
         </Link>
         <div>
-          <h1 className="text-3xl font-bold text-foreground">ערוך תלמיד</h1>
-          <p className="text-muted-foreground mt-1">עדכן את פרטי התלמיד במערכת</p>
+          <h1 className="text-3xl font-bold text-foreground">{tr.title}</h1>
+          <p className="text-muted-foreground mt-1">{tr.subtitle}</p>
         </div>
       </div>
 
@@ -253,15 +293,15 @@ export default function EditStudentPage() {
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
-            השינויים נשמרו בהצלחה!
+            {isEn ? "Changes saved successfully!" : "השינויים נשמרו בהצלחה!"}
           </div>
-          <div className="text-sm text-green-700/80 mt-1">מעביר לרשימת התלמידים...</div>
+          <div className="text-sm text-green-700/80 mt-1">{isEn ? "Redirecting to students list..." : "מעביר לרשימת התלמידים..."}</div>
         </Card>
       )}
 
       {submitError && (
         <Card className="border-2 border-red-200 bg-red-50 p-4">
-          <div className="font-medium text-red-700">שגיאה</div>
+          <div className="font-medium text-red-700">{isEn ? "Error" : "שגיאה"}</div>
           <div className="text-sm text-red-700/80 mt-1">{submitError}</div>
         </Card>
       )}
@@ -272,17 +312,17 @@ export default function EditStudentPage() {
             <User className="h-6 w-6" />
           </div>
           <div className="flex-1">
-            <h3 className="font-semibold text-lg mb-2">סטטוס התלמיד</h3>
-            <p className="text-sm text-muted-foreground mb-3">בחר את סטטוס התלמיד הנוכחי</p>
+            <h3 className="font-semibold text-lg mb-2">{tr.status}</h3>
+            <p className="text-sm text-muted-foreground mb-3">{tr.chooseStatus}</p>
             <Select value={student.status} onValueChange={(value) => updateStudent({ status: value })}>
               <SelectTrigger className="w-full bg-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="מתעניין">מתעניין</SelectItem>
-                <SelectItem value="פעיל">פעיל</SelectItem>
-                <SelectItem value="השהיה">השהיה</SelectItem>
-                <SelectItem value="סיים">סיים</SelectItem>
+                <SelectItem value="מתעניין">{tr.pending}</SelectItem>
+                <SelectItem value="פעיל">{tr.active}</SelectItem>
+                <SelectItem value="השהיה">{tr.paused}</SelectItem>
+                <SelectItem value="סיים">{tr.completed}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -296,20 +336,20 @@ export default function EditStudentPage() {
               <IdCard className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="font-semibold text-lg">מידע אישי</h3>
-              <p className="text-sm text-muted-foreground">פרטים בסיסיים על התלמיד</p>
+              <h3 className="font-semibold text-lg">{tr.personalInfo}</h3>
+              <p className="text-sm text-muted-foreground">{isEn ? "Basic student details" : "פרטים בסיסיים על התלמיד"}</p>
             </div>
           </div>
           <div className="grid gap-4">
             <div className="grid gap-2">
               <Label htmlFor="name" className="text-base font-medium">
-                שם מלא *
+                {tr.fullName}
               </Label>
               <Input
                 id="name"
                 value={student.name}
                 onChange={(e) => updateStudent({ name: e.target.value })}
-                placeholder="לדוגמה: יוסי כהן"
+                  placeholder={isEn ? "e.g. John Doe" : "לדוגמה: יוסי כהן"}
                 className="text-base h-12 bg-white"
                 required
               />
@@ -318,7 +358,7 @@ export default function EditStudentPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="idNumber" className="text-base font-medium">
-                  תעודת זהות
+                  {tr.idNumber}
                 </Label>
                 <Input
                   id="idNumber"
@@ -331,7 +371,7 @@ export default function EditStudentPage() {
 
               <div className="grid gap-2">
                 <Label htmlFor="birthDate" className="text-base font-medium">
-                  תאריך לידה
+                  {tr.birthDate}
                 </Label>
                 <Input
                   id="birthDate"
@@ -351,7 +391,7 @@ export default function EditStudentPage() {
               <Phone className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="font-semibold text-lg">פרטי קשר</h3>
+              <h3 className="font-semibold text-lg">{tr.contactInfo}</h3>
               <p className="text-sm text-muted-foreground">מידע ליצירת קשר</p>
             </div>
           </div>
@@ -400,25 +440,25 @@ export default function EditStudentPage() {
 
             <div className="grid gap-2">
               <Label htmlFor="city" className="text-base font-medium">
-                עיר
+                {tr.city}
               </Label>
               <CityCombobox
                 value={student.city}
                 onChange={(value) => updateStudent({ city: value })}
-                placeholder="בחר עיר"
+                placeholder={isEn ? "Choose city" : "בחר עיר"}
                 className="bg-white"
               />
             </div>
 
             <div className="grid gap-2">
               <Label htmlFor="address" className="text-base font-medium">
-                כתובת
+                {tr.address}
               </Label>
               <Input
                 id="address"
                 value={student.address}
                 onChange={(e) => updateStudent({ address: e.target.value })}
-                placeholder="רחוב 123"
+                placeholder={isEn ? "Street 123" : "רחוב 123"}
                 className="text-base h-12 bg-white"
               />
             </div>
@@ -431,14 +471,14 @@ export default function EditStudentPage() {
               <Users className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="font-semibold text-lg">פרטי הורים</h3>
+              <h3 className="font-semibold text-lg">{tr.parentInfo}</h3>
               <p className="text-sm text-muted-foreground">מידע על הורי התלמיד</p>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="father" className="text-base font-medium">
-                שם האב
+                {tr.fatherName}
               </Label>
               <Input
                 id="father"
@@ -451,7 +491,7 @@ export default function EditStudentPage() {
 
             <div className="grid gap-2">
               <Label htmlFor="mother" className="text-base font-medium">
-                שם האם
+                {tr.motherName}
               </Label>
               <Input
                 id="mother"
@@ -470,7 +510,7 @@ export default function EditStudentPage() {
               <Heart className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="font-semibold text-lg">מידע רפואי</h3>
+              <h3 className="font-semibold text-lg">{tr.medicalInfo}</h3>
               <p className="text-sm text-muted-foreground">רגישויות וקופת חולים</p>
             </div>
           </div>
@@ -515,14 +555,14 @@ export default function EditStudentPage() {
               <KeyRound className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="font-semibold text-lg">חשבון משתמש</h3>
+              <h3 className="font-semibold text-lg">{tr.userAccount}</h3>
               <p className="text-sm text-muted-foreground">יצירת חשבון התחברות לתלמיד במערכת</p>
             </div>
           </div>
 
           {hasUserAccount ? (
             <div className="text-center py-4 bg-green-100 rounded-lg border border-green-300">
-              <p className="text-green-700 font-medium">לתלמיד זה כבר יש חשבון משתמש במערכת</p>
+              <p className="text-green-700 font-medium">{isEn ? "This student already has a user account" : "לתלמיד זה כבר יש חשבון משתמש במערכת"}</p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -574,14 +614,14 @@ export default function EditStudentPage() {
               <BookOpen className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="font-semibold text-lg">קורסים</h3>
+              <h3 className="font-semibold text-lg">{tr.courses}</h3>
               <p className="text-sm text-muted-foreground">בחר קורסים עבור התלמיד</p>
             </div>
           </div>
 
           <div className="mb-4">
             <Label htmlFor="totalSessions" className="text-base font-medium">
-              כמות מפגשים בררת מחדל
+              {tr.sessionsDefault}
             </Label>
             <Input
               id="totalSessions"
@@ -620,7 +660,7 @@ export default function EditStudentPage() {
 
                 {student.courseIds.length > 0 && (
                   <div className="pt-4 border-t-2 border-purple-100">
-                    <p className="text-sm font-medium text-muted-foreground mb-3">קורסים נבחרים:</p>
+                    <p className="text-sm font-medium text-muted-foreground mb-3">{tr.selectedCourses}</p>
                     <div className="flex flex-wrap gap-2">
                       {student.courseIds.map((courseId) => {
                         const course = courses.find((c: any) => c.id.toString() === courseId)
@@ -645,7 +685,7 @@ export default function EditStudentPage() {
                 )}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground text-center py-4">אין קורסים זמינים במערכת</p>
+              <p className="text-sm text-muted-foreground text-center py-4">{tr.noCourses}</p>
             )}
           </div>
         </Card>
@@ -658,14 +698,14 @@ export default function EditStudentPage() {
             disabled={isSubmitting || submitSuccess || !student.name || !id}
           >
             {submitSuccess ? (
-              "נשמר בהצלחה!"
+              tr.saved
             ) : isSubmitting ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin ml-2" />
-                שומר...
+                {tr.saving}
               </>
             ) : (
-              "שמור שינויים"
+              tr.save
             )}
           </Button>
 
@@ -676,7 +716,7 @@ export default function EditStudentPage() {
             className="h-12 px-8 text-base bg-transparent"
             onClick={handleCancel}
           >
-            ביטול
+            {tr.cancel}
           </Button>
         </div>
       </form>
@@ -685,18 +725,18 @@ export default function EditStudentPage() {
       <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
         <AlertDialogContent dir="rtl">
           <AlertDialogHeader>
-            <AlertDialogTitle>יש שינויים שלא נשמרו</AlertDialogTitle>
+            <AlertDialogTitle>{tr.unsavedTitle}</AlertDialogTitle>
             <AlertDialogDescription>
-              האם אתה בטוח שברצונך לצאת? כל השינויים שלא נשמרו יאבדו.
+              {tr.unsavedDesc}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-row-reverse gap-2">
-            <AlertDialogCancel>המשך לערוך</AlertDialogCancel>
+            <AlertDialogCancel>{tr.continueEdit}</AlertDialogCancel>
             <AlertDialogAction 
               onClick={() => router.push(id ? `/dashboard/students/${id}` : "/dashboard/students")}
               className="bg-red-600 hover:bg-red-700"
             >
-              צא בלי לשמור
+              {tr.leaveWithoutSave}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

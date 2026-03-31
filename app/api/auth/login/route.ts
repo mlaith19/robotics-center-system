@@ -27,6 +27,7 @@ const LOGIN_ERRORS = {
     "לחשבון זה לא הוגדרה סיסמה. פנה למנהל המערכת להגדרת סיסמה או איפוס.",
   rate_limited: "ננעלת לאחר ניסיונות כושלים רבים. המתן דקה ונסה שוב.",
   user_inactive: "המשתמש מושבת. פנה למנהל.",
+  pending_approval: "עדיין לא אושרת ממנהל מערכת",
 } as const
 
 export async function POST(request: NextRequest) {
@@ -118,6 +119,22 @@ export async function POST(request: NextRequest) {
     }
 
     if ((user as { status?: string }).status !== "active") {
+      // Provide a clearer message for public registrations that are still pending admin approval.
+      try {
+        const [studentPending, teacherPending] = await Promise.all([
+          db`SELECT id FROM "Student" WHERE "userId" = ${user.id} AND status = 'מתעניין' LIMIT 1`,
+          db`SELECT id FROM "Teacher" WHERE "userId" = ${user.id} AND status = 'מתעניין' LIMIT 1`,
+        ])
+        if (studentPending.length > 0 || teacherPending.length > 0) {
+          console.log(`[AUTH] FAIL=PENDING_APPROVAL username="${username}"`)
+          return NextResponse.json(
+            { error: "PENDING_APPROVAL", reason: "pending_approval", message: LOGIN_ERRORS.pending_approval },
+            { status: 403 }
+          )
+        }
+      } catch {
+        // Fallback to generic inactive message below.
+      }
       console.log(`[AUTH] FAIL=USER_INACTIVE username="${username}"`)
       return NextResponse.json(
         { error: "USER_INACTIVE", reason: "user_inactive", message: LOGIN_ERRORS.user_inactive },

@@ -13,6 +13,7 @@ import { PageHeader } from "@/components/page-header"
 import { deleteWithUndo } from "@/lib/notify"
 import { useCurrentUser } from "@/lib/auth-context"
 import { hasPermission, hasFullAccessRole } from "@/lib/permissions"
+import { useLanguage } from "@/lib/i18n/context"
 
 interface Student {
   id: string
@@ -28,12 +29,12 @@ interface Student {
   createdAt?: string
 }
 
-const statusLabels: Record<string, string> = {
-  "מתעניין": "מתעניין",
-  "רשום": "רשום",
-  "פעיל": "פעיל",
-  "לא פעיל": "לא פעיל",
-  "הפסיק": "הפסיק",
+const statusLabels: Record<string, Record<"he" | "en" | "ar", string>> = {
+  "מתעניין": { he: "מתעניין", en: "Pending", ar: "قيد الانتظار" },
+  "רשום": { he: "רשום", en: "Registered", ar: "مسجل" },
+  "פעיל": { he: "פעיל", en: "Active", ar: "نشط" },
+  "לא פעיל": { he: "לא פעיל", en: "Inactive", ar: "غير نشط" },
+  "הפסיק": { he: "הפסיק", en: "Stopped", ar: "متوقف" },
 }
 
 const statusColors: Record<string, string> = {
@@ -45,6 +46,9 @@ const statusColors: Record<string, string> = {
 }
 
 export default function StudentsPage() {
+  const { t, locale } = useLanguage()
+  const isRtl = locale !== "en"
+  const l = (he: string, en: string, ar: string) => (locale === "en" ? en : locale === "ar" ? ar : he)
   const router = useRouter()
   const searchParams = useSearchParams()
   const [students, setStudents] = useState<Student[]>([])
@@ -76,7 +80,7 @@ export default function StudentsPage() {
     try {
       const res = await fetch("/api/students")
       if (res.status === 403) {
-        setFetchError("אין הרשאה לצפות בתלמידים (403). פנה למנהל המערכת.")
+        setFetchError(l("אין הרשאה לצפות בתלמידים (403). פנה למנהל המערכת.", "No permission to view students (403). Contact system admin.", "لا توجد صلاحية لعرض الطلاب (403). تواصل مع مدير النظام."))
         setStudents([])
         return
       }
@@ -90,12 +94,12 @@ export default function StudentsPage() {
         // Public registrations stay in "רישום" until approved.
         setStudents(list.filter((s) => (s?.status || "").trim() !== "מתעניין"))
       } else {
-        setFetchError(`שגיאה בטעינת תלמידים (${res.status})`)
+        setFetchError(l(`שגיאה בטעינת תלמידים (${res.status})`, `Error loading students (${res.status})`, `خطأ في تحميل الطلاب (${res.status})`))
         setStudents([])
       }
     } catch (error) {
       console.error("Error fetching students:", error)
-      setFetchError("שגיאת רשת בטעינת תלמידים")
+      setFetchError(l("שגיאת רשת בטעינת תלמידים", "Network error while loading students", "خطأ شبكة أثناء تحميل الطلاب"))
       setStudents([])
     } finally {
       setLoading(false)
@@ -111,7 +115,7 @@ export default function StudentsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]" dir="rtl">
+      <div className="flex items-center justify-center min-h-[400px]" dir={isRtl ? "rtl" : "ltr"}>
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
@@ -119,21 +123,21 @@ export default function StudentsPage() {
 
   if (fetchError) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4" dir="rtl">
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4" dir={isRtl ? "rtl" : "ltr"}>
         <Card className="p-6 border-red-200 bg-red-50 max-w-md w-full text-center">
-          <p className="text-red-700 font-semibold text-lg mb-2">שגיאת גישה</p>
+          <p className="text-red-700 font-semibold text-lg mb-2">{l("שגיאת גישה", "Access error", "خطأ صلاحية")}</p>
           <p className="text-red-600 text-sm mb-4">{fetchError}</p>
-          <Button variant="outline" onClick={fetchStudents}>נסה שוב</Button>
+          <Button variant="outline" onClick={fetchStudents}>{t("courses.retry")}</Button>
         </Card>
       </div>
     )
   }
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="space-y-6" dir={isRtl ? "rtl" : "ltr"}>
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <PageHeader title="תלמידים" description="נהל את כל התלמידים במרכז" />
+        <PageHeader title={t("students.title")} description={t("students.manageAll")} />
         <div className="flex items-center gap-2">
           <div className="flex items-center border rounded-lg p-1">
             <Button
@@ -157,7 +161,7 @@ export default function StudentsPage() {
             <Link href="/dashboard/students/new">
               <Button className="gap-2">
                 <Plus className="h-4 w-4" />
-                תלמיד חדש
+                {t("students.newStudent")}
               </Button>
             </Link>
           )}
@@ -168,7 +172,7 @@ export default function StudentsPage() {
       <div className="relative max-w-md">
         <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          placeholder="חיפוש תלמידים..."
+          placeholder={t("students.searchPlaceholder")}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="pr-10"
@@ -179,13 +183,13 @@ export default function StudentsPage() {
       {filteredStudents.length === 0 ? (
         <Card className="p-12 text-center">
           <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-          <h3 className="text-lg font-medium mb-2">אין תלמידים</h3>
-          <p className="text-muted-foreground mb-4">לא נמצאו תלמידים התואמים את החיפוש</p>
+          <h3 className="text-lg font-medium mb-2">{t("students.none")}</h3>
+          <p className="text-muted-foreground mb-4">{t("students.noneMatchSearch")}</p>
           {canEditStudents && (
             <Link href="/dashboard/students/new">
               <Button>
                 <Plus className="h-4 w-4 ml-2" />
-                הוסף תלמיד חדש
+                {t("students.addFirst")}
               </Button>
             </Link>
           )}
@@ -209,7 +213,7 @@ export default function StudentsPage() {
                     </div>
                   </div>
                   <Badge className={statusColors[student.status || "מתעניין"] || "bg-gray-100 text-gray-800"}>
-                    {statusLabels[student.status || "מתעניין"] || student.status || "מתעניין"}
+                    {statusLabels[student.status || "מתעניין"]?.[locale] || student.status || statusLabels["מתעניין"][locale]}
                   </Badge>
                 </div>
 
@@ -229,7 +233,7 @@ export default function StudentsPage() {
                   )}
                   {student.father && (
                     <div className="flex items-center justify-end gap-2 text-muted-foreground">
-                      <span>אב: {student.father}</span>
+                      <span>{l(`אב: ${student.father}`, `Father: ${student.father}`, `الأب: ${student.father}`)}</span>
                       <Users className="h-4 w-4" />
                     </div>
                   )}
@@ -265,7 +269,7 @@ export default function StudentsPage() {
                     <Link href={`/dashboard/students/${student.id}/edit`} className="flex-1">
                       <Button variant="outline" size="sm" className="w-full gap-1 bg-transparent">
                         <Pencil className="h-4 w-4" />
-                        ערוך
+                        {t("courses.edit")}
                       </Button>
                     </Link>
                   )}
@@ -273,7 +277,7 @@ export default function StudentsPage() {
                     <Link href={`/dashboard/students/${student.id}`} className="flex-1">
                       <Button variant="outline" size="sm" className="w-full gap-1 bg-transparent">
                         <Eye className="h-4 w-4" />
-                        צפה
+                        {t("courses.view")}
                       </Button>
                     </Link>
                   )}

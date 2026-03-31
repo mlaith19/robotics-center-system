@@ -17,6 +17,7 @@ import { useUserType } from "@/lib/use-user-type"
 import { StudentTabs } from "@/components/student/student-tabs"
 import useSWR, { mutate } from "swr"
 import { arrayFetcher, fetcher as apiFetcher } from "@/lib/swr-fetcher"
+import { useLanguage } from "@/lib/i18n/context"
 
 interface Student {
   id: string
@@ -54,15 +55,14 @@ function safeText(v: any) {
 }
 
 function formatDate(dateStr: string | null) {
-  if (!dateStr) return "—"
-  try {
-    return new Intl.DateTimeFormat("he-IL", { dateStyle: "short" }).format(new Date(dateStr))
-  } catch {
-    return "—"
-  }
+  return dateStr
 }
 
 export default function StudentViewPage() {
+  const { t, locale } = useLanguage()
+  const isRtl = locale !== "en"
+  const l = (he: string, en: string, ar: string) => (locale === "en" ? en : locale === "ar" ? ar : he)
+  const localeTag = locale === "en" ? "en-GB" : locale === "ar" ? "ar" : "he-IL"
   const params = useParams()
   const id = params.id as string
   const [isStudentUser, setIsStudentUser] = useState(false)
@@ -150,7 +150,7 @@ export default function StudentViewPage() {
   }
 
   if (!student) {
-    return <div className="text-center py-10">לא נמצא תלמיד</div>
+    return <div className="text-center py-10">{l("לא נמצא תלמיד", "Student not found", "لم يتم العثور على الطالب")}</div>
   }
 
   // Get enrolled course names
@@ -159,7 +159,7 @@ export default function StudentViewPage() {
     .filter(Boolean)
 
   return (
-    <div dir="rtl" className="min-h-screen">
+    <div dir={isRtl ? "rtl" : "ltr"} className="min-h-screen">
       <div className="space-y-6 max-w-5xl mx-auto p-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -171,10 +171,10 @@ export default function StudentViewPage() {
             </Link>
 
             <div>
-              <h1 className="text-3xl font-bold text-foreground">פרטי תלמיד</h1>
+              <h1 className="text-3xl font-bold text-foreground">{l("פרטי תלמיד", "Student Details", "تفاصيل الطالب")}</h1>
               <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
                 <Link href="/dashboard/students" className="hover:text-foreground transition-colors">
-                  תלמידים
+                  {t("students.title")}
                 </Link>
                 <ChevronLeft className="h-4 w-4" />
                 <span className="text-foreground font-medium">{student.name}</span>
@@ -186,7 +186,7 @@ export default function StudentViewPage() {
             <Link href={`/dashboard/students/${student.id}/edit`}>
               <Button className="gap-2">
                 <Edit className="h-4 w-4" />
-                ערוך תלמיד
+                {l("ערוך תלמיד", "Edit Student", "تعديل الطالب")}
               </Button>
             </Link>
           )}
@@ -225,7 +225,7 @@ export default function StudentViewPage() {
 
         {/* Created Date */}
         <div className="text-center text-sm text-muted-foreground">
-          נוצר בתאריך: {student.createdAt ? formatDate(student.createdAt) : "—"}
+          {l("נוצר בתאריך:", "Created at:", "تاريخ الإنشاء:")} {student.createdAt ? new Intl.DateTimeFormat(localeTag, { dateStyle: "short" }).format(new Date(student.createdAt)) : "—"}
         </div>
       </div>
     </div>
