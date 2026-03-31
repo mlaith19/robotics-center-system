@@ -542,9 +542,9 @@ export default function TeacherViewPage() {
             <ArrowRight className="h-5 w-5" />
           </Button>
           {teacher.profileImage ? (
-            <img src={teacher.profileImage} alt={teacher.name} className="h-12 w-12 rounded-full object-cover border shadow-lg" />
+            <img src={teacher.profileImage} alt={teacher.name} className="h-12 w-12 rounded-full object-contain bg-white p-0.5 border shadow-lg" />
           ) : (
-            <img src="/api/og-logo" alt="Center logo" className="h-12 w-12 rounded-full object-cover border shadow-lg" />
+            <img src="/api/og-logo" alt="Center logo" className="h-12 w-12 rounded-full object-contain bg-white p-0.5 border shadow-lg" />
           )}
           <div>
             <div className="text-xl font-bold text-foreground">{teacher.name}</div>

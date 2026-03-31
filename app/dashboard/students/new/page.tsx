@@ -293,7 +293,7 @@ export default function NewStudentPage() {
               <Label htmlFor="profileImageUpload">{isEn ? "Profile image" : "תמונת פרופיל"}</Label>
               <div className="flex items-center gap-3">
                 {newStudent.profileImage ? (
-                  <img src={newStudent.profileImage} alt="profile preview" className="h-16 w-16 rounded-full object-cover border" />
+                  <img src={newStudent.profileImage} alt="profile preview" className="h-16 w-16 rounded-full object-contain bg-white p-0.5 border" />
                 ) : (
                   <div className="h-16 w-16 rounded-full border-2 border-dashed bg-muted" />
                 )}

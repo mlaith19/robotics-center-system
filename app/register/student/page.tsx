@@ -301,7 +301,7 @@ function RegisterStudentContent() {
               <Label htmlFor="profileImageUpload">תמונת פרופיל</Label>
               <div className="flex items-center gap-3">
                 {profileImage ? (
-                  <img src={profileImage} alt="profile preview" className="h-16 w-16 rounded-full object-cover border" />
+                  <img src={profileImage} alt="profile preview" className="h-16 w-16 rounded-full object-contain bg-white p-0.5 border" />
                 ) : (
                   <div className="h-16 w-16 rounded-full border-2 border-dashed bg-muted" />
                 )}

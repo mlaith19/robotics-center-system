@@ -204,9 +204,9 @@ export default function StudentsPage() {
                 <div className="flex items-start justify-between mb-4 flex-row-reverse">
                   <div className="flex items-center gap-3">
                     {student.profileImage ? (
-                      <img src={student.profileImage} alt={student.name} className="w-12 h-12 rounded-full object-cover border" />
+                      <img src={student.profileImage} alt={student.name} className="w-12 h-12 rounded-full object-contain bg-white p-0.5 border" />
                     ) : (
-                      <img src="/api/og-logo" alt="Center logo" className="w-12 h-12 rounded-full object-cover border" />
+                      <img src="/api/og-logo" alt="Center logo" className="w-12 h-12 rounded-full object-contain bg-white p-0.5 border" />
                     )}
                     <div className="text-right">
                       <h3 className="font-semibold text-lg">{student.name}</h3>

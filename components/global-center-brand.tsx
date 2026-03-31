@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { usePathname } from "next/navigation"
 
 type BrandState = {
   center_name: string
@@ -13,6 +14,7 @@ const DEFAULT_BRAND: BrandState = {
 }
 
 export function GlobalCenterBrand() {
+  const pathname = usePathname()
   const [brand, setBrand] = useState<BrandState>(DEFAULT_BRAND)
 
   useEffect(() => {
@@ -34,15 +36,18 @@ export function GlobalCenterBrand() {
     }
   }, [])
 
+  const hideOnDashboard = pathname?.startsWith("/dashboard") || pathname?.startsWith("/master")
+  if (hideOnDashboard) return null
+
   return (
     <div className="fixed top-3 left-1/2 z-40 -translate-x-1/2 pointer-events-none">
-      <div className="flex items-center gap-2 rounded-full border border-border/80 bg-background/95 px-3 py-1.5 shadow-sm backdrop-blur">
+      <div className="flex flex-col items-center rounded-2xl border border-border/80 bg-background/95 px-4 py-2 shadow-sm backdrop-blur">
         <img
           src={brand.logo || "/api/og-logo"}
           alt={brand.center_name}
-          className="h-7 w-7 rounded-full object-cover border"
+          className="h-14 w-14 rounded-full object-contain bg-white p-1 border"
         />
-        <span className="max-w-[60vw] truncate text-sm font-semibold text-foreground">{brand.center_name}</span>
+        <span className="mt-1 max-w-[70vw] truncate text-sm font-semibold text-foreground">{brand.center_name}</span>
       </div>
     </div>
   )

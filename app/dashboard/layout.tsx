@@ -493,7 +493,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
             <div className="flex items-center gap-3 rounded-lg bg-muted p-3">
               {userProfileImage ? (
-                <img src={userProfileImage} alt="Profile" className="h-10 w-10 rounded-full object-cover border" />
+                <img src={userProfileImage} alt="Profile" className="h-10 w-10 rounded-full object-contain bg-white p-0.5 border" />
               ) : (
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-semibold">
                   {currentUser.full_name?.charAt(0) || currentUser.username.charAt(0).toUpperCase()}
