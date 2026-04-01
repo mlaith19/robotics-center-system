@@ -61,6 +61,7 @@ type Teacher = {
 export default function CoursesPage() {
   const [courses, setCourses] = useState<Course[]>([])
   const [teachers, setTeachers] = useState<Teacher[]>([])
+  const [expectedByCourse, setExpectedByCourse] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [q, setQ] = useState("")
@@ -94,9 +95,10 @@ export default function CoursesPage() {
     setLoading(true)
     setErr(null)
     try {
-      const [coursesRes, teachersRes] = await Promise.all([
+      const [coursesRes, teachersRes, enrollmentsRes] = await Promise.all([
         fetch("/api/courses", { cache: "no-store" }),
-        fetch("/api/teachers", { cache: "no-store" })
+        fetch("/api/teachers", { cache: "no-store" }),
+        fetch("/api/enrollments", { cache: "no-store" }),
       ])
       if (!coursesRes.ok) throw new Error(`Failed to load courses (${coursesRes.status})`)
       const coursesData = await coursesRes.json()
@@ -105,6 +107,18 @@ export default function CoursesPage() {
       if (teachersRes.ok) {
         const teachersData = await teachersRes.json()
         setTeachers(teachersData ?? [])
+      }
+      if (enrollmentsRes.ok) {
+        const enrollments = await enrollmentsRes.json()
+        const sumMap: Record<string, number> = {}
+        ;(Array.isArray(enrollments) ? enrollments : []).forEach((e: any) => {
+          const cid = String(e?.courseId || e?.courseIdRef || "")
+          if (!cid) return
+          sumMap[cid] = (sumMap[cid] || 0) + Number(e?.coursePrice || 0)
+        })
+        setExpectedByCourse(sumMap)
+      } else {
+        setExpectedByCourse({})
       }
     } catch (e: any) {
       setErr(e?.message ?? "Failed to load")
@@ -427,9 +441,9 @@ export default function CoursesPage() {
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((c) => {
             const isTotalPriceMode = isTotalCoursePricingType(c.courseType)
-            const totalExpected = isTotalPriceMode
+            const totalExpected = Number(expectedByCourse[c.id] ?? (isTotalPriceMode
               ? (c.price || 0)
-              : (c.enrollmentCount || 0) * (c.price || 0)
+              : (c.enrollmentCount || 0) * (c.price || 0)))
             const remaining = totalExpected - (c.totalPaid || 0)
             const statusPres = getCourseStatusPresentation({
               status: c.status,

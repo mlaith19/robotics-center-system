@@ -13,6 +13,22 @@ function isMissingColumnError(e: unknown): boolean {
   return code === "42703"
 }
 
+async function ensureEnrollmentAuditColumns(db: any) {
+  const safe = async (q: Promise<unknown>) => {
+    try {
+      await q
+    } catch (err) {
+      console.warn("[enrollments] ensure column skipped:", err)
+    }
+  }
+  await safe(
+    db`
+      ALTER TABLE "Enrollment"
+      ADD COLUMN IF NOT EXISTS "createdByUserId" TEXT
+    `
+  )
+}
+
 export const GET = withTenantAuth(async (req, _session) => {
   const [tenant, tenantErr] = await requireTenant(req)
   if (tenantErr) return tenantErr
@@ -106,6 +122,7 @@ export const GET = withTenantAuth(async (req, _session) => {
   }
 
   try {
+    await ensureEnrollmentAuditColumns(db)
     await ensureSiblingDiscountTables(db)
     let result: Record<string, unknown>[]
     try {
@@ -170,7 +187,8 @@ export const GET = withTenantAuth(async (req, _session) => {
           rank = await getSiblingRank(db, studentIdVal)
           rankCache.set(studentIdVal, rank)
         }
-        const amountForRank = resolveSiblingAmountByRank(pkg, rank)
+        const resolvedRank = rank && rank > 0 ? rank : 1
+        const amountForRank = resolveSiblingAmountByRank(pkg, resolvedRank)
         if (amountForRank != null) {
           effectivePrice = resolveEffectiveCoursePriceByPackage(pkg.pricingMode, amountForRank, {
             duration: Number(r.courseDuration || 0),
@@ -198,6 +216,7 @@ export const POST = withTenantAuth(async (req, session) => {
   if (tenantErr) return tenantErr
   const db = tenant.db
   try {
+    await ensureEnrollmentAuditColumns(db)
     const body = await req.json()
     const { studentId, courseId, status, sessionsLeft } = body
 
