@@ -200,19 +200,19 @@ export function ImportFromExcel() {
 
   return (
     <Card>
-      <CardHeader className="text-right">
+      <CardHeader className="px-3 text-right sm:px-6">
         <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
           <FileSpreadsheet className="h-5 w-5 text-primary" />
           {t("import.tabTitle")}
         </CardTitle>
         <CardDescription className="text-right">{t("import.tabDescription")}</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6" dir={locale === "en" ? "ltr" : "rtl"}>
+      <CardContent className="space-y-6 px-3 sm:px-6" dir={locale === "en" ? "ltr" : "rtl"}>
         {/* A) Entity + Template download */}
         <div className="space-y-2">
           <Label>{t("import.importType")}</Label>
           <Select value={entity} onValueChange={(v) => setEntity(v as EntityType)}>
-            <SelectTrigger className="max-w-xs">
+            <SelectTrigger className="w-full sm:max-w-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -226,13 +226,13 @@ export function ImportFromExcel() {
         </div>
         <div className="space-y-2">
           <Label>{t("import.downloadTemplate")}</Label>
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={() => downloadTemplate("he")}>
-              <Download className="h-4 w-4 ml-2" />
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => downloadTemplate("he")}>
+              <Download className="ml-2 h-4 w-4" />
               {t("import.templateHebrew")}
             </Button>
-            <Button type="button" variant="outline" onClick={() => downloadTemplate("en")}>
-              <Download className="h-4 w-4 ml-2" />
+            <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => downloadTemplate("en")}>
+              <Download className="ml-2 h-4 w-4" />
               {t("import.templateEnglish")}
             </Button>
           </div>
@@ -241,24 +241,24 @@ export function ImportFromExcel() {
         {/* C) Upload */}
         <div className="space-y-2">
           <Label>{t("import.uploadFile")}</Label>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
             <input
               type="file"
               accept=".xlsx,.csv"
               onChange={handleFileChange}
-              className="text-sm file:mr-2 file:rounded file:border-0 file:bg-primary file:px-4 file:py-2 file:text-primary-foreground"
+              className="w-full min-w-0 text-sm file:mr-2 file:rounded file:border-0 file:bg-primary file:px-4 file:py-2 file:text-primary-foreground"
             />
             {file && (
-              <span className="text-sm text-muted-foreground">
+              <span className="break-all text-sm text-muted-foreground">
                 {file.name} ({(file.size / 1024).toFixed(1)} KB)
               </span>
             )}
           </div>
           {sheetNames.length > 1 && (
-            <div className="flex items-center gap-2 mt-2">
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
               <Label className="text-muted-foreground">{t("import.selectSheet")}</Label>
               <Select value={selectedSheet} onValueChange={setSelectedSheet}>
-                <SelectTrigger className="w-48">
+                <SelectTrigger className="w-full sm:w-48">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -271,8 +271,8 @@ export function ImportFromExcel() {
               </Select>
             </div>
           )}
-          <Button type="button" onClick={parseFile} disabled={!file || parseLoading}>
-            {parseLoading ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Upload className="h-4 w-4 ml-2" />}
+          <Button type="button" className="w-full sm:w-auto" onClick={parseFile} disabled={!file || parseLoading}>
+            {parseLoading ? <Loader2 className="ml-2 h-4 w-4 animate-spin" /> : <Upload className="ml-2 h-4 w-4" />}
             {t("import.parseFile")}
           </Button>
         </div>
@@ -282,8 +282,8 @@ export function ImportFromExcel() {
           <div className="space-y-2">
             <Label>{t("import.columnMapping")}</Label>
             <p className="text-sm text-muted-foreground">{t("import.columnMappingHint")}</p>
-            <div className="border rounded-md overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto rounded-md border">
+              <table className="w-full min-w-[300px] text-sm">
                 <thead>
                   <tr className="border-b bg-muted/50">
                     <th className="text-right p-2">{t("import.excelColumn")}</th>
@@ -316,7 +316,7 @@ export function ImportFromExcel() {
                 </tbody>
               </table>
             </div>
-            <Button type="button" variant="secondary" onClick={validatePreview}>
+            <Button type="button" variant="secondary" className="w-full sm:w-auto" onClick={validatePreview}>
               {t("import.validatePreview")}
             </Button>
           </div>
@@ -342,8 +342,8 @@ export function ImportFromExcel() {
         {rows.length > 0 && validation && (
           <div className="space-y-2">
             <Label>{t("import.preview")} (10)</Label>
-            <div className="border rounded-md overflow-x-auto max-h-64 overflow-y-auto">
-              <table className="w-full text-sm">
+            <div className="max-h-64 overflow-x-auto overflow-y-auto rounded-md border">
+              <table className="w-full min-w-[480px] text-sm">
                 <thead className="sticky top-0 bg-muted">
                   <tr className="border-b">
                     <th className="p-2 w-12">#</th>
@@ -385,7 +385,7 @@ export function ImportFromExcel() {
             <div className="space-y-2">
               <Label>{t("import.importMode")}</Label>
               <Select value={importMode} onValueChange={(v) => setImportMode(v as "create" | "upsert")}>
-                <SelectTrigger className="max-w-xs">
+                <SelectTrigger className="w-full sm:max-w-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -396,10 +396,11 @@ export function ImportFromExcel() {
             </div>
             <Button
               type="button"
+              className="w-full sm:w-auto"
               onClick={runImport}
               disabled={importing || (validation !== null && !validation.valid)}
             >
-              {importing ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : null}
+              {importing ? <Loader2 className="ml-2 h-4 w-4 animate-spin" /> : null}
               {t("import.runImport")}
             </Button>
           </div>

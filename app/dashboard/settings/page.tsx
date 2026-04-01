@@ -505,17 +505,17 @@ export default function SettingsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64" dir="rtl">
+      <div className="flex h-64 min-h-[300px] items-center justify-center p-3 sm:p-6" dir="rtl">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
   }
 
   return (
-    <div className="space-y-8" dir="rtl">
-      <div className="flex items-center justify-between">
+    <div className="container mx-auto max-w-7xl space-y-6 p-3 sm:space-y-8 sm:p-6" dir="rtl">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <PageHeader title="הגדרות" description="הגדרות מערכת ותצורה" />
-        <Button onClick={handleSave} className="gap-2" disabled={isSaving}>
+        <Button onClick={handleSave} className="w-full shrink-0 gap-2 sm:w-auto" disabled={isSaving}>
           {isSaving ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -531,51 +531,53 @@ export default function SettingsPage() {
       </div>
 
       <Tabs defaultValue="general" className="w-full" dir="rtl">
-        <TabsList className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-1 mb-6">
-          <TabsTrigger value="general" className="flex flex-row-reverse items-center justify-center gap-2">
-            <Building2 className="h-4 w-4" />
+        <div className="-mx-1 overflow-x-auto px-1 pb-1 sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0">
+          <TabsList className="mb-4 flex h-auto w-max min-w-full max-w-none flex-nowrap justify-start gap-1 overflow-x-auto rounded-lg bg-muted p-1 sm:mb-6 lg:grid lg:w-full lg:min-w-0 lg:grid-cols-7 lg:overflow-visible lg:p-1">
+          <TabsTrigger value="general" className="flex shrink-0 flex-row-reverse items-center justify-center gap-2 rounded-md px-2 text-xs data-[state=active]:shadow-sm sm:text-sm lg:min-w-0">
+            <Building2 className="h-4 w-4 shrink-0" />
             <span>כללי</span>
           </TabsTrigger>
-          <TabsTrigger value="numbers" className="flex flex-row-reverse items-center justify-center gap-2">
-            <Hash className="h-4 w-4" />
+          <TabsTrigger value="numbers" className="flex shrink-0 flex-row-reverse items-center justify-center gap-2 rounded-md px-2 text-xs data-[state=active]:shadow-sm sm:text-sm lg:min-w-0">
+            <Hash className="h-4 w-4 shrink-0" />
             <span>מספרים</span>
           </TabsTrigger>
-          <TabsTrigger value="categories" className="flex flex-row-reverse items-center justify-center gap-2">
-            <FolderOpen className="h-4 w-4" />
+          <TabsTrigger value="categories" className="flex shrink-0 flex-row-reverse items-center justify-center gap-2 rounded-md px-2 text-xs data-[state=active]:shadow-sm sm:text-sm lg:min-w-0">
+            <FolderOpen className="h-4 w-4 shrink-0" />
             <span>קטגוריות קורס</span>
           </TabsTrigger>
-          <TabsTrigger value="siblings" className="flex flex-row-reverse items-center justify-center gap-2">
-            <Hash className="h-4 w-4" />
+          <TabsTrigger value="siblings" className="flex shrink-0 flex-row-reverse items-center justify-center gap-2 rounded-md px-2 text-xs data-[state=active]:shadow-sm sm:text-sm lg:min-w-0">
+            <Hash className="h-4 w-4 shrink-0" />
             <span>חבילות אחים</span>
           </TabsTrigger>
-          <TabsTrigger value="teacher-tariffs" className="flex flex-row-reverse items-center justify-center gap-2">
-            <Banknote className="h-4 w-4" />
+          <TabsTrigger value="teacher-tariffs" className="flex shrink-0 flex-row-reverse items-center justify-center gap-2 rounded-md px-2 text-xs data-[state=active]:shadow-sm sm:text-sm lg:min-w-0">
+            <Banknote className="h-4 w-4 shrink-0" />
             <span>תעריפי מורים</span>
           </TabsTrigger>
-          <TabsTrigger value="import" className="flex flex-row-reverse items-center justify-center gap-2">
-            <FileSpreadsheet className="h-4 w-4" />
+          <TabsTrigger value="import" className="flex shrink-0 flex-row-reverse items-center justify-center gap-2 rounded-md px-2 text-xs data-[state=active]:shadow-sm sm:text-sm lg:min-w-0">
+            <FileSpreadsheet className="h-4 w-4 shrink-0" />
             <span>ייבוא מאקסל</span>
           </TabsTrigger>
-          <TabsTrigger value="other" className="flex flex-row-reverse items-center justify-center gap-2">
-            <Settings2 className="h-4 w-4" />
+          <TabsTrigger value="other" className="flex shrink-0 flex-row-reverse items-center justify-center gap-2 rounded-md px-2 text-xs data-[state=active]:shadow-sm sm:text-sm lg:min-w-0">
+            <Settings2 className="h-4 w-4 shrink-0" />
             <span>אחר</span>
           </TabsTrigger>
         </TabsList>
+        </div>
 
         {/* טאב כללי */}
         <TabsContent value="general">
           <Card>
-            <CardHeader className="text-right">
+            <CardHeader className="px-3 text-right sm:px-6">
               <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
                 <Building2 className="h-5 w-5 text-primary" />
                 פרטי המרכז
               </CardTitle>
               <CardDescription className="text-right">הגדר את פרטי המרכז שלך</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-6 px-3 sm:px-6">
               {/* שם המרכז */}
               <div className="space-y-2">
-                <Label htmlFor="centerName" className="text-right block">שם המרכז *</Label>
+                <Label htmlFor="centerName" className="block text-right">שם המרכז *</Label>
                 <Input
                   id="centerName"
                   placeholder="לדוגמה: מרכז הרובוטיקה"
@@ -602,38 +604,38 @@ export default function SettingsPage() {
               {/* לוגו */}
               <div className="space-y-2">
                 <Label>לוגו המרכז</Label>
-                <div className="flex items-center gap-4">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                   {logoPreview ? (
-                    <div className="relative">
+                    <div className="relative shrink-0">
                       <img
                         src={logoPreview || "/placeholder.svg"}
                         alt="Logo preview"
-                        className="h-24 w-24 object-contain rounded border"
+                        className="h-24 w-24 rounded border object-contain"
                       />
                       <Button
                         type="button"
                         variant="destructive"
                         size="icon"
-                        className="absolute -top-2 -right-2 h-6 w-6 rounded-full"
+                        className="absolute -right-2 -top-2 h-6 w-6 rounded-full"
                         onClick={handleRemoveLogo}
                       >
                         <X className="h-3 w-3" />
                       </Button>
                     </div>
                   ) : (
-                    <div className="h-24 w-24 border-2 border-dashed rounded flex items-center justify-center bg-muted">
+                    <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded border-2 border-dashed bg-muted">
                       <Upload className="h-8 w-8 text-muted-foreground" />
                     </div>
                   )}
-                  <div>
-                    <Input type="file" accept="image/*" onChange={handleLogoUpload} className="max-w-[250px]" />
-                    <p className="text-xs text-muted-foreground mt-1">PNG, JPG עד 2MB</p>
+                  <div className="min-w-0 flex-1">
+                    <Input type="file" accept="image/*" onChange={handleLogoUpload} className="w-full max-w-full sm:max-w-[280px]" />
+                    <p className="mt-1 text-xs text-muted-foreground">PNG, JPG עד 2MB</p>
                   </div>
                 </div>
               </div>
 
               {/* מספרי טלפון */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="phone" className="text-right block">מספר נייד *</Label>
                   <Input
@@ -673,8 +675,8 @@ export default function SettingsPage() {
                   dir="rtl"
                 />
               </div>
-              <div className="pt-4 border-t flex flex-row-reverse justify-end">
-                <Button onClick={handleSave} className="gap-2" disabled={isSaving}>
+              <div className="flex flex-col-reverse border-t pt-4 sm:flex-row sm:justify-end">
+                <Button onClick={handleSave} className="w-full gap-2 sm:w-auto" disabled={isSaving}>
                   {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   {isSaving ? "שומר..." : "שמור הגדרות"}
                 </Button>
@@ -685,7 +687,7 @@ export default function SettingsPage() {
 
         <TabsContent value="siblings">
           <Card>
-            <CardHeader className="text-right">
+            <CardHeader className="px-3 text-right sm:px-6">
               <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
                 <Hash className="h-5 w-5 text-primary" />
                 חבילות הנחת אחים
@@ -694,9 +696,9 @@ export default function SettingsPage() {
                 הגדרת מחיר לילד ראשון / שני / שלישי. את ההפעלה בפועל מבצעים עם הרשאת "הנחת אחים".
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-row-reverse justify-end">
-                <Button type="button" onClick={openAddSiblingPackage} className="gap-2">
+            <CardContent className="space-y-4 px-3 sm:px-6">
+              <div className="flex flex-row-reverse justify-stretch sm:justify-end">
+                <Button type="button" onClick={openAddSiblingPackage} className="w-full gap-2 sm:w-auto">
                   <Plus className="h-4 w-4" />
                   הוסף חבילת אחים
                 </Button>
@@ -706,16 +708,16 @@ export default function SettingsPage() {
               ) : (
                 <ul className="space-y-2 border rounded-lg p-2">
                   {siblingPackages.map((pkg) => (
-                    <li key={pkg.id} className="flex flex-row-reverse items-center justify-between gap-2 rounded-md border bg-card px-3 py-2">
-                      <div className="text-right">
+                    <li key={pkg.id} className="flex flex-col gap-3 rounded-md border bg-card px-3 py-3 sm:flex-row-reverse sm:items-center sm:justify-between sm:py-2">
+                      <div className="min-w-0 text-right">
                         <div className="font-medium">{pkg.name}</div>
-                        <div className="text-xs text-muted-foreground">
+                        <div className="text-xs text-muted-foreground break-words">
                           {pkg.pricingMode === "perStudent" ? "לפי ילד" : pkg.pricingMode === "perCourse" ? "לפי קורס" : pkg.pricingMode === "perSession" ? "לפי מפגש" : "לפי שעה"} |
                           ראשון: ₪{pkg.firstAmount} | שני: ₪{pkg.secondAmount} | שלישי+: ₪{pkg.thirdAmount}
                           {pkg.isActive ? " | פעיל" : " | לא פעיל"}
                         </div>
                       </div>
-                      <div className="flex gap-1">
+                      <div className="flex shrink-0 justify-end gap-1">
                         <Button type="button" variant="outline" size="icon" onClick={() => openEditSiblingPackage(pkg)} title="ערוך">
                           <Pencil className="h-4 w-4" />
                         </Button>
@@ -733,7 +735,7 @@ export default function SettingsPage() {
 
         <TabsContent value="teacher-tariffs">
           <Card>
-            <CardHeader className="text-right">
+            <CardHeader className="px-3 text-right sm:px-6">
               <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
                 <Banknote className="h-5 w-5 text-primary" />
                 פרופילי תעריף למורים
@@ -743,9 +745,9 @@ export default function SettingsPage() {
                 חל — כל מורה בקורס יכולה לקבל פרופיל אחר. נדרשת הרשאת עריכת הגדרות לשינוי כאן; לשיוך בקורס נדרשת עריכת קורסים.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-row-reverse justify-end">
-                <Button type="button" onClick={openAddTeacherTariff} className="gap-2">
+            <CardContent className="space-y-4 px-3 sm:px-6">
+              <div className="flex flex-row-reverse justify-stretch sm:justify-end">
+                <Button type="button" onClick={openAddTeacherTariff} className="w-full gap-2 sm:w-auto">
                   <Plus className="h-4 w-4" />
                   הוסף פרופיל תעריף
                 </Button>
@@ -757,16 +759,16 @@ export default function SettingsPage() {
                   {teacherTariffProfiles.map((row) => (
                     <li
                       key={row.id}
-                      className="flex flex-row-reverse items-center justify-between gap-2 rounded-md border bg-card px-3 py-2"
+                      className="flex flex-col gap-3 rounded-md border bg-card px-3 py-3 sm:flex-row-reverse sm:items-center sm:justify-between sm:py-2"
                     >
-                      <div className="text-right">
+                      <div className="min-w-0 text-right">
                         <div className="font-medium">{row.name}</div>
                         <div className="text-xs text-muted-foreground">
                           {row.pricingMethod === "per_student_tier" ? "לפי תלמידים" : "רגיל (מרכז/חיצוני)"}
                           {row.isActive ? " | פעיל" : " | לא פעיל"}
                         </div>
                       </div>
-                      <div className="flex gap-1">
+                      <div className="flex shrink-0 justify-end gap-1">
                         <Button type="button" variant="outline" size="icon" onClick={() => openEditTeacherTariff(row)} title="ערוך">
                           <Pencil className="h-4 w-4" />
                         </Button>
@@ -791,17 +793,17 @@ export default function SettingsPage() {
         {/* טאב מספרים */}
         <TabsContent value="numbers">
           <Card>
-            <CardHeader className="text-right">
+            <CardHeader className="px-3 text-right sm:px-6">
               <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
                 <Hash className="h-5 w-5 text-primary" />
                 מחירים והגדרות מספריות
               </CardTitle>
               <CardDescription className="text-right">הגדר מחירים והגבלות מספריות</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
+            <CardContent className="space-y-6 px-3 sm:px-6">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="lessonPrice" className="text-right block">מחיר שיעור בודד (בש"ח)</Label>
+                  <Label htmlFor="lessonPrice" className="block text-right">מחיר שיעור בודד (בש"ח)</Label>
                   <Input
                     id="lessonPrice"
                     type="number"
@@ -826,9 +828,9 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="registrationFee" className="text-right block">דמי רישום (בש"ח)</Label>
+                  <Label htmlFor="registrationFee" className="block text-right">דמי רישום (בש"ח)</Label>
                   <Input
                     id="registrationFee"
                     type="number"
@@ -867,8 +869,8 @@ export default function SettingsPage() {
                   dir="rtl"
                 />
               </div>
-              <div className="pt-4 border-t flex flex-row-reverse justify-end">
-                <Button onClick={handleSave} className="gap-2" disabled={isSaving}>
+              <div className="flex flex-col-reverse border-t pt-4 sm:flex-row sm:justify-end">
+                <Button onClick={handleSave} className="w-full gap-2 sm:w-auto" disabled={isSaving}>
                   {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   {isSaving ? "שומר..." : "שמור הגדרות"}
                 </Button>
@@ -880,7 +882,7 @@ export default function SettingsPage() {
         {/* טאב קטגוריות קורס */}
         <TabsContent value="categories">
           <Card>
-            <CardHeader className="text-right">
+            <CardHeader className="px-3 text-right sm:px-6">
               <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
                 <FolderOpen className="h-5 w-5 text-primary" />
                 קטגוריות קורס
@@ -889,9 +891,9 @@ export default function SettingsPage() {
                 ניהול קטגוריות להצגה בבחירת קורס (קורס חדש / עריכת קורס). הוספה, עריכה ומחיקה.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-row-reverse justify-end">
-                <Button type="button" onClick={openAddCategory} className="gap-2">
+            <CardContent className="space-y-4 px-3 sm:px-6">
+              <div className="flex flex-row-reverse justify-stretch sm:justify-end">
+                <Button type="button" onClick={openAddCategory} className="w-full gap-2 sm:w-auto">
                   <Plus className="h-4 w-4" />
                   הוסף קטגוריה
                 </Button>
@@ -903,10 +905,10 @@ export default function SettingsPage() {
                   {categories.map((cat) => (
                     <li
                       key={cat.id}
-                      className="flex flex-row-reverse items-center justify-between gap-2 rounded-md border bg-card px-3 py-2"
+                      className="flex flex-col gap-3 rounded-md border bg-card px-3 py-3 sm:flex-row-reverse sm:items-center sm:justify-between sm:py-2"
                     >
-                      <span className="font-medium" dir="rtl">{cat.name}</span>
-                      <div className="flex gap-1">
+                      <span className="min-w-0 font-medium break-words" dir="rtl">{cat.name}</span>
+                      <div className="flex shrink-0 justify-end gap-1">
                         <Button
                           type="button"
                           variant="outline"
@@ -942,17 +944,17 @@ export default function SettingsPage() {
         {/* טאב אחר */}
         <TabsContent value="other">
           <Card>
-            <CardHeader className="text-right">
+            <CardHeader className="px-3 text-right sm:px-6">
               <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
                 <Settings2 className="h-5 w-5 text-primary" />
                 הגדרות נוספות
               </CardTitle>
               <CardDescription className="text-right">הגדרות נוספות של המרכז</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
+            <CardContent className="space-y-6 px-3 sm:px-6">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="email" className="text-right block">כתובת אימייל</Label>
+                  <Label htmlFor="email" className="block text-right">כתובת אימייל</Label>
                   <Input
                     id="email"
                     type="email"
@@ -1002,8 +1004,8 @@ export default function SettingsPage() {
                   dir="rtl"
                 />
               </div>
-              <div className="pt-4 border-t flex flex-row-reverse justify-end">
-                <Button onClick={handleSave} className="gap-2" disabled={isSaving}>
+              <div className="flex flex-col-reverse border-t pt-4 sm:flex-row sm:justify-end">
+                <Button onClick={handleSave} className="w-full gap-2 sm:w-auto" disabled={isSaving}>
                   {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   {isSaving ? "שומר..." : "שמור הגדרות"}
                 </Button>
@@ -1014,7 +1016,7 @@ export default function SettingsPage() {
       </Tabs>
 
       <Dialog open={categoryDialog.open} onOpenChange={(open) => setCategoryDialog((d) => ({ ...d, open }))}>
-        <DialogContent className="sm:max-w-md" dir="rtl">
+        <DialogContent className="max-h-[90dvh] max-w-[calc(100vw-1.5rem)] overflow-y-auto sm:max-w-md" dir="rtl">
           <DialogHeader>
             <DialogTitle>{categoryDialog.edit ? "עריכת קטגוריה" : "הוספת קטגוריה"}</DialogTitle>
             <DialogDescription>שם הקטגוריה כפי שיופיע בבחירת קורס.</DialogDescription>
@@ -1030,11 +1032,11 @@ export default function SettingsPage() {
               dir="rtl"
             />
           </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button type="button" variant="outline" onClick={() => setCategoryDialog({ open: false, edit: null, name: "" })}>
+          <DialogFooter className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-2">
+            <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setCategoryDialog({ open: false, edit: null, name: "" })}>
               ביטול
             </Button>
-            <Button type="button" onClick={saveCategory} disabled={categorySaving}>
+            <Button type="button" className="w-full sm:w-auto" onClick={saveCategory} disabled={categorySaving}>
               {categorySaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {categoryDialog.edit ? "עדכן" : "הוסף"}
             </Button>
@@ -1043,7 +1045,7 @@ export default function SettingsPage() {
       </Dialog>
 
       <Dialog open={siblingDialog.open} onOpenChange={(open) => setSiblingDialog((d) => ({ ...d, open }))}>
-        <DialogContent className="sm:max-w-md" dir="rtl">
+        <DialogContent className="max-h-[90dvh] max-w-[calc(100vw-1.5rem)] overflow-y-auto sm:max-w-md" dir="rtl">
           <DialogHeader>
             <DialogTitle>{siblingDialog.edit ? "עריכת חבילת אחים" : "הוספת חבילת אחים"}</DialogTitle>
             <DialogDescription>הגדר מחיר קבוע לכל סדר אחאות (ראשון, שני, שלישי+).</DialogDescription>
@@ -1069,7 +1071,7 @@ export default function SettingsPage() {
                 dir="rtl"
               />
             </div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div className="space-y-1">
                 <Label>ראשון</Label>
                 <Input type="number" value={siblingDialog.firstAmount} onChange={(e) => setSiblingDialog((d) => ({ ...d, firstAmount: e.target.value }))} />
@@ -1102,20 +1104,21 @@ export default function SettingsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <label className="flex flex-row-reverse items-center gap-2 text-sm">
+            <label className="flex flex-row-reverse items-start gap-2 text-sm">
               <input
                 type="checkbox"
+                className="mt-0.5 shrink-0"
                 checked={siblingDialog.isActive}
                 onChange={(e) => setSiblingDialog((d) => ({ ...d, isActive: e.target.checked }))}
               />
-              חבילה פעילה
+              <span className="leading-snug">חבילה פעילה</span>
             </label>
           </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button type="button" variant="outline" onClick={() => setSiblingDialog((d) => ({ ...d, open: false }))}>
+          <DialogFooter className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-2">
+            <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setSiblingDialog((d) => ({ ...d, open: false }))}>
               ביטול
             </Button>
-            <Button type="button" onClick={saveSiblingPackage} disabled={siblingSaving}>
+            <Button type="button" className="w-full sm:w-auto" onClick={saveSiblingPackage} disabled={siblingSaving}>
               {siblingSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {siblingDialog.edit ? "עדכן" : "הוסף"}
             </Button>
@@ -1124,7 +1127,7 @@ export default function SettingsPage() {
       </Dialog>
 
       <Dialog open={tariffDialog.open} onOpenChange={(open) => setTariffDialog((d) => ({ ...d, open }))}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto" dir="rtl">
+        <DialogContent className="max-h-[90dvh] max-w-[calc(100vw-1.5rem)] overflow-y-auto sm:max-w-lg" dir="rtl">
           <DialogHeader>
             <DialogTitle>{tariffDialog.edit ? "עריכת פרופיל תעריף" : "פרופיל תעריף חדש"}</DialogTitle>
             <DialogDescription>הגדרות אלה חלות על כל המורים שישויכו לפרופיל זה מתוך קורס.</DialogDescription>
@@ -1214,18 +1217,19 @@ export default function SettingsPage() {
                 </div>
               </div>
             )}
-            <div className="flex flex-row-reverse items-center gap-2">
+            <div className="flex flex-row-reverse items-start gap-2">
               <Checkbox
                 id="tariff-bonus"
+                className="mt-0.5 shrink-0"
                 checked={tariffDialog.bonusEnabled}
                 onCheckedChange={(c) => setTariffDialog((d) => ({ ...d, bonusEnabled: c === true }))}
               />
-              <Label htmlFor="tariff-bonus" className="cursor-pointer">
+              <Label htmlFor="tariff-bonus" className="cursor-pointer leading-snug">
                 בונוס לשעה מעל מספר תלמידים
               </Label>
             </div>
             {tariffDialog.bonusEnabled && (
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <div className="space-y-1">
                   <Label>מינימום תלמידים</Label>
                   <Input
@@ -1244,22 +1248,23 @@ export default function SettingsPage() {
                 </div>
               </div>
             )}
-            <div className="flex flex-row-reverse items-center gap-2">
+            <div className="flex flex-row-reverse items-start gap-2">
               <Checkbox
                 id="tariff-active"
+                className="mt-0.5 shrink-0"
                 checked={tariffDialog.isActive}
                 onCheckedChange={(c) => setTariffDialog((d) => ({ ...d, isActive: c === true }))}
               />
-              <Label htmlFor="tariff-active" className="cursor-pointer">
+              <Label htmlFor="tariff-active" className="cursor-pointer leading-snug">
                 פרופיל פעיל (מופיע בבחירה בקורס)
               </Label>
             </div>
           </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button type="button" variant="outline" onClick={() => setTariffDialog((d) => ({ ...d, open: false }))}>
+          <DialogFooter className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-2">
+            <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setTariffDialog((d) => ({ ...d, open: false }))}>
               ביטול
             </Button>
-            <Button type="button" onClick={saveTeacherTariffProfile} disabled={tariffSaving}>
+            <Button type="button" className="w-full sm:w-auto" onClick={saveTeacherTariffProfile} disabled={tariffSaving}>
               {tariffSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {tariffDialog.edit ? "עדכן" : "הוסף"}
             </Button>
