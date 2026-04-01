@@ -56,7 +56,7 @@ interface SiblingPackageRow {
   id: string
   name: string
   description: string | null
-  pricingMode: "perCourse" | "perSession" | "perHour"
+  pricingMode: "perStudent" | "perCourse" | "perSession" | "perHour"
   firstAmount: number
   secondAmount: number
   thirdAmount: number
@@ -111,7 +111,7 @@ export default function SettingsPage() {
     firstAmount: string
     secondAmount: string
     thirdAmount: string
-    pricingMode: "perCourse" | "perSession" | "perHour"
+    pricingMode: "perStudent" | "perCourse" | "perSession" | "perHour"
     isActive: boolean
   }>({
     open: false,
@@ -556,7 +556,7 @@ export default function SettingsPage() {
                       <div className="text-right">
                         <div className="font-medium">{pkg.name}</div>
                         <div className="text-xs text-muted-foreground">
-                          {pkg.pricingMode === "perCourse" ? "לפי קורס" : pkg.pricingMode === "perSession" ? "לפי מפגש" : "לפי שעה"} |
+                          {pkg.pricingMode === "perStudent" ? "לפי ילד" : pkg.pricingMode === "perCourse" ? "לפי קורס" : pkg.pricingMode === "perSession" ? "לפי מפגש" : "לפי שעה"} |
                           ראשון: ₪{pkg.firstAmount} | שני: ₪{pkg.secondAmount} | שלישי+: ₪{pkg.thirdAmount}
                           {pkg.isActive ? " | פעיל" : " | לא פעיל"}
                         </div>
@@ -876,7 +876,7 @@ export default function SettingsPage() {
               <Label>שיטת חישוב חבילה</Label>
               <Select
                 value={siblingDialog.pricingMode}
-                onValueChange={(value: "perCourse" | "perSession" | "perHour") =>
+                onValueChange={(value: "perStudent" | "perCourse" | "perSession" | "perHour") =>
                   setSiblingDialog((d) => ({ ...d, pricingMode: value }))
                 }
               >
@@ -884,6 +884,7 @@ export default function SettingsPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="perStudent">לפי ילד</SelectItem>
                   <SelectItem value="perCourse">לפי קורס (סכום כולל)</SelectItem>
                   <SelectItem value="perSession">לפי מפגש</SelectItem>
                   <SelectItem value="perHour">לפי שעה</SelectItem>

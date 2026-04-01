@@ -43,7 +43,10 @@ interface Enrollment {
   studentName: string
   status: string
   enrollmentDate: string
+  createdByUserId?: string | null
   createdByUserName?: string | null
+  siblingDiscountPackageName?: string | null
+  siblingDiscountPackageSource?: "course" | "student" | null
 }
 
 interface CourseSessionFeedback {
@@ -114,6 +117,10 @@ export default function CourseViewPage() {
     enrolledStudents: locale === "ar" ? "الطلاب المسجلون في الدورة" : locale === "en" ? "Students Enrolled In Course" : "תלמידים רשומים לקורס",
     student: locale === "ar" ? "الطالب" : locale === "en" ? "Student" : "תלמיד",
     enrollmentDate: locale === "ar" ? "تاريخ التسجيل" : locale === "en" ? "Enrollment Date" : "תאריך רישום",
+    siblingPackage: locale === "ar" ? "حزمة خصم إخوة" : locale === "en" ? "Sibling Discount Package" : "חבילת הנחת אחים",
+    packageSource: locale === "ar" ? "מקור חבילה" : locale === "en" ? "Package Source" : "מקור חבילה",
+    sourceCourse: locale === "ar" ? "من الدورة" : locale === "en" ? "From Course" : "מהקורס",
+    sourceStudent: locale === "ar" ? "من الطالب" : locale === "en" ? "From Student" : "מהתלמיד",
     performedBy: locale === "ar" ? "تم بواسطة" : locale === "en" ? "Performed By" : "בוצע על ידי",
     noneStudents: locale === "ar" ? "لا يوجد طلاب مسجلون في هذه الدورة" : locale === "en" ? "No students enrolled in this course" : "אין תלמידים רשומים לקורס זה",
     paymentInfoPlaceholder: locale === "ar" ? "سيتم عرض معلومات التكلفة والمدفوعات هنا" : locale === "en" ? "Cost and payment details will be shown here" : "פרטי עלות ותשלומים יוצגו כאן",
@@ -623,6 +630,8 @@ export default function CourseViewPage() {
                         <TableHead className="text-right">{tr.student}</TableHead>
                         <TableHead className="text-right">{tr.status}</TableHead>
                         <TableHead className="text-right">{tr.enrollmentDate}</TableHead>
+                        <TableHead className="text-right">{tr.siblingPackage}</TableHead>
+                        <TableHead className="text-right">{tr.packageSource}</TableHead>
                         <TableHead className="text-right">{tr.performedBy}</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -638,7 +647,17 @@ export default function CourseViewPage() {
                           <TableCell className="text-right text-muted-foreground">
                             {enrollment.enrollmentDate ? new Date(enrollment.enrollmentDate).toLocaleDateString(localeTag) : "-"}
                           </TableCell>
-                          <TableCell className="text-right text-muted-foreground">{enrollment.createdByUserName || "—"}</TableCell>
+                          <TableCell className="text-right text-muted-foreground">{enrollment.siblingDiscountPackageName || "—"}</TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {enrollment.siblingDiscountPackageSource === "course"
+                              ? tr.sourceCourse
+                              : enrollment.siblingDiscountPackageSource === "student"
+                                ? tr.sourceStudent
+                                : "—"}
+                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {enrollment.createdByUserName || enrollment.createdByUserId || "—"}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

@@ -38,7 +38,7 @@ interface GafanProgram {
 interface SiblingPackage {
   id: string
   name: string
-  pricingMode: "perCourse" | "perSession" | "perHour"
+  pricingMode: "perStudent" | "perCourse" | "perSession" | "perHour"
   isActive: boolean
 }
 
@@ -785,7 +785,7 @@ export default function EditCoursePage() {
                 <SelectItem value="none">ללא חבילה</SelectItem>
                 {siblingPackages.map((pkg) => (
                   <SelectItem key={pkg.id} value={pkg.id}>
-                    {pkg.name} ({pkg.pricingMode === "perCourse" ? "לפי קורס" : pkg.pricingMode === "perSession" ? "לפי מפגש" : "לפי שעה"})
+                    {pkg.name} ({pkg.pricingMode === "perStudent" ? "לפי ילד" : pkg.pricingMode === "perCourse" ? "לפי קורס" : pkg.pricingMode === "perSession" ? "לפי מפגש" : "לפי שעה"})
                   </SelectItem>
                 ))}
               </SelectContent>

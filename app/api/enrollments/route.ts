@@ -132,7 +132,14 @@ export const GET = withTenantAuth(async (req, _session) => {
       }
     }
 
-    const packageIds = [...new Set(Array.from(packageByStudent.values()))]
+    const packageIds = [
+      ...new Set(
+        rows
+          .map((r) => (r.siblingDiscountPackageId ? String(r.siblingDiscountPackageId) : ""))
+          .concat(Array.from(packageByStudent.values()))
+          .filter(Boolean)
+      ),
+    ]
     const packagesMap = new Map<string, SiblingDiscountPackage>()
     if (packageIds.length) {
       const pkgs = await db<SiblingDiscountPackage[]>`
@@ -148,10 +155,16 @@ export const GET = withTenantAuth(async (req, _session) => {
     const finalRows = []
     for (const r of rows) {
       const studentIdVal = String(r.studentId || "")
-      const packageId = (r.siblingDiscountPackageId ? String(r.siblingDiscountPackageId) : null) || packageByStudent.get(studentIdVal)
+      const coursePackageId = r.siblingDiscountPackageId ? String(r.siblingDiscountPackageId) : null
+      const studentPackageId = packageByStudent.get(studentIdVal) || null
+      const packageId = coursePackageId || studentPackageId
       const pkg = packageId ? packagesMap.get(packageId) : undefined
       let effectivePrice = Number(r.coursePrice || 0)
+      let siblingDiscountPackageName: string | null = null
+      let siblingDiscountPackageSource: "course" | "student" | null = null
       if (pkg && studentIdVal) {
+        siblingDiscountPackageName = String(pkg.name || "")
+        siblingDiscountPackageSource = coursePackageId ? "course" : studentPackageId ? "student" : null
         let rank = rankCache.get(studentIdVal)
         if (rank === undefined) {
           rank = await getSiblingRank(db, studentIdVal)
@@ -166,7 +179,12 @@ export const GET = withTenantAuth(async (req, _session) => {
           })
         }
       }
-      finalRows.push({ ...r, coursePrice: effectivePrice })
+      finalRows.push({
+        ...r,
+        coursePrice: effectivePrice,
+        siblingDiscountPackageName,
+        siblingDiscountPackageSource,
+      })
     }
     return Response.json(finalRows)
   } catch (err) {

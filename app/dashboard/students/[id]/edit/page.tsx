@@ -34,7 +34,7 @@ import {
 type SiblingPackage = {
   id: string
   name: string
-  pricingMode: "perCourse" | "perSession" | "perHour"
+  pricingMode: "perStudent" | "perCourse" | "perSession" | "perHour"
   isActive: boolean
 }
 
@@ -786,7 +786,7 @@ export default function EditStudentPage() {
                     .filter((p) => p.isActive !== false)
                     .map((p) => (
                       <SelectItem key={p.id} value={p.id}>
-                        {p.name} ({p.pricingMode === "perCourse" ? "לפי קורס" : p.pricingMode === "perSession" ? "לפי מפגש" : "לפי שעה"})
+                        {p.name} ({p.pricingMode === "perStudent" ? "לפי ילד" : p.pricingMode === "perCourse" ? "לפי קורס" : p.pricingMode === "perSession" ? "לפי מפגש" : "לפי שעה"})
                       </SelectItem>
                     ))}
                 </SelectContent>
