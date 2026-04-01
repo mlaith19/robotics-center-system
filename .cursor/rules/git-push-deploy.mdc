@@ -1,0 +1,27 @@
+---
+description: פריסה — push מקומי ואז pull+Docker על השרת
+alwaysApply: true
+---
+
+# העלאת גרסה (Git + שרת)
+
+## 1) מחשב פיתוח (Windows) — לדחוף את הגרסה ל־GitHub
+
+```powershell
+Set-Location "e:\PROJECTS\robotics center system"
+git add .
+git commit -m "תיאור השינוי"
+git push origin main
+```
+
+## 2) שרת (Linux) — למשוך את הגרסה האחרונה ולבנות מחדש ב־Docker
+
+הרץ **בדיוק** (עותק אחד, שורה אחת):
+
+```bash
+cd /var/www/robotics-center && git pull origin main && (docker compose --env-file .env.production -f docker-compose.production.yml up -d --build || docker compose --env-file .env -f docker-compose.production.yml up -d --build) && docker image prune -f
+```
+
+- קודם `git pull origin main` — זה מה שמביא את **הגרסה האחרונה** מ־`main`.
+- אם נכשל עם `.env.production`, נסיון שני עם `.env`.
+- `docker image prune -f` מנקה תמונות ישנות אחרי הבנייה.

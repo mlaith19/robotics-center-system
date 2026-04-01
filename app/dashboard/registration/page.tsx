@@ -227,15 +227,15 @@ export default function RegistrationPage() {
 
   if (studentsLoading || teachersLoading) {
     return (
-      <div className="container mx-auto p-6 flex items-center justify-center min-h-[400px]" dir="rtl">
+      <div className="container mx-auto flex min-h-[400px] items-center justify-center p-3 sm:p-6" dir="rtl">
         <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     )
   }
 
   return (
-    <div className="container mx-auto p-6" dir="rtl">
-      <div className="mb-6">
+    <div className="container mx-auto p-3 sm:p-6" dir="rtl">
+      <div className="mb-4 sm:mb-6">
         <Button
           variant="ghost"
           className="mb-2 text-muted-foreground hover:text-foreground"
@@ -243,21 +243,21 @@ export default function RegistrationPage() {
         >
           ← חזרה
         </Button>
-        <h1 className="text-3xl font-bold">רישום</h1>
-        <p className="text-muted-foreground mt-2">שלח טפסי רישום לתלמידים ומורים חדשים דרך WhatsApp</p>
+        <h1 className="text-2xl font-bold sm:text-3xl">רישום</h1>
+        <p className="mt-2 text-sm text-muted-foreground sm:text-base">שלח טפסי רישום לתלמידים ומורים חדשים דרך WhatsApp</p>
       </div>
 
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Link2 className="h-5 w-5" />
+      <Card className="mb-4 sm:mb-6">
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="flex flex-wrap items-center gap-2 text-lg sm:text-xl">
+            <Link2 className="h-5 w-5 shrink-0" />
             קישור לרישום – להעתקה ושליחה
           </CardTitle>
-          <CardDescription>העתק את הקישור ושלח לתלמיד או למורה; בפתיחת הקישור ייפתח דף רישום (ללא התחברות)</CardDescription>
+          <CardDescription className="text-pretty">העתק את הקישור ושלח לתלמיד או למורה; בפתיחת הקישור ייפתח דף רישום (ללא התחברות)</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 flex-1 min-w-[200px]">
+        <CardContent className="space-y-4 p-4 pt-0 sm:p-6 sm:pt-0">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-stretch">
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 sm:min-w-[200px]">
               <UserPlus className="h-4 w-4 text-muted-foreground shrink-0" />
               <input
                 type="text"
@@ -269,8 +269,8 @@ export default function RegistrationPage() {
                 {copiedType === "student" ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
               </Button>
             </div>
-            <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 flex-1 min-w-[200px]">
-              <GraduationCap className="h-4 w-4 text-muted-foreground shrink-0" />
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 sm:min-w-[200px]">
+              <GraduationCap className="h-4 w-4 shrink-0 text-muted-foreground" />
               <input
                 type="text"
                 readOnly
@@ -282,34 +282,34 @@ export default function RegistrationPage() {
               </Button>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
-                <Button className="gap-2" variant="outline">
+                <Button className="w-full gap-2 sm:w-auto" variant="outline">
                   <Send className="h-4 w-4" />
                   שליחה ב-WhatsApp
                 </Button>
               </DialogTrigger>
-              <DialogContent dir="rtl">
+              <DialogContent dir="rtl" className="max-h-[90dvh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>שליחת טופס רישום</DialogTitle>
                   <DialogDescription>בחר סוג רישום – יישלח קישור ב-WhatsApp (דורש הגדרת מספר בהגדרות)</DialogDescription>
                 </DialogHeader>
-                <div className="grid gap-4 py-4">
+                <div className="grid gap-3 py-4 sm:gap-4">
                   <Button
                     variant="outline"
-                    className="h-20 gap-3 text-lg bg-transparent"
+                    className="h-auto min-h-[4.5rem] gap-3 py-4 text-base sm:h-20 sm:text-lg bg-transparent"
                     onClick={() => sendRegistrationForm("student")}
                   >
-                    <UserPlus className="h-6 w-6" />
+                    <UserPlus className="h-6 w-6 shrink-0" />
                     טופס רישום לתלמיד
                   </Button>
                   <Button
                     variant="outline"
-                    className="h-20 gap-3 text-lg bg-transparent"
+                    className="h-auto min-h-[4.5rem] gap-3 py-4 text-base sm:h-20 sm:text-lg bg-transparent"
                     onClick={() => sendRegistrationForm("teacher")}
                   >
-                    <GraduationCap className="h-6 w-6" />
+                    <GraduationCap className="h-6 w-6 shrink-0" />
                     טופס רישום למורה
                   </Button>
                 </div>
@@ -320,19 +320,93 @@ export default function RegistrationPage() {
       </Card>
 
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <UserPlus className="h-5 w-5" />
-                מתעניינים (טרם רשומים/פעילים)
-              </CardTitle>
-              <CardDescription>רק תלמידים ומורים בסטטוס &quot;מתעניין&quot; – לאחר רישום או מעבר לפעיל/לא פעיל הם לא יופיעו כאן</CardDescription>
-            </div>
+        <CardHeader className="p-4 sm:p-6">
+          <div>
+            <CardTitle className="flex flex-wrap items-center gap-2 text-lg sm:text-xl">
+              <UserPlus className="h-5 w-5 shrink-0" />
+              מתעניינים (טרם רשומים/פעילים)
+            </CardTitle>
+            <CardDescription className="mt-1 text-pretty">
+              רק תלמידים ומורים בסטטוס &quot;מתעניין&quot; – לאחר רישום או מעבר לפעיל/לא פעיל הם לא יופיעו כאן
+            </CardDescription>
           </div>
         </CardHeader>
-        <CardContent>
-          <Table>
+        <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
+          <div className="space-y-3 md:hidden">
+            {registrations.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                אין מתעניינים כרגע – רק רשומות בסטטוס &quot;מתעניין&quot; מוצגות כאן
+              </p>
+            ) : (
+              registrations.map((registration) => (
+                <Card key={`${registration.type}-${registration.id}`} className="p-4">
+                  <div className="flex flex-col gap-3 text-right">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0 font-medium">{registration.name}</div>
+                      <span
+                        className={`w-fit shrink-0 rounded-full px-2 py-1 text-xs ${
+                          registration.type === "student"
+                            ? "bg-blue-100 text-blue-700"
+                            : "bg-purple-100 text-purple-700"
+                        }`}
+                      >
+                        {registration.type === "student" ? "תלמיד" : "מורה"}
+                      </span>
+                    </div>
+                    <div className="grid gap-2 text-sm text-muted-foreground">
+                      <div>
+                        <span className="block text-xs opacity-80">טלפון</span>
+                        <span className="text-foreground">{registration.phone || "—"}</span>
+                      </div>
+                      <div className="min-w-0 break-all">
+                        <span className="block text-xs opacity-80">אימייל</span>
+                        <span className="text-foreground">{registration.email || "—"}</span>
+                      </div>
+                      <div>
+                        <span className="block text-xs opacity-80">קורס</span>
+                        <span className="text-foreground">
+                          {registration.type === "student"
+                            ? registration.courseId
+                              ? courseMap.get(registration.courseId) || "קורס לא נמצא"
+                              : "לא נבחר"
+                            : "—"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="block text-xs opacity-80">תאריך</span>
+                        <span className="text-foreground">
+                          {registration.createdAt
+                            ? new Date(registration.createdAt).toLocaleDateString("he-IL")
+                            : "—"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 border-t pt-3">
+                      <Button variant="outline" size="sm" className="flex-1 min-w-[7rem]" onClick={() => handleViewDetails(registration)}>
+                        <Eye className="h-4 w-4" />
+                        צפיה
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="min-w-[7rem] flex-1 gap-1"
+                        disabled={approvingId === registration.id}
+                        onClick={() => handleApprove(registration)}
+                      >
+                        {approvingId === registration.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="h-4 w-4" />
+                        )}
+                        אישור
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              ))
+            )}
+          </div>
+          <div className="hidden md:block">
+          <Table className="min-w-[720px]">
             <TableHeader>
               <TableRow>
                 <TableHead className="text-right">שם</TableHead>
@@ -385,7 +459,7 @@ export default function RegistrationPage() {
                         : "-"}
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <Button variant="outline" size="sm" onClick={() => handleViewDetails(registration)}>
                           <Eye className="h-4 w-4" />
                           צפיה
@@ -406,6 +480,7 @@ export default function RegistrationPage() {
               )}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
     </div>

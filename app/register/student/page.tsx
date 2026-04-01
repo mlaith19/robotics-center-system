@@ -180,12 +180,12 @@ function RegisterStudentContent() {
 
   if (success) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-4">
-        <Card className="w-full max-w-md border-green-200 bg-green-50">
-          <CardContent className="pt-6 text-center">
+      <div className="flex min-h-[100dvh] flex-col items-center justify-center px-2 py-6 sm:px-4">
+        <Card className="w-full max-w-md border-green-200 bg-green-50 shadow-md">
+          <CardContent className="px-4 pt-6 text-center sm:px-6">
             <CheckCircle className="h-16 w-16 text-green-600 mx-auto mb-4" />
-            <h2 className="text-xl font-bold text-green-800">הרישום התקבל</h2>
-            <p className="text-green-700 mt-2">נצור איתך קשר בהקדם.</p>
+            <h2 className="text-lg font-bold text-green-800 sm:text-xl">הרישום התקבל</h2>
+            <p className="mt-2 text-sm text-green-700 sm:text-base">נצור איתך קשר בהקדם.</p>
             {submittedExistingStudent === true ? (
               <p className="text-blue-800 mt-2 font-medium">זוהה תלמיד קיים — עודכנה הרשמה מחדש עם הנתונים הקיימים.</p>
             ) : (
@@ -200,7 +200,7 @@ function RegisterStudentContent() {
                 סיסמה ראשונית = טלפון ההורה שהוזן בטופס
               </div>
             )}
-            <p className="text-green-700 mt-2">מעבירים אותך לדף התחברות בעוד 5 שניות...</p>
+            <p className="mt-2 text-sm text-green-700 sm:text-base">מעבירים אותך לדף התחברות בעוד 5 שניות...</p>
           </CardContent>
         </Card>
       </div>
@@ -208,19 +208,19 @@ function RegisterStudentContent() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4">
-      <Card className="w-full max-w-md shadow-lg">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl">רישום תלמיד</CardTitle>
-          <CardDescription>מלא את הפרטים ונחזור אליך</CardDescription>
+    <div className="flex min-h-[100dvh] w-full flex-col items-center justify-start py-6 sm:justify-center sm:py-8">
+      <Card className="w-full max-w-md shadow-lg sm:max-w-lg">
+        <CardHeader className="space-y-2 px-4 text-center sm:px-6">
+          <CardTitle className="text-xl sm:text-2xl">רישום תלמיד</CardTitle>
+          <CardDescription className="text-pretty">מלא את הפרטים ונחזור אליך</CardDescription>
           {selectedCourseId && (
-            <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+            <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-left text-sm leading-snug text-blue-800 sm:text-right">
               נרשמת לקורס: {selectedCourseName || "קורס ייעודי"}.
               הבקשה תופיע כמתעניין ותאושר על ידי מנהל לפני שיבוץ לקורס.
             </div>
           )}
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-4 pb-6 sm:px-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
               <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
@@ -299,18 +299,19 @@ function RegisterStudentContent() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="profileImageUpload">תמונת פרופיל</Label>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
                 {profileImage ? (
-                  <img src={profileImage} alt="profile preview" className="h-16 w-16 rounded-full object-contain bg-white p-1 border" />
+                  <img src={profileImage} alt="profile preview" className="mx-auto h-16 w-16 rounded-full border bg-white object-contain p-1 sm:mx-0" />
                 ) : (
-                  <div className="h-16 w-16 rounded-full border-2 border-dashed bg-muted" />
+                  <div className="mx-auto h-16 w-16 rounded-full border-2 border-dashed bg-muted sm:mx-0" />
                 )}
-                <div className="flex-1 space-y-2">
+                <div className="min-w-0 flex-1 space-y-2">
                   <Input
                     id="profileImageUpload"
                     type="file"
                     accept="image/*"
                     capture="environment"
+                    className="text-xs sm:text-sm"
                     onChange={handleProfileImageUpload}
                     disabled={isSubmitting}
                   />
@@ -377,31 +378,34 @@ function RegisterStudentContent() {
               </div>
             </div>
             <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
-              <div className="flex items-center gap-2">
+              <div className="flex items-start gap-3">
                 <Checkbox
                   id="confirmCenterAgreement"
+                  className="mt-0.5 shrink-0"
                   checked={confirmCenterAgreement}
                   onCheckedChange={(checked) => setConfirmCenterAgreement(checked === true)}
                   disabled={isSubmitting}
                 />
-                <Label htmlFor="confirmCenterAgreement" className="text-sm cursor-pointer">
+                <Label htmlFor="confirmCenterAgreement" className="cursor-pointer text-sm leading-snug">
                   מאשר את הסכם המרכז *
                 </Label>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-start gap-3">
                 <Checkbox
                   id="confirmPhotoConsent"
+                  className="mt-0.5 shrink-0"
                   checked={confirmPhotoConsent}
                   onCheckedChange={(checked) => setConfirmPhotoConsent(checked === true)}
                   disabled={isSubmitting}
                 />
-                <Label htmlFor="confirmPhotoConsent" className="text-sm cursor-pointer">
+                <Label htmlFor="confirmPhotoConsent" className="cursor-pointer text-sm leading-snug">
                   מאשר צילום של הילד *
                 </Label>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-start gap-3">
                 <Checkbox
                   id="noSensitivity"
+                  className="mt-0.5 shrink-0"
                   checked={noSensitivity}
                   onCheckedChange={(checked) => {
                     const isChecked = checked === true
@@ -410,7 +414,7 @@ function RegisterStudentContent() {
                   }}
                   disabled={isSubmitting}
                 />
-                <Label htmlFor="noSensitivity" className="text-sm cursor-pointer">
+                <Label htmlFor="noSensitivity" className="cursor-pointer text-sm leading-snug">
                   אין רגישות לילד
                 </Label>
               </div>
