@@ -115,6 +115,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       { id: "cashier.delete", name: "מחיקת תנועות", description: "מחיקת הכנסות והוצאות" },
       { id: "cashier.discount", name: "הנחה (תשלומים)", description: "הוספת הנחה לתלמיד בדף תלמיד" },
       { id: "cashier.credit", name: "זיכוי (תשלומים)", description: "הוספת זיכוי לתלמיד בדף תלמיד" },
+      { id: "cashier.siblingDiscount", name: "הנחת אחים", description: "הפעלת חבילת הנחת אחים על חיובי תלמיד" },
     ],
   },
   {

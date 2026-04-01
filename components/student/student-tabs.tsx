@@ -68,6 +68,22 @@ type Attendance = {
   createdByUserName?: string | null
 }
 
+type SiblingPackage = {
+  id: string
+  name: string
+  firstAmount: number
+  secondAmount: number
+  thirdAmount: number
+  isActive: boolean
+}
+
+type SiblingPreview = {
+  rank: number | null
+  amountForRank: number | null
+  firstAmount: number
+  discountAmount: number | null
+}
+
 function formatDate(dateString?: string, localeTag = "he-IL") {
   if (!dateString) return "-"
   const d = new Date(dateString)
@@ -211,6 +227,11 @@ export function StudentTabs({
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null)
   const [paymentType, setPaymentType] = useState<"payment" | "discount" | "credit">("payment")
   const [sessionFeedbackRows, setSessionFeedbackRows] = useState<any[]>([])
+  const [siblingPackages, setSiblingPackages] = useState<SiblingPackage[]>([])
+  const [applySiblingDiscount, setApplySiblingDiscount] = useState(false)
+  const [selectedSiblingPackageId, setSelectedSiblingPackageId] = useState<string>("")
+  const [siblingPreview, setSiblingPreview] = useState<SiblingPreview | null>(null)
+  const [isLoadingSiblingPreview, setIsLoadingSiblingPreview] = useState(false)
   const currentUser = useCurrentUser()
 
   const isAdmin =
@@ -242,6 +263,7 @@ export function StudentTabs({
   const showSessionFeedback = isOwnProfile || isAdmin || hasPermission(userPerms, "students.tab.feedback")
   const canAddDiscount = isAdmin || hasPermission(userPerms, "cashier.discount")
   const canAddCredit = isAdmin || hasPermission(userPerms, "cashier.credit")
+  const canApplySiblingDiscount = isAdmin || hasPermission(userPerms, "cashier.siblingDiscount")
 
   useEffect(() => {
     if (!studentId) return
@@ -250,6 +272,43 @@ export function StudentTabs({
       .then((rows) => setSessionFeedbackRows(Array.isArray(rows) ? rows : []))
       .catch(() => setSessionFeedbackRows([]))
   }, [studentId])
+
+  useEffect(() => {
+    if (!canApplySiblingDiscount) return
+    fetch("/api/sibling-discount-packages", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((rows) => {
+        const active = Array.isArray(rows) ? rows.filter((r: any) => r?.isActive !== false) : []
+        setSiblingPackages(active)
+      })
+      .catch(() => setSiblingPackages([]))
+  }, [canApplySiblingDiscount])
+
+  useEffect(() => {
+    if (!applySiblingDiscount || !selectedSiblingPackageId || !studentId) {
+      setSiblingPreview(null)
+      return
+    }
+    setIsLoadingSiblingPreview(true)
+    fetch(`/api/students/${studentId}/sibling-discount-preview?packageId=${encodeURIComponent(selectedSiblingPackageId)}`, {
+      credentials: "include",
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data) {
+          setSiblingPreview(null)
+          return
+        }
+        setSiblingPreview({
+          rank: data.rank ?? null,
+          amountForRank: data.amountForRank ?? null,
+          firstAmount: Number(data.firstAmount || 0),
+          discountAmount: data.discountAmount == null ? null : Number(data.discountAmount),
+        })
+      })
+      .catch(() => setSiblingPreview(null))
+      .finally(() => setIsLoadingSiblingPreview(false))
+  }, [applySiblingDiscount, selectedSiblingPackageId, studentId])
 
   const israeliBanks = [
     "בנק לאומי",
@@ -388,6 +447,8 @@ export function StudentTabs({
           bankName: paymentType === "payment" && (paymentMethod === "transfer" || paymentMethod === "check") ? bankName : undefined,
           bankBranch: paymentType === "payment" && (paymentMethod === "transfer" || paymentMethod === "check") ? bankBranch : undefined,
           accountNumber: paymentType === "payment" && (paymentMethod === "transfer" || paymentMethod === "check") ? accountNumber : undefined,
+          applySiblingDiscount: paymentType === "payment" && applySiblingDiscount && !!selectedSiblingPackageId,
+          siblingPackageId: paymentType === "payment" && applySiblingDiscount ? selectedSiblingPackageId : undefined,
         }),
       })
 
@@ -402,6 +463,8 @@ export function StudentTabs({
         setBankBranch("")
         setAccountNumber("")
         setPaymentType("payment")
+        setApplySiblingDiscount(false)
+        setSelectedSiblingPackageId("")
         setIsPaymentDialogOpen(false)
         onPaymentAdded?.()
       }
@@ -757,6 +820,51 @@ export function StudentTabs({
                     </div>
                   )}
 
+                  {paymentType === "payment" && canApplySiblingDiscount && (
+                    <div className="space-y-2 rounded-md border p-3">
+                      <label className="flex flex-row-reverse items-center justify-end gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={applySiblingDiscount}
+                          onChange={(e) => setApplySiblingDiscount(e.target.checked)}
+                        />
+                        החל חבילת הנחת אחים על התשלום הזה
+                      </label>
+                      {applySiblingDiscount && (
+                        <div className="space-y-2">
+                          <Select value={selectedSiblingPackageId} onValueChange={setSelectedSiblingPackageId}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="בחר חבילת אחים פעילה" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {siblingPackages.map((pkg) => (
+                                <SelectItem key={pkg.id} value={pkg.id}>
+                                  {pkg.name} (1: ₪{pkg.firstAmount}, 2: ₪{pkg.secondAmount}, 3+: ₪{pkg.thirdAmount})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {selectedSiblingPackageId && (
+                            <div className="rounded-md bg-muted/50 p-2 text-xs">
+                              {isLoadingSiblingPreview ? (
+                                <span>מחשב הנחת אחים...</span>
+                              ) : siblingPreview ? (
+                                <>
+                                  <div>סדר אחאות: {siblingPreview.rank ?? "לא משויך"}</div>
+                                  <div>מחיר לילד ראשון: ₪{siblingPreview.firstAmount}</div>
+                                  <div>מחיר מחושב לתלמיד זה: ₪{siblingPreview.amountForRank ?? "—"}</div>
+                                  <div>גובה הנחה: ₪{siblingPreview.discountAmount ?? 0}</div>
+                                </>
+                              ) : (
+                                <span>לא ניתן לחשב כרגע הנחת אחים לתלמיד זה.</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {paymentType === "payment" && paymentMethod === "credit" && (
                     <div className="space-y-2">
                       <Label htmlFor="card-digits">4 ספרות אחרונות של כרטיס *</Label>
@@ -820,7 +928,13 @@ export function StudentTabs({
 
                   <Button
                     onClick={handleAddPayment}
-                    disabled={isAddingPayment || !paymentAmount || (paymentType === "discount" && !canAddDiscount) || (paymentType === "credit" && !canAddCredit)}
+                    disabled={
+                      isAddingPayment ||
+                      !paymentAmount ||
+                      (paymentType === "discount" && !canAddDiscount) ||
+                      (paymentType === "credit" && !canAddCredit) ||
+                      (paymentType === "payment" && applySiblingDiscount && !selectedSiblingPackageId)
+                    }
                     className={`w-full ${paymentType === "discount" ? "bg-orange-500 hover:bg-orange-600" : paymentType === "credit" ? "bg-purple-500 hover:bg-purple-600" : ""}`}
                   >
                     {isAddingPayment ? (

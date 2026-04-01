@@ -51,6 +51,17 @@ interface CourseCategoryRow {
   createdAt: string
 }
 
+interface SiblingPackageRow {
+  id: string
+  name: string
+  description: string | null
+  firstAmount: number
+  secondAmount: number
+  thirdAmount: number
+  isActive: boolean
+  createdAt: string
+}
+
 const fetcher = (url: string) =>
   fetch(url, { credentials: "include" }).then((res) => {
     if (!res.ok) throw new Error("Failed to load settings")
@@ -62,6 +73,10 @@ export default function SettingsPage() {
   const { data: settingsData, error, mutate, isLoading } = useSWR<CenterSettings>("/api/settings", fetcher)
   const { data: categories = [], mutate: mutateCategories } = useSWR<CourseCategoryRow[]>(
     "/api/course-categories",
+    (url: string) => fetch(url, { credentials: "include" }).then((r) => (r.ok ? r.json() : []))
+  )
+  const { data: siblingPackages = [], mutate: mutateSiblingPackages } = useSWR<SiblingPackageRow[]>(
+    "/api/sibling-discount-packages",
     (url: string) => fetch(url, { credentials: "include" }).then((r) => (r.ok ? r.json() : []))
   )
 
@@ -86,6 +101,26 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [categoryDialog, setCategoryDialog] = useState<{ open: boolean; edit: CourseCategoryRow | null; name: string }>({ open: false, edit: null, name: "" })
   const [categorySaving, setCategorySaving] = useState(false)
+  const [siblingDialog, setSiblingDialog] = useState<{
+    open: boolean
+    edit: SiblingPackageRow | null
+    name: string
+    description: string
+    firstAmount: string
+    secondAmount: string
+    thirdAmount: string
+    isActive: boolean
+  }>({
+    open: false,
+    edit: null,
+    name: "",
+    description: "",
+    firstAmount: "",
+    secondAmount: "",
+    thirdAmount: "",
+    isActive: true,
+  })
+  const [siblingSaving, setSiblingSaving] = useState(false)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -234,6 +269,83 @@ export default function SettingsPage() {
     })
   }
 
+  const openAddSiblingPackage = () => {
+    setSiblingDialog({
+      open: true,
+      edit: null,
+      name: "",
+      description: "",
+      firstAmount: "",
+      secondAmount: "",
+      thirdAmount: "",
+      isActive: true,
+    })
+  }
+
+  const openEditSiblingPackage = (pkg: SiblingPackageRow) => {
+    setSiblingDialog({
+      open: true,
+      edit: pkg,
+      name: pkg.name,
+      description: pkg.description || "",
+      firstAmount: String(pkg.firstAmount ?? ""),
+      secondAmount: String(pkg.secondAmount ?? ""),
+      thirdAmount: String(pkg.thirdAmount ?? ""),
+      isActive: pkg.isActive !== false,
+    })
+  }
+
+  const saveSiblingPackage = async () => {
+    if (!siblingDialog.name.trim()) {
+      toast({ title: "נא להזין שם חבילה", variant: "destructive" })
+      return
+    }
+    setSiblingSaving(true)
+    try {
+      const payload = {
+        name: siblingDialog.name.trim(),
+        description: siblingDialog.description.trim(),
+        firstAmount: Number(siblingDialog.firstAmount || 0),
+        secondAmount: Number(siblingDialog.secondAmount || 0),
+        thirdAmount: Number(siblingDialog.thirdAmount || 0),
+        isActive: siblingDialog.isActive,
+      }
+      const url = siblingDialog.edit
+        ? `/api/sibling-discount-packages/${siblingDialog.edit.id}`
+        : "/api/sibling-discount-packages"
+      const method = siblingDialog.edit ? "PATCH" : "POST"
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || "שגיאה בשמירת חבילת אחים")
+      }
+      setSiblingDialog((s) => ({ ...s, open: false }))
+      mutateSiblingPackages()
+      toast({ title: siblingDialog.edit ? "חבילת אחים עודכנה" : "חבילת אחים נוספה" })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "שגיאה בשמירה"
+      toast({ title: msg, variant: "destructive" })
+    } finally {
+      setSiblingSaving(false)
+    }
+  }
+
+  const deleteSiblingPackage = async (id: string) => {
+    const res = await fetch(`/api/sibling-discount-packages/${id}`, { method: "DELETE", credentials: "include" })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      toast({ title: data.error || "שגיאה במחיקת חבילה", variant: "destructive" })
+      return
+    }
+    mutateSiblingPackages()
+    toast({ title: "חבילת האחים נמחקה" })
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64" dir="rtl">
@@ -262,7 +374,7 @@ export default function SettingsPage() {
       </div>
 
       <Tabs defaultValue="general" className="w-full" dir="rtl">
-        <TabsList className="w-full grid grid-cols-5 mb-6">
+        <TabsList className="w-full grid grid-cols-6 mb-6">
           <TabsTrigger value="general" className="flex flex-row-reverse items-center justify-center gap-2">
             <Building2 className="h-4 w-4" />
             <span>כללי</span>
@@ -274,6 +386,10 @@ export default function SettingsPage() {
           <TabsTrigger value="categories" className="flex flex-row-reverse items-center justify-center gap-2">
             <FolderOpen className="h-4 w-4" />
             <span>קטגוריות קורס</span>
+          </TabsTrigger>
+          <TabsTrigger value="siblings" className="flex flex-row-reverse items-center justify-center gap-2">
+            <Hash className="h-4 w-4" />
+            <span>חבילות אחים</span>
           </TabsTrigger>
           <TabsTrigger value="import" className="flex flex-row-reverse items-center justify-center gap-2">
             <FileSpreadsheet className="h-4 w-4" />
@@ -402,6 +518,53 @@ export default function SettingsPage() {
                   {isSaving ? "שומר..." : "שמור הגדרות"}
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="siblings">
+          <Card>
+            <CardHeader className="text-right">
+              <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
+                <Hash className="h-5 w-5 text-primary" />
+                חבילות הנחת אחים
+              </CardTitle>
+              <CardDescription className="text-right">
+                הגדרת מחיר לילד ראשון / שני / שלישי. את ההפעלה בפועל מבצעים עם הרשאת "הנחת אחים".
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-row-reverse justify-end">
+                <Button type="button" onClick={openAddSiblingPackage} className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  הוסף חבילת אחים
+                </Button>
+              </div>
+              {siblingPackages.length === 0 ? (
+                <p className="text-muted-foreground text-right">לא הוגדרו חבילות אחים עדיין.</p>
+              ) : (
+                <ul className="space-y-2 border rounded-lg p-2">
+                  {siblingPackages.map((pkg) => (
+                    <li key={pkg.id} className="flex flex-row-reverse items-center justify-between gap-2 rounded-md border bg-card px-3 py-2">
+                      <div className="text-right">
+                        <div className="font-medium">{pkg.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          ראשון: ₪{pkg.firstAmount} | שני: ₪{pkg.secondAmount} | שלישי+: ₪{pkg.thirdAmount}
+                          {pkg.isActive ? " | פעיל" : " | לא פעיל"}
+                        </div>
+                      </div>
+                      <div className="flex gap-1">
+                        <Button type="button" variant="outline" size="icon" onClick={() => openEditSiblingPackage(pkg)} title="ערוך">
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button type="button" variant="outline" size="icon" onClick={() => deleteSiblingPackage(pkg.id)} title="מחק">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -655,6 +818,68 @@ export default function SettingsPage() {
             <Button type="button" onClick={saveCategory} disabled={categorySaving}>
               {categorySaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {categoryDialog.edit ? "עדכן" : "הוסף"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={siblingDialog.open} onOpenChange={(open) => setSiblingDialog((d) => ({ ...d, open }))}>
+        <DialogContent className="sm:max-w-md" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>{siblingDialog.edit ? "עריכת חבילת אחים" : "הוספת חבילת אחים"}</DialogTitle>
+            <DialogDescription>הגדר מחיר קבוע לכל סדר אחאות (ראשון, שני, שלישי+).</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label htmlFor="siblingPackageName">שם החבילה</Label>
+              <Input
+                id="siblingPackageName"
+                value={siblingDialog.name}
+                onChange={(e) => setSiblingDialog((d) => ({ ...d, name: e.target.value }))}
+                className="text-right"
+                dir="rtl"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="siblingPackageDescription">תיאור</Label>
+              <Input
+                id="siblingPackageDescription"
+                value={siblingDialog.description}
+                onChange={(e) => setSiblingDialog((d) => ({ ...d, description: e.target.value }))}
+                className="text-right"
+                dir="rtl"
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-1">
+                <Label>ראשון</Label>
+                <Input type="number" value={siblingDialog.firstAmount} onChange={(e) => setSiblingDialog((d) => ({ ...d, firstAmount: e.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <Label>שני</Label>
+                <Input type="number" value={siblingDialog.secondAmount} onChange={(e) => setSiblingDialog((d) => ({ ...d, secondAmount: e.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <Label>שלישי+</Label>
+                <Input type="number" value={siblingDialog.thirdAmount} onChange={(e) => setSiblingDialog((d) => ({ ...d, thirdAmount: e.target.value }))} />
+              </div>
+            </div>
+            <label className="flex flex-row-reverse items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={siblingDialog.isActive}
+                onChange={(e) => setSiblingDialog((d) => ({ ...d, isActive: e.target.checked }))}
+              />
+              חבילה פעילה
+            </label>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setSiblingDialog((d) => ({ ...d, open: false }))}>
+              ביטול
+            </Button>
+            <Button type="button" onClick={saveSiblingPackage} disabled={siblingSaving}>
+              {siblingSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {siblingDialog.edit ? "עדכן" : "הוסף"}
             </Button>
           </DialogFooter>
         </DialogContent>

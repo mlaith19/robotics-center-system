@@ -85,6 +85,9 @@ export default function EditStudentPage() {
   const { data: rawCourses } = useSWR("/api/courses", arrayFetcher)
   const courses = Array.isArray(rawCourses) ? rawCourses : []
   const { data: studentData, error: studentError } = useSWR(id ? `/api/students/${id}` : null, apiFetcher)
+  const { data: allStudentsData } = useSWR("/api/students", arrayFetcher)
+  const allStudents = Array.isArray(allStudentsData) ? allStudentsData : []
+  const [siblingStudentIds, setSiblingStudentIds] = useState<string[]>([])
 
   const [student, setStudent] = useState({
     name: "",
@@ -138,6 +141,18 @@ export default function EditStudentPage() {
       setHasUserAccount(!!studentData.userId)
     }
   }, [studentData, studentError])
+
+  useEffect(() => {
+    if (!id) return
+    fetch(`/api/students/${id}/siblings`, { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : { siblings: [] }))
+      .then((data) => {
+        const rows = Array.isArray(data?.siblings) ? data.siblings : []
+        const ids = rows.map((r: any) => String(r.id)).filter((sid: string) => sid !== id)
+        setSiblingStudentIds(ids)
+      })
+      .catch(() => setSiblingStudentIds([]))
+  }, [id])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -226,6 +241,13 @@ export default function EditStudentPage() {
         }
       }
 
+      await fetch(`/api/students/${id}/siblings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ siblingStudentIds }),
+      })
+
       // Navigate immediately
       window.location.href = "/dashboard/students"
     } catch (err: any) {
@@ -272,6 +294,13 @@ export default function EditStudentPage() {
     if (!file) return
     const dataUrl = await fileToProfileImageDataUrl(file)
     updateStudent({ profileImage: dataUrl })
+  }
+
+  const toggleSibling = (studentId: string) => {
+    setSiblingStudentIds((prev) =>
+      prev.includes(studentId) ? prev.filter((id) => id !== studentId) : [...prev, studentId]
+    )
+    setHasChanges(true)
   }
 
   if (studentError) {
@@ -716,6 +745,37 @@ export default function EditStudentPage() {
               </div>
             ) : (
               <p className="text-sm text-muted-foreground text-center py-4">{tr.noCourses}</p>
+            )}
+          </div>
+        </Card>
+
+        <Card className="border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-amber-100/50 p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="bg-amber-500 text-white p-2.5 rounded-lg">
+              <Users className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-lg">שיוך אחים</h3>
+              <p className="text-sm text-muted-foreground">בחר תלמידים שהם אחים של {student.name || "התלמיד"}</p>
+            </div>
+          </div>
+          <div className="border-2 border-amber-200 rounded-lg p-5 bg-white">
+            {allStudents.filter((s: any) => String(s.id) !== id).length > 0 ? (
+              <div className="grid grid-cols-2 gap-3">
+                {allStudents
+                  .filter((s: any) => String(s.id) !== id)
+                  .map((s: any) => {
+                    const sid = String(s.id)
+                    return (
+                      <label key={sid} className="flex items-center gap-2 rounded-md border px-3 py-2 cursor-pointer hover:bg-amber-50">
+                        <Checkbox checked={siblingStudentIds.includes(sid)} onCheckedChange={() => toggleSibling(sid)} />
+                        <span className="text-sm">{s.name}</span>
+                      </label>
+                    )
+                  })}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">אין תלמידים נוספים לשיוך.</p>
             )}
           </div>
         </Card>
