@@ -98,15 +98,17 @@ export default function NewTeacherPage() {
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-4xl" dir="rtl">
+    <div className="container mx-auto max-w-4xl p-3 sm:p-6" dir="rtl">
       <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => router.back()}>
-            <ArrowRight className="h-4 w-4" />
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">מורה חדש</h1>
-            <p className="text-muted-foreground mt-2">הוסף מורה חדש למערכת הרובוטיקה</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="sm" onClick={() => router.back()} className="shrink-0">
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+            <div className="min-w-0">
+              <h1 className="text-2xl font-bold text-foreground sm:text-3xl">מורה חדש</h1>
+              <p className="mt-1 text-sm text-muted-foreground sm:mt-2 sm:text-base">הוסף מורה חדש למערכת הרובוטיקה</p>
+            </div>
           </div>
         </div>
 
@@ -175,7 +177,7 @@ export default function NewTeacherPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
                 <Label htmlFor="idNumber" className="flex items-center gap-2">
                   <IdCard className="h-4 w-4" />
@@ -205,13 +207,13 @@ export default function NewTeacherPage() {
 
             <div className="grid gap-2">
               <Label htmlFor="profileImageUpload">תמונת פרופיל</Label>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 {newTeacher.profileImage ? (
-                  <img src={newTeacher.profileImage} alt="profile preview" className="h-16 w-16 rounded-full object-contain bg-white p-1 border" />
+                  <img src={newTeacher.profileImage} alt="profile preview" className="h-16 w-16 shrink-0 rounded-full border bg-white object-contain p-1" />
                 ) : (
-                  <div className="h-16 w-16 rounded-full border-2 border-dashed bg-muted" />
+                  <div className="h-16 w-16 shrink-0 rounded-full border-2 border-dashed bg-muted" />
                 )}
-                <div className="flex-1 space-y-2">
+                <div className="min-w-0 flex-1 space-y-2">
                   <Input id="profileImageUpload" type="file" accept="image/*" capture="environment" onChange={handleProfileImageUpload} />
                   {newTeacher.profileImage && (
                     <Button type="button" variant="outline" size="sm" onClick={() => setNewTeacher((prev) => ({ ...prev, profileImage: "" }))}>
@@ -321,13 +323,14 @@ export default function NewTeacherPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center gap-3">
+            <div className="flex items-start gap-3">
               <Checkbox 
                 id="createUserAccount"
+                className="mt-0.5 shrink-0"
                 checked={createUserAccount}
                 onCheckedChange={(checked) => setCreateUserAccount(checked === true)}
               />
-              <Label htmlFor="createUserAccount" className="cursor-pointer">
+              <Label htmlFor="createUserAccount" className="cursor-pointer leading-snug">
                 צור חשבון משתמש למורה (יאפשר למורה להתחבר למערכת)
               </Label>
             </div>
@@ -360,13 +363,14 @@ export default function NewTeacherPage() {
           </CardContent>
         </Card>
 
-        <div className="flex gap-3 justify-end">
-          <Button variant="outline" size="lg" onClick={() => router.back()} disabled={submitting}>
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
+          <Button variant="outline" size="lg" className="w-full sm:w-auto" onClick={() => router.back()} disabled={submitting}>
             ביטול
           </Button>
 
           <Button
             size="lg"
+            className="w-full sm:w-auto"
             onClick={handleAddTeacher}
             disabled={submitting || !newTeacher.name.trim() || !newTeacher.email.trim()}
           >

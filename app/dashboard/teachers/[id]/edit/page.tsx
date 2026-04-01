@@ -159,25 +159,27 @@ export default function EditTeacherPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex min-h-[400px] items-center justify-center p-3 sm:p-6">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     )
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-4xl" dir="rtl">
+    <div className="container mx-auto max-w-4xl p-3 sm:p-6" dir="rtl">
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center gap-4">
-          <Link href="/dashboard/teachers">
-            <Button variant="ghost" size="sm">
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">עריכת מורה</h1>
-            <p className="text-muted-foreground mt-2">עדכן את פרטי המורה</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+          <div className="flex items-center gap-3">
+            <Link href="/dashboard/teachers" className="shrink-0">
+              <Button variant="ghost" size="sm">
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </Link>
+            <div className="min-w-0">
+              <h1 className="text-2xl font-bold text-foreground sm:text-3xl">עריכת מורה</h1>
+              <p className="mt-1 text-sm text-muted-foreground sm:mt-2 sm:text-base">עדכן את פרטי המורה</p>
+            </div>
           </div>
         </div>
 
@@ -275,13 +277,13 @@ export default function EditTeacherPage() {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="profileImageUpload">תמונת פרופיל</Label>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 {form.profileImage ? (
-                  <img src={form.profileImage} alt="profile preview" className="h-16 w-16 rounded-full object-contain bg-white p-1 border" />
+                  <img src={form.profileImage} alt="profile preview" className="h-16 w-16 shrink-0 rounded-full border bg-white object-contain p-1" />
                 ) : (
-                  <div className="h-16 w-16 rounded-full border-2 border-dashed bg-muted" />
+                  <div className="h-16 w-16 shrink-0 rounded-full border-2 border-dashed bg-muted" />
                 )}
-                <div className="flex-1 space-y-2">
+                <div className="min-w-0 flex-1 space-y-2">
                   <Input id="profileImageUpload" type="file" accept="image/*" capture="environment" onChange={handleProfileImageUpload} />
                   {form.profileImage && (
                     <Button type="button" variant="outline" size="sm" onClick={() => setForm((prev) => ({ ...prev, profileImage: "" }))}>
@@ -354,13 +356,14 @@ export default function EditTeacherPage() {
               </div>
             ) : (
               <>
-                <div className="flex items-center gap-3">
+                <div className="flex items-start gap-3">
                   <Checkbox 
                     id="createUserAccount"
+                    className="mt-0.5 shrink-0"
                     checked={createUserAccount}
                     onCheckedChange={(checked) => setCreateUserAccount(checked === true)}
                   />
-                  <Label htmlFor="createUserAccount" className="cursor-pointer">
+                  <Label htmlFor="createUserAccount" className="cursor-pointer leading-snug">
                     צור חשבון משתמש למורה (יאפשר למורה להתחבר למערכת)
                   </Label>
                 </div>
@@ -439,18 +442,18 @@ export default function EditTeacherPage() {
           </CardContent>
         </Card>
 
-        <div className="flex gap-3 justify-end">
-          <Link href="/dashboard/teachers">
-            <Button variant="outline" size="lg" className="bg-transparent">
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
+          <Link href="/dashboard/teachers" className="w-full sm:w-auto">
+            <Button variant="outline" size="lg" className="w-full bg-transparent sm:w-auto">
               ביטול
             </Button>
           </Link>
 
           <Button
             size="lg"
+            className="w-full gap-2 sm:w-auto"
             onClick={onSave}
             disabled={saving || !form.name.trim()}
-            className="gap-2"
           >
             {saving ? (
               <>

@@ -35,7 +35,7 @@ export default function TeacherMePage() {
 
   if (status === "not_found") {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[300px] gap-4 p-6" dir={dir}>
+      <div className="flex min-h-[300px] flex-col items-center justify-center gap-4 p-3 sm:p-6" dir={dir}>
         <p className="text-muted-foreground text-center">לא נמצא פרופיל מורה משויך למשתמש זה.</p>
         <button
           type="button"
@@ -49,7 +49,7 @@ export default function TeacherMePage() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-[300px]" dir={dir}>
+    <div className="flex min-h-[300px] items-center justify-center p-3 sm:p-6" dir={dir}>
       <Loader2 className="h-8 w-8 animate-spin text-primary" />
       <span className={dir === "rtl" ? "mr-2" : "ml-2"}>טוען פרופיל...</span>
     </div>

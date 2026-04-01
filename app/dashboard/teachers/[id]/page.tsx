@@ -6,7 +6,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ArrowRight, Mail, Phone, User, Edit, BookOpen, Receipt, CalendarCheck, Plus, Loader2 } from "lucide-react"
+import { ArrowRight, Mail, Phone, Edit, BookOpen, CalendarCheck, Plus, Loader2 } from "lucide-react"
 import { useCurrentUser } from "@/lib/auth-context"
 import { hasPermission, hasFullAccessRole } from "@/lib/permissions"
 import { courseTimeToDisplayValue } from "@/lib/course-db-fields"
@@ -517,14 +517,14 @@ export default function TeacherViewPage() {
 
   // Note: if id is "create", the useEffect above handles redirect
   // We show a brief loading state while redirecting
-  if (loading || isCreateRoute) return <div className="p-6" dir="rtl">טוען...</div>
+  if (loading || isCreateRoute) return <div className="p-3 sm:p-6" dir="rtl">טוען...</div>
   
   if (error)
     return (
-      <div className="p-6" dir="rtl">
-        <div className="text-red-600 font-medium">שגיאה</div>
-        <div className="text-sm text-muted-foreground mt-1">{error}</div>
-        <div className="mt-4 flex gap-2">
+      <div className="p-3 sm:p-6" dir="rtl">
+        <div className="font-medium text-red-600">שגיאה</div>
+        <div className="mt-1 text-sm text-muted-foreground">{error}</div>
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
           <Button variant="outline" onClick={() => router.refresh()} className="bg-transparent">
             נסה שוב
           </Button>
@@ -537,7 +537,7 @@ export default function TeacherViewPage() {
 
   if (!teacher)
     return (
-      <div className="p-6" dir="rtl">
+      <div className="p-3 sm:p-6" dir="rtl">
         <div className="font-medium">מורה לא נמצא</div>
         <Button variant="outline" className="mt-4 bg-transparent" onClick={() => router.push("/dashboard/teachers")}>
           חזרה למורים
@@ -545,28 +545,30 @@ export default function TeacherViewPage() {
       </div>
     )
 
+  const visibleTabCount = [canTabGeneral, canTabCourses, canTabPayments, canTabAttendance].filter(Boolean).length
+
   return (
-    <div dir="rtl" className="p-6 max-w-4xl mx-auto space-y-4">
+    <div dir="rtl" className="mx-auto max-w-4xl space-y-4 p-3 sm:p-6">
       {/* Compact Header */}
-      <div className="flex items-center justify-between bg-gradient-to-l from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 rounded-xl p-4 border border-blue-100 dark:border-blue-900">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => router.back()} className="bg-transparent hover:bg-white/50">
+      <div className="flex flex-col gap-3 rounded-xl border border-blue-100 bg-gradient-to-l from-blue-50 to-indigo-50 p-4 dark:border-blue-900 dark:from-blue-950/30 dark:to-indigo-950/30 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => router.back()} className="shrink-0 bg-transparent hover:bg-white/50">
             <ArrowRight className="h-5 w-5" />
           </Button>
           {teacher.profileImage ? (
-            <img src={teacher.profileImage} alt={teacher.name} className="h-12 w-12 rounded-full object-contain bg-white p-1 border shadow-lg" />
+            <img src={teacher.profileImage} alt={teacher.name} className="h-12 w-12 rounded-full border bg-white object-contain p-1 shadow-lg" />
           ) : (
-            <img src="/api/og-logo" alt="Center logo" className="h-12 w-12 rounded-full object-contain bg-white p-1 border shadow-lg" />
+            <img src="/api/og-logo" alt="Center logo" className="h-12 w-12 rounded-full border bg-white object-contain p-1 shadow-lg" />
           )}
-          <div>
-            <div className="text-xl font-bold text-foreground">{teacher.name}</div>
-            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <Mail className="h-3.5 w-3.5" />
-                {teacher.email ?? "-"}
+          <div className="min-w-0 flex-1">
+            <div className="text-lg font-bold text-foreground sm:text-xl">{teacher.name}</div>
+            <div className="mt-1 flex flex-col gap-1 text-sm text-muted-foreground sm:flex-row sm:flex-wrap sm:gap-x-4 sm:gap-y-1">
+              <span className="flex min-w-0 items-center gap-1">
+                <Mail className="h-3.5 w-3.5 shrink-0" />
+                <span className="break-all">{teacher.email ?? "-"}</span>
               </span>
-              <span className="flex items-center gap-1">
-                <Phone className="h-3.5 w-3.5" />
+              <span className="flex items-center gap-1" dir="ltr">
+                <Phone className="h-3.5 w-3.5 shrink-0" />
                 {teacher.phone ?? "-"}
               </span>
             </div>
@@ -574,8 +576,8 @@ export default function TeacherViewPage() {
         </div>
 
         {!isTeacherUser && (
-          <Link href={`/dashboard/teachers/${teacher.id}/edit`}>
-            <Button className="gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
+          <Link href={`/dashboard/teachers/${teacher.id}/edit`} className="w-full shrink-0 sm:w-auto">
+            <Button className="w-full gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 sm:w-auto">
               <Edit className="h-4 w-4" />
               ערוך
             </Button>
@@ -583,18 +585,51 @@ export default function TeacherViewPage() {
         )}
       </div>
 
-      <Card className="p-4 border-0 shadow-sm bg-white/50 dark:bg-card/50">
+      <Card className="border-0 bg-white/50 p-3 shadow-sm dark:bg-card/50 sm:p-4">
         <Tabs defaultValue={canTabGeneral ? "general" : canTabCourses ? "courses" : canTabPayments ? "payments" : "attendance"} dir="rtl" className="w-full">
-          <TabsList className="grid w-full bg-muted/50 p-1 rounded-lg" style={{ gridTemplateColumns: `repeat(${[canTabGeneral, canTabCourses, canTabPayments, canTabAttendance].filter(Boolean).length}, 1fr)` }}>
-            {canTabGeneral && <TabsTrigger value="general" className="data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-blue-700 rounded-md transition-all">כללי</TabsTrigger>}
-            {canTabCourses && <TabsTrigger value="courses" className="data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-blue-700 rounded-md transition-all">קורסים</TabsTrigger>}
-            {canTabPayments && <TabsTrigger value="payments" className="data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-blue-700 rounded-md transition-all">תשלומים</TabsTrigger>}
-            {canTabAttendance && <TabsTrigger value="attendance" className="data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-blue-700 rounded-md transition-all">נוכחות</TabsTrigger>}
-          </TabsList>
+          <div className="-mx-1 overflow-x-auto px-1 pb-1 sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0">
+            <TabsList
+              className="mb-3 flex h-auto min-h-10 w-max min-w-full max-w-none flex-nowrap justify-start gap-1 overflow-x-auto rounded-lg bg-muted/50 p-1 sm:mb-4 md:grid md:w-full md:overflow-visible"
+              style={visibleTabCount > 0 ? { gridTemplateColumns: `repeat(${visibleTabCount}, minmax(0, 1fr))` } : undefined}
+            >
+              {canTabGeneral && (
+                <TabsTrigger
+                  value="general"
+                  className="shrink-0 rounded-md px-2 text-xs transition-all data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-sm sm:text-sm md:min-w-0"
+                >
+                  כללי
+                </TabsTrigger>
+              )}
+              {canTabCourses && (
+                <TabsTrigger
+                  value="courses"
+                  className="shrink-0 rounded-md px-2 text-xs transition-all data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-sm sm:text-sm md:min-w-0"
+                >
+                  קורסים
+                </TabsTrigger>
+              )}
+              {canTabPayments && (
+                <TabsTrigger
+                  value="payments"
+                  className="shrink-0 rounded-md px-2 text-xs transition-all data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-sm sm:text-sm md:min-w-0"
+                >
+                  תשלומים
+                </TabsTrigger>
+              )}
+              {canTabAttendance && (
+                <TabsTrigger
+                  value="attendance"
+                  className="shrink-0 rounded-md px-2 text-xs transition-all data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-sm sm:text-sm md:min-w-0"
+                >
+                  נוכחות
+                </TabsTrigger>
+              )}
+            </TabsList>
+          </div>
 
           {canTabGeneral && (
           <TabsContent value="general" className="mt-4 space-y-4">
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
               <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800">
                 <div className="text-xs text-muted-foreground mb-1">תעודת זהות</div>
                 <div className="font-semibold text-sm">{teacher.idNumber ?? "-"}</div>
@@ -647,8 +682,8 @@ export default function TeacherViewPage() {
             </div>
 
             {courses.length ? (
-              <div className="rounded-lg border overflow-hidden">
-                <table className="w-full text-sm">
+              <div className="overflow-x-auto rounded-lg border">
+                <table className="w-full min-w-[720px] text-sm">
                   <thead className="bg-slate-50 dark:bg-slate-800">
                     <tr>
                       <th className="text-right p-3 font-medium">שם הקורס</th>
@@ -708,8 +743,8 @@ export default function TeacherViewPage() {
           {canTabPayments && (
           <TabsContent value="payments" className="mt-6 space-y-4">
             {/* Period Filter Buttons */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-sm text-muted-foreground ml-2">תקופה:</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm text-muted-foreground">תקופה:</span>
               <Button
                 variant={paymentsPeriod === "month" ? "default" : "outline"}
                 size="sm"
@@ -744,9 +779,9 @@ export default function TeacherViewPage() {
               </Button>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
               {/* Paid to Teacher - shows expenses sum */}
-              <Card className="p-4 bg-green-50 dark:bg-green-950/20">
+              <Card className="bg-green-50 p-4 dark:bg-green-950/20">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <span className="text-green-600 font-bold">₪</span>
@@ -829,8 +864,8 @@ export default function TeacherViewPage() {
           {canTabAttendance && (
           <TabsContent value="attendance" className="mt-6 space-y-4">
             {/* Stats Cards with Colors */}
-            <div className="grid grid-cols-3 gap-4">
-              <Card className="p-4 bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
+              <Card className="border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/20">
                 <div className="flex items-center gap-2 text-sm text-blue-700 dark:text-blue-400 mb-2">
                   <CalendarCheck className="h-4 w-4" />
                   נוכחות
@@ -857,10 +892,10 @@ export default function TeacherViewPage() {
 
             {/* Course Filter Dropdown */}
             {attendanceCourses.length > 0 && (
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-muted-foreground">סנן לפי קורס:</span>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                <span className="shrink-0 text-sm text-muted-foreground">סנן לפי קורס:</span>
                 <Select value={selectedAttendanceCourse} onValueChange={setSelectedAttendanceCourse}>
-                  <SelectTrigger className="w-48">
+                  <SelectTrigger className="w-full sm:w-48">
                     <SelectValue placeholder="כל הקורסים" />
                   </SelectTrigger>
                   <SelectContent>
@@ -930,7 +965,7 @@ export default function TeacherViewPage() {
 
       {/* Payment Dialog */}
       <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
-        <DialogContent className="max-w-md" dir="rtl">
+        <DialogContent className="max-h-[90dvh] max-w-md overflow-y-auto" dir="rtl">
           <DialogHeader>
             <DialogTitle>תשלום למורה (הוצאה)</DialogTitle>
             <DialogDescription>הזן את פרטי התשלום למורה - יירשם כהוצאה במערכת</DialogDescription>
@@ -987,7 +1022,7 @@ export default function TeacherViewPage() {
             )}
 
             {(paymentMethod === "transfer" || paymentMethod === "check") && (
-              <div className="grid gap-3 grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="space-y-2">
                   <Label htmlFor="bank-name">בנק *</Label>
                   <Select value={bankName} onValueChange={setBankName}>
@@ -1054,14 +1089,14 @@ export default function TeacherViewPage() {
 
       {/* Course Details Dialog */}
       <Dialog open={isCourseDialogOpen} onOpenChange={setIsCourseDialogOpen}>
-        <DialogContent className="max-w-lg" dir="rtl">
+        <DialogContent className="max-h-[90dvh] max-w-lg overflow-y-auto" dir="rtl">
           <DialogHeader>
             <DialogTitle className="text-xl text-blue-700 dark:text-blue-400">{selectedCourse?.name}</DialogTitle>
             <DialogDescription>פרטי הקורס</DialogDescription>
           </DialogHeader>
           {selectedCourse && (
             <div className="space-y-4 mt-4">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800">
                   <div className="text-xs text-muted-foreground mb-1">ימים</div>
                   <div className="font-semibold text-sm">{formatDays(selectedCourse.daysOfWeek)}</div>
@@ -1101,16 +1136,16 @@ export default function TeacherViewPage() {
                 </div>
               )}
               
-              <div className="flex gap-2 pt-2">
+              <div className="flex flex-col gap-2 pt-2 sm:flex-row">
                 <Button 
                   variant="outline" 
-                  className="flex-1 bg-transparent"
+                  className="w-full flex-1 bg-transparent sm:w-auto"
                   onClick={() => setIsCourseDialogOpen(false)}
                 >
                   סגור
                 </Button>
                 <Button 
-                  className="flex-1 bg-blue-600 hover:bg-blue-700"
+                  className="w-full flex-1 bg-blue-600 hover:bg-blue-700 sm:w-auto"
                   onClick={() => {
                     setIsCourseDialogOpen(false)
                     router.push(`/dashboard/courses/${selectedCourse.id}`)
