@@ -124,11 +124,6 @@ const courseColors = [
 ]
 
 
-interface CurrentUser {
-  id: number
-  role: string
-}
-
 export default function SchedulePage() {
   const currentUser = useCurrentUser()
   const { locale } = useLanguage()
@@ -346,9 +341,9 @@ export default function SchedulePage() {
     const hours = Array.from({ length: 14 }, (_, i) => i + 8)
 
     return (
-      <div className="border rounded-lg overflow-hidden">
-        <div className="bg-muted/50 p-4 border-b">
-          <div className="text-lg font-semibold">
+      <div className="overflow-hidden rounded-lg border">
+        <div className="border-b bg-muted/50 p-3 sm:p-4">
+          <div className="text-base font-semibold sm:text-lg">
             {currentDate.toLocaleDateString("he-IL", {
               weekday: "long",
               year: "numeric",
@@ -366,11 +361,11 @@ export default function SchedulePage() {
             })
 
             return (
-              <div key={hour} className="flex min-h-[80px]">
-                <div className="w-20 p-4 bg-muted/30 border-l text-sm font-medium text-muted-foreground">
+              <div key={hour} className="flex min-h-[72px] sm:min-h-[80px]">
+                <div className="w-14 shrink-0 border-l bg-muted/30 p-2 text-xs font-medium text-muted-foreground sm:w-20 sm:p-4 sm:text-sm">
                   {hour.toString().padStart(2, "0")}:00
                 </div>
-                <div className="flex-1 p-2">
+                <div className="min-w-0 flex-1 p-2">
                   {hourCourses.length > 0 ? (
                     <div className="space-y-2">
                       {hourCourses.map((course) => {
@@ -406,20 +401,21 @@ export default function SchedulePage() {
     const hours = Array.from({ length: 14 }, (_, i) => i + 8)
 
     return (
-      <div className="border rounded-lg overflow-hidden">
-        <div className="grid grid-cols-8 bg-muted/50 border-b">
-          <div className="p-3 border-l"></div>
+      <div className="-mx-1 overflow-x-auto px-1 sm:mx-0 sm:overflow-visible sm:px-0">
+        <div className="min-w-[720px] overflow-hidden rounded-lg border">
+        <div className="grid grid-cols-8 border-b bg-muted/50">
+          <div className="border-l p-2 sm:p-3"></div>
           {weekDates.map((date, i) => (
-            <div key={i} className="p-3 text-center border-l">
-              <div className="text-sm font-medium">{date.toLocaleDateString("he-IL", { weekday: "short" })}</div>
-              <div className="text-lg font-bold mt-1">{date.getDate()}</div>
+            <div key={i} className="border-l p-2 text-center sm:p-3">
+              <div className="text-xs font-medium sm:text-sm">{date.toLocaleDateString("he-IL", { weekday: "short" })}</div>
+              <div className="mt-0.5 text-base font-bold sm:mt-1 sm:text-lg">{date.getDate()}</div>
             </div>
           ))}
         </div>
         <div className="divide-y">
           {hours.map((hour) => (
-            <div key={hour} className="grid grid-cols-8 min-h-[80px]">
-              <div className="p-3 bg-muted/30 border-l text-sm font-medium text-muted-foreground flex items-start">
+            <div key={hour} className="grid min-h-[72px] grid-cols-8 sm:min-h-[80px]">
+              <div className="flex items-start border-l bg-muted/30 p-2 text-xs font-medium text-muted-foreground sm:p-3 sm:text-sm">
                 {hour.toString().padStart(2, "0")}:00
               </div>
               {weekDates.map((date, i) => {
@@ -430,7 +426,7 @@ export default function SchedulePage() {
                 })
 
                 return (
-                  <div key={i} className="p-1 border-l">
+                  <div key={i} className="min-w-0 border-l p-1">
                     {dayCourses.length > 0 ? (
                       <div className="space-y-1">
                         {dayCourses.map((course) => {
@@ -456,6 +452,7 @@ export default function SchedulePage() {
             </div>
           ))}
         </div>
+        </div>
       </div>
     )
   }
@@ -475,10 +472,11 @@ export default function SchedulePage() {
     }
 
     return (
-      <div className="border rounded-lg overflow-hidden">
-        <div className="grid grid-cols-7 bg-muted/50 border-b">
+      <div className="-mx-1 overflow-x-auto px-1 sm:mx-0 sm:overflow-visible sm:px-0">
+        <div className="min-w-[560px] overflow-hidden rounded-lg border">
+        <div className="grid grid-cols-7 border-b bg-muted/50">
           {["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"].map((day) => (
-            <div key={day} className="p-3 text-center border-l text-sm font-medium">
+            <div key={day} className="border-l p-1.5 text-center text-[11px] font-medium sm:p-3 sm:text-sm">
               {day}
             </div>
           ))}
@@ -491,16 +489,16 @@ export default function SchedulePage() {
             return (
               <div
                 key={i}
-                className={`min-h-[120px] p-2 border-b border-l ${!date ? "bg-muted/20" : ""} ${
+                className={`min-h-[88px] border-b border-l p-1 sm:min-h-[120px] sm:p-2 ${!date ? "bg-muted/20" : ""} ${
                   isToday ? "bg-primary/5" : ""
                 }`}
               >
                 {date && (
                   <>
                     <div
-                      className={`text-sm font-medium mb-2 ${
+                      className={`mb-1 text-xs font-medium sm:mb-2 sm:text-sm ${
                         isToday
-                          ? "bg-primary text-primary-foreground w-6 h-6 rounded-full flex items-center justify-center"
+                          ? "flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground sm:h-7 sm:w-7"
                           : ""
                       }`}
                     >
@@ -513,7 +511,7 @@ export default function SchedulePage() {
                           return (
                             <div
                               key={course.id}
-                              className={`text-xs p-1.5 rounded cursor-pointer transition-colors truncate border ${colors.bg} ${colors.text} ${colors.border} ${colors.hover}`}
+                              className={`cursor-pointer truncate rounded border p-1 text-[10px] transition-colors sm:p-1.5 sm:text-xs ${colors.bg} ${colors.text} ${colors.border} ${colors.hover}`}
                               onClick={() => handleCourseClick(course)}
                             >
                               {course.startTime} {course.name}
@@ -521,7 +519,7 @@ export default function SchedulePage() {
                           )
                         })}
                         {dayCourses.length > 3 && (
-                          <div className="text-xs text-muted-foreground px-1">+{dayCourses.length - 3} עוד</div>
+                          <div className="px-0.5 text-[10px] text-muted-foreground sm:text-xs sm:px-1">+{dayCourses.length - 3} עוד</div>
                         )}
                       </div>
                     )}
@@ -531,57 +529,60 @@ export default function SchedulePage() {
             )
           })}
         </div>
+        </div>
       </div>
     )
   }
 
   if (coursesLoading || (canViewStudents && studentsLoading)) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]" dir="rtl">
-        <Loader2 className="h-8 w-8 animate-spin" />
+      <div className="flex min-h-[400px] items-center justify-center p-3 sm:p-6" dir="rtl">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
   }
 
   return (
-    <div className="space-y-6" dir="rtl">
-      <div className="flex items-center justify-between">
+    <div className="container mx-auto max-w-7xl space-y-4 p-3 sm:space-y-6 sm:p-6" dir="rtl">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <PageHeader title="לוח זמנים" description="צפה ונהל את לוח המפגשים" />
-        <div className="text-xl font-semibold">
+        <div className="shrink-0 text-right text-base font-semibold sm:text-xl">
           {viewMode === "month"
             ? currentDate.toLocaleDateString("he-IL", { year: "numeric", month: "long" })
             : currentDate.toLocaleDateString("he-IL", { year: "numeric", month: "long", day: "numeric" })}
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <Button variant={viewMode === "day" ? "default" : "outline"} size="sm" onClick={() => setViewMode("day")}>
-            יום
-          </Button>
-          <Button variant={viewMode === "week" ? "default" : "outline"} size="sm" onClick={() => setViewMode("week")}>
-            שבוע
-          </Button>
-          <Button variant={viewMode === "month" ? "default" : "outline"} size="sm" onClick={() => setViewMode("month")}>
-            חודש
-          </Button>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant={viewMode === "day" ? "default" : "outline"} size="sm" onClick={() => setViewMode("day")}>
+              יום
+            </Button>
+            <Button variant={viewMode === "week" ? "default" : "outline"} size="sm" onClick={() => setViewMode("week")}>
+              שבוע
+            </Button>
+            <Button variant={viewMode === "month" ? "default" : "outline"} size="sm" onClick={() => setViewMode("month")}>
+              חודש
+            </Button>
+          </div>
 
-          <div className="mr-4 flex items-center gap-2">
-            <Button variant="outline" size="icon" onClick={handlePrevious}>
+          <div className="flex w-full items-center gap-2 sm:mr-0 sm:w-auto lg:mr-4">
+            <Button variant="outline" size="icon" className="shrink-0" onClick={handlePrevious} aria-label="תקופה קודמת">
               <ChevronRight className="h-4 w-4" />
             </Button>
-            <Button variant="outline" size="icon" onClick={handleNext}>
+            <Button variant="outline" size="icon" className="shrink-0" onClick={handleNext} aria-label="תקופה הבאה">
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <Button variant="outline" onClick={handleToday}>
+            <Button variant="outline" className="min-w-0 flex-1 sm:flex-initial" onClick={handleToday}>
               היום
             </Button>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-stretch lg:max-w-none lg:justify-end">
           <Select value={filterCourse} onValueChange={setFilterCourse}>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-full sm:w-[min(100%,180px)]">
               <div className="flex items-center gap-2">
                 <Filter className="h-4 w-4" />
                 <SelectValue placeholder="כל הקורסים" />
@@ -599,7 +600,7 @@ export default function SchedulePage() {
 
           {!isTeacherOnlyView && (
             <Select value={filterTeacher} onValueChange={setFilterTeacher}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-full sm:w-[min(100%,180px)]">
                 <div className="flex items-center gap-2">
                   <Filter className="h-4 w-4" />
                   <SelectValue placeholder="כל המורים" />
@@ -618,7 +619,7 @@ export default function SchedulePage() {
 
           {canViewStudents && (
             <Select value={filterStudent} onValueChange={setFilterStudent}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-full sm:w-[min(100%,180px)]">
                 <div className="flex items-center gap-2">
                   <Filter className="h-4 w-4" />
                   <SelectValue placeholder="כל התלמידים" />
@@ -638,16 +639,16 @@ export default function SchedulePage() {
       </div>
 
       {isStudentUser && (
-        <Card className="p-4 border-blue-200 bg-blue-50/40">
+        <Card className="border-blue-200 bg-blue-50/40 p-3 sm:p-4">
           {availableRegistrationCourses.length > 0 ? (
             <>
-              <div className="font-semibold mb-2">קורסים פתוחים להרשמה</div>
-              <div className="flex flex-wrap gap-2">
+              <div className="mb-2 font-semibold">קורסים פתוחים להרשמה</div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                 {availableRegistrationCourses.map((course) => (
                   <Link
                     key={course.id}
                     href={`/register/student?courseId=${encodeURIComponent(course.id)}&courseName=${encodeURIComponent(course.name)}`}
-                    className="inline-flex items-center rounded-md border border-blue-300 bg-white px-3 py-1.5 text-sm hover:bg-blue-50"
+                    className="inline-flex w-full items-center justify-center rounded-md border border-blue-300 bg-white px-3 py-2 text-center text-sm hover:bg-blue-50 sm:w-auto sm:py-1.5"
                   >
                     הרשמה ל-{course.name}
                   </Link>
@@ -665,14 +666,14 @@ export default function SchedulePage() {
       {viewMode === "month" && renderMonthView()}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]" dir="rtl">
+        <DialogContent className="max-h-[90dvh] max-w-[calc(100vw-1.5rem)] overflow-y-auto sm:max-w-[500px]" dir="rtl">
           <DialogHeader>
-            <DialogTitle className="text-2xl">{selectedCourse?.name}</DialogTitle>
-            <DialogDescription>{selectedCourse?.description}</DialogDescription>
+            <DialogTitle className="text-xl sm:text-2xl">{selectedCourse?.name}</DialogTitle>
+            <DialogDescription className="text-pretty">{selectedCourse?.description}</DialogDescription>
           </DialogHeader>
           {selectedCourse && (
-            <div className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-4 py-2 sm:py-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <div className="text-sm text-muted-foreground mb-1">מורים</div>
                   <div className="font-medium">
@@ -684,7 +685,7 @@ export default function SchedulePage() {
                   <div className="font-medium">{selectedCourse.level || "לא צוין"}</div>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <div className="text-sm text-muted-foreground mb-1">תאריכים</div>
                   <div className="font-medium text-sm">
@@ -709,7 +710,7 @@ export default function SchedulePage() {
                   )) || <span className="text-muted-foreground">לא צוין</span>}
                 </div>
               </div>
-              <div className={`grid gap-4 ${isStudentUser ? "grid-cols-1" : "grid-cols-2"}`}>
+              <div className={`grid gap-4 ${isStudentUser ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2"}`}>
                 {!isStudentUser && (
                   <div>
                     <div className="text-sm text-muted-foreground mb-1">תלמידים</div>
