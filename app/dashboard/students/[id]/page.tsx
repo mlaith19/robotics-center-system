@@ -144,14 +144,16 @@ export default function StudentViewPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex min-h-[400px] items-center justify-center p-3 sm:p-6">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
   }
 
   if (!student) {
-    return <div className="text-center py-10">{l("לא נמצא תלמיד", "Student not found", "لم يتم العثور على الطالب")}</div>
+    return (
+      <div className="px-3 py-10 text-center sm:px-6">{l("לא נמצא תלמיד", "Student not found", "لم يتم العثور على الطالب")}</div>
+    )
   }
 
   // Get enrolled course names
@@ -161,31 +163,31 @@ export default function StudentViewPage() {
 
   return (
     <div dir={isRtl ? "rtl" : "ltr"} className="min-h-screen">
-      <div className="space-y-6 max-w-5xl mx-auto p-6">
+      <div className="mx-auto max-w-5xl space-y-4 p-3 sm:space-y-6 sm:p-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/dashboard/students">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+            <Link href="/dashboard/students" className="shrink-0">
               <Button variant="ghost" size="icon">
                 <ArrowRight className="h-5 w-5" />
               </Button>
             </Link>
 
-            <div>
-              <h1 className="text-3xl font-bold text-foreground">{l("פרטי תלמיד", "Student Details", "تفاصيل الطالب")}</h1>
-              <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-                <Link href="/dashboard/students" className="hover:text-foreground transition-colors">
+            <div className="min-w-0 flex-1">
+              <h1 className="text-xl font-bold text-foreground sm:text-3xl">{l("פרטי תלמיד", "Student Details", "تفاصيل الطالب")}</h1>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                <Link href="/dashboard/students" className="transition-colors hover:text-foreground">
                   {t("students.title")}
                 </Link>
-                <ChevronLeft className="h-4 w-4" />
-                <span className="text-foreground font-medium">{student.name}</span>
+                <ChevronLeft className="h-4 w-4 shrink-0" />
+                <span className="break-words font-medium text-foreground">{student.name}</span>
               </div>
             </div>
           </div>
 
           {!isStudentUser && canEditStudents && (
-            <Link href={`/dashboard/students/${student.id}/edit`}>
-              <Button className="gap-2">
+            <Link href={`/dashboard/students/${student.id}/edit`} className="w-full shrink-0 sm:w-auto">
+              <Button className="w-full gap-2 sm:w-auto">
                 <Edit className="h-4 w-4" />
                 {l("ערוך תלמיד", "Edit Student", "تعديل الطالب")}
               </Button>
@@ -194,16 +196,16 @@ export default function StudentViewPage() {
         </div>
 
         {/* Student Name Header */}
-        <Card className="p-6">
-          <div className="flex items-center gap-6">
+        <Card className="p-4 sm:p-6">
+          <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:gap-6">
             {student.profileImage ? (
-              <img src={student.profileImage} alt={student.name} className="h-20 w-20 rounded-full object-contain bg-white p-1 border" />
+              <img src={student.profileImage} alt={student.name} className="h-20 w-20 rounded-full border bg-white object-contain p-1" />
             ) : (
-              <img src="/api/og-logo" alt="Center logo" className="h-20 w-20 rounded-full object-contain bg-white p-1 border" />
+              <img src="/api/og-logo" alt="Center logo" className="h-20 w-20 rounded-full border bg-white object-contain p-1" />
             )}
-            <div className="flex-1">
-              <div className="flex items-center gap-3">
-                <h2 className="text-2xl font-bold text-foreground">{student.name}</h2>
+            <div className="min-w-0 flex-1 text-center sm:text-right">
+              <div className="flex flex-col items-center gap-2 sm:flex-row sm:flex-wrap sm:justify-end sm:gap-3">
+                <h2 className="text-xl font-bold text-foreground sm:text-2xl">{student.name}</h2>
                 <Badge className={statusColors[student.status] || "bg-gray-100 text-gray-800"}>
                   {student.status}
                 </Badge>
@@ -213,7 +215,7 @@ export default function StudentViewPage() {
         </Card>
 
         {/* Tabs - including Profile tab with all details */}
-        <Card className="p-6">
+        <Card className="overflow-hidden p-3 sm:p-6">
           <StudentTabs
             studentId={id}
             student={student}

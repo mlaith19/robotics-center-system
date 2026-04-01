@@ -185,16 +185,16 @@ export default function NewStudentPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-4xl p-6 space-y-6" dir={isRtl ? "rtl" : "ltr"}>
-      <div className="flex items-center gap-4">
-        <Link href="/dashboard/students">
+    <div className="container mx-auto max-w-4xl space-y-4 p-3 sm:space-y-6 sm:p-6" dir={isRtl ? "rtl" : "ltr"}>
+      <div className="flex items-start gap-3 sm:items-center sm:gap-4">
+        <Link href="/dashboard/students" className="shrink-0">
           <Button variant="ghost" size="icon">
             <ArrowRight className="h-5 w-5" />
           </Button>
         </Link>
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">{tr.title}</h1>
-          <p className="text-muted-foreground mt-1">{tr.subtitle}</p>
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-bold text-foreground sm:text-3xl">{tr.title}</h1>
+          <p className="mt-1 text-sm text-muted-foreground sm:text-base">{tr.subtitle}</p>
         </div>
       </div>
 
@@ -212,7 +212,7 @@ export default function NewStudentPage() {
         </Card>
       )}
 
-      <Card className="border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100/50 p-6">
+      <Card className="border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100/50 p-4 sm:p-6">
         <div className="flex items-start gap-4">
           <div className="bg-blue-500 text-white p-3 rounded-lg">
             <User className="h-6 w-6" />
@@ -236,7 +236,7 @@ export default function NewStudentPage() {
       </Card>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        <Card className="border-2 border-green-200 bg-gradient-to-br from-green-50 to-green-100/50 p-6">
+        <Card className="border-2 border-green-200 bg-gradient-to-br from-green-50 to-green-100/50 p-4 sm:p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="bg-green-500 text-white p-2.5 rounded-lg">
               <IdCard className="h-5 w-5" />
@@ -262,7 +262,7 @@ export default function NewStudentPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
                 <Label htmlFor="idNumber" className="text-base font-medium">
                   {tr.idNumber}
@@ -291,14 +291,14 @@ export default function NewStudentPage() {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="profileImageUpload">{isEn ? "Profile image" : "תמונת פרופיל"}</Label>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
                 {newStudent.profileImage ? (
-                  <img src={newStudent.profileImage} alt="profile preview" className="h-16 w-16 rounded-full object-contain bg-white p-1 border" />
+                  <img src={newStudent.profileImage} alt="profile preview" className="mx-auto h-16 w-16 rounded-full border bg-white object-contain p-1 sm:mx-0" />
                 ) : (
-                  <div className="h-16 w-16 rounded-full border-2 border-dashed bg-muted" />
+                  <div className="mx-auto h-16 w-16 rounded-full border-2 border-dashed bg-muted sm:mx-0" />
                 )}
-                <div className="flex-1 space-y-2">
-                  <Input id="profileImageUpload" type="file" accept="image/*" capture="environment" onChange={handleProfileImageUpload} />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <Input id="profileImageUpload" type="file" accept="image/*" capture="environment" className="text-xs sm:text-sm" onChange={handleProfileImageUpload} />
                   {newStudent.profileImage && (
                     <Button type="button" variant="outline" size="sm" onClick={() => setNewStudent((prev) => ({ ...prev, profileImage: "" }))}>
                       <X className="h-4 w-4 mr-1" />
@@ -311,7 +311,7 @@ export default function NewStudentPage() {
           </div>
         </Card>
 
-        <Card className="border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100/50 p-6">
+        <Card className="border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100/50 p-4 sm:p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="bg-blue-500 text-white p-2.5 rounded-lg">
               <Phone className="h-5 w-5" />
@@ -337,7 +337,7 @@ export default function NewStudentPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
                 <Label htmlFor="phone" className="text-base font-medium">
                   {tr.mobile}
@@ -392,7 +392,7 @@ export default function NewStudentPage() {
           </div>
         </Card>
 
-        <Card className="border-2 border-emerald-200 bg-gradient-to-br from-emerald-50 to-emerald-100/50 p-6">
+        <Card className="border-2 border-emerald-200 bg-gradient-to-br from-emerald-50 to-emerald-100/50 p-4 sm:p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="bg-emerald-500 text-white p-2.5 rounded-lg">
               <Users className="h-5 w-5" />
@@ -403,7 +403,7 @@ export default function NewStudentPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor="father" className="text-base font-medium">
                 {tr.fatherName}
@@ -433,7 +433,7 @@ export default function NewStudentPage() {
         </Card>
 
         {/* User Account */}
-        <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-purple-100/50 p-6">
+        <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-purple-100/50 p-4 sm:p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="bg-purple-500 text-white p-2.5 rounded-lg">
               <KeyRound className="h-5 w-5" />
@@ -445,13 +445,14 @@ export default function NewStudentPage() {
           </div>
 
           <div className="space-y-4">
-            <div className="flex items-center gap-3">
+            <div className="flex items-start gap-3">
               <Checkbox 
                 id="createUserAccount"
+                className="mt-1 shrink-0"
                 checked={createUserAccount}
                 onCheckedChange={(checked) => setCreateUserAccount(checked === true)}
               />
-              <Label htmlFor="createUserAccount" className="cursor-pointer text-base">
+              <Label htmlFor="createUserAccount" className="cursor-pointer text-base leading-snug">
                 {tr.createAccount}
               </Label>
             </div>
@@ -486,7 +487,7 @@ export default function NewStudentPage() {
           </div>
         </Card>
 
-        <Card className="border-2 border-red-200 bg-gradient-to-br from-red-50 to-red-100/50 p-6">
+        <Card className="border-2 border-red-200 bg-gradient-to-br from-red-50 to-red-100/50 p-4 sm:p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="bg-red-500 text-white p-2.5 rounded-lg">
               <Heart className="h-5 w-5" />
@@ -534,7 +535,7 @@ export default function NewStudentPage() {
           </div>
         </Card>
 
-        <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-purple-100/50 p-6">
+        <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-purple-100/50 p-4 sm:p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="bg-purple-500 text-white p-2.5 rounded-lg">
               <BookOpen className="h-5 w-5" />
@@ -563,7 +564,7 @@ export default function NewStudentPage() {
           <div className="border-2 border-purple-200 rounded-lg p-5 bg-white">
             {courses.length > 0 ? (
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {courses.map((course) => (
                     <div
                       key={course.id.toString()}
@@ -617,18 +618,18 @@ export default function NewStudentPage() {
           </div>
         </Card>
 
-        <div className="flex gap-3 justify-start">
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-start">
           <Button
             type="submit"
             size="lg"
-            className="h-12 px-8 text-base"
+            className="h-12 w-full px-8 text-base sm:w-auto"
             disabled={isSubmitting || submitSuccess || !newStudent.name}
           >
             {submitSuccess ? (isEn ? "Saved successfully!" : "נשמר בהצלחה!") : isSubmitting ? tr.saving : tr.addStudent}
           </Button>
 
-          <Link href="/dashboard/students">
-            <Button type="button" variant="outline" size="lg" className="h-12 px-8 text-base bg-transparent">
+          <Link href="/dashboard/students" className="w-full sm:w-auto">
+            <Button type="button" variant="outline" size="lg" className="h-12 w-full px-8 text-base bg-transparent sm:w-auto">
               {tr.cancel}
             </Button>
           </Link>
