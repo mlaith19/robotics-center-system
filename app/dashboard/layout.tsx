@@ -517,7 +517,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Main content */}
       <main className="flex-1 overflow-auto">
         <AuthProvider value={currentUser}>
-          <div className="container mx-auto p-6 md:p-8">{children}</div>
+          <div className="container mx-auto p-3 sm:p-6 md:p-8">{children}</div>
         </AuthProvider>
       </main>
     </div>

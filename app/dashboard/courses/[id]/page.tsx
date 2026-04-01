@@ -674,7 +674,7 @@ export default function CourseViewPage() {
             </CardHeader>
             <CardContent>
               {enrollments.length > 0 ? (
-                <div className="rounded-md border">
+                <div className="overflow-x-auto rounded-md border">
                   <Table className="min-w-[640px]">
                     <TableHeader>
                       <TableRow className="bg-muted/50">
@@ -789,7 +789,7 @@ export default function CourseViewPage() {
               {(() => {
                 const studentAttendance = attendanceList.filter((a) => a.studentId != null)
                 return studentAttendance.length > 0 ? (
-                  <div className="rounded-md border">
+                  <div className="overflow-x-auto rounded-md border">
                     <Table className="min-w-[560px]">
                       <TableHeader>
                         <TableRow className="bg-muted/50">
@@ -840,7 +840,7 @@ export default function CourseViewPage() {
               {(() => {
                 const teacherAttendance = attendanceList.filter((a) => a.teacherId != null)
                 return teacherAttendance.length > 0 ? (
-                  <div className="rounded-md border">
+                  <div className="overflow-x-auto rounded-md border">
                     <Table className="min-w-[560px]">
                       <TableHeader>
                         <TableRow className="bg-muted/50">

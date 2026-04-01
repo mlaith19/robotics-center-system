@@ -420,8 +420,8 @@ export default function UsersPage() {
 
   if (noPermission) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6" dir="rtl">
-        <Card className="max-w-md w-full text-center">
+      <div className="flex min-h-[50vh] items-center justify-center p-3 sm:p-6" dir="rtl">
+        <Card className="w-full max-w-md text-center">
           <CardHeader>
             <CardTitle className="text-lg text-red-600">אין הרשאה</CardTitle>
             <CardDescription>אין לך הרשאה לצפות בדף המשתמשים. פנה למנהל המערכת.</CardDescription>
@@ -435,23 +435,23 @@ export default function UsersPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6" dir="rtl">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="mr-2 inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900"
-          >
-            <ArrowRight className="h-4 w-4" />
-            חזרה
-          </button>
-          <PageHeader title="משתמשים" description="ניהול משתמשים והרשאות" />
-        </div>
+    <div className="space-y-4 sm:space-y-6" dir="rtl">
+      <div className="mx-auto max-w-7xl space-y-4 sm:space-y-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 flex-1">
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="mb-2 inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900"
+            >
+              <ArrowRight className="h-4 w-4 shrink-0" />
+              חזרה
+            </button>
+            <PageHeader title="משתמשים" description="ניהול משתמשים והרשאות" />
+          </div>
 
-          <Button className="gap-2" onClick={openCreate}>
-            <UserPlus className="h-4 w-4" />
+          <Button className="w-full gap-2 sm:w-auto" onClick={openCreate}>
+            <UserPlus className="h-4 w-4 shrink-0" />
             הוסף משתמש
           </Button>
         </div>
@@ -461,13 +461,13 @@ export default function UsersPage() {
             <CardTitle className="text-base">סינון וחיפוש</CardTitle>
             <CardDescription>חיפוש לפי שם/אימייל/טלפון וסינון לפי סטטוס</CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col gap-3 md:flex-row md:items-end">
-            <div className="flex-1 space-y-2">
+          <CardContent className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+            <div className="min-w-0 flex-1 space-y-2 sm:min-w-[200px]">
               <Label>חיפוש</Label>
-              <Input value={q ?? ""} onChange={(e) => setQ(e.target.value)} placeholder="חפש משתמש..." />
+              <Input value={q ?? ""} onChange={(e) => setQ(e.target.value)} placeholder="חפש משתמש..." className="w-full" />
             </div>
 
-            <div className="w-full md:w-64 space-y-2">
+            <div className="w-full space-y-2 sm:w-48 md:w-64">
               <Label>סטטוס</Label>
               <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
                 <SelectTrigger>
@@ -481,7 +481,7 @@ export default function UsersPage() {
               </Select>
             </div>
 
-            <div className="text-sm text-gray-600 pt-2 md:pt-0">
+            <div className="shrink-0 pt-2 text-sm text-gray-600 sm:pt-0">
               {loading ? "טוען..." : `${filteredCount} משתמשים`}
             </div>
           </CardContent>
@@ -492,54 +492,59 @@ export default function UsersPage() {
             <CardTitle>רשימת משתמשים</CardTitle>
             <CardDescription>עריכה: טלפון + הרשאות | פעולה: השבת/הפעל/מחק. לכניסה למערכת: הזן את &quot;שם משתמש&quot; או אימייל + סיסמה.</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-2 sm:p-6">
             {loading ? (
               <div className="py-10 text-center text-gray-500">טוען...</div>
             ) : users.length === 0 ? (
               <div className="py-10 text-center text-gray-500">אין משתמשים</div>
             ) : (
-              <Table>
+              <div className="-mx-2 overflow-x-auto sm:mx-0">
+                <Table className="min-w-[880px] w-full">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>שם</TableHead>
-                    <TableHead title="לכניסה למערכת יש להזין שם משתמש או אימייל">שם משתמש</TableHead>
-                    <TableHead>אימייל</TableHead>
-                    <TableHead>טלפון</TableHead>
-                    <TableHead>הרשאות</TableHead>
-                    <TableHead>סטטוס</TableHead>
-                    <TableHead>נוצר</TableHead>
-                    <TableHead>פעולות</TableHead>
+                    <TableHead className="whitespace-nowrap text-right">שם</TableHead>
+                    <TableHead className="whitespace-nowrap text-right" title="לכניסה למערכת יש להזין שם משתמש או אימייל">
+                      שם משתמש
+                    </TableHead>
+                    <TableHead className="text-right">אימייל</TableHead>
+                    <TableHead className="whitespace-nowrap text-right">טלפון</TableHead>
+                    <TableHead className="whitespace-nowrap text-right">הרשאות</TableHead>
+                    <TableHead className="whitespace-nowrap text-right">סטטוס</TableHead>
+                    <TableHead className="whitespace-nowrap text-right">נוצר</TableHead>
+                    <TableHead className="whitespace-nowrap text-right">פעולות</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {users.map((u) => (
                     <TableRow key={u.id}>
-                      <TableCell className="font-medium">
+                      <TableCell className="max-w-[140px] align-top font-medium sm:max-w-none">
                         <div className="flex items-center gap-2">
-                          {isAdminUser(u) && <Lock className="h-4 w-4 text-purple-600" />}
-                          {u.name}
+                          {isAdminUser(u) && <Lock className="h-4 w-4 shrink-0 text-purple-600" />}
+                          <span className="break-words">{u.name}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="font-mono text-sm text-indigo-600" title="לכניסה: הזן ערך זה בשדה שם משתמש">
-                        {u.username ?? "—"}
+                      <TableCell className="align-top font-mono text-sm text-indigo-600" title="לכניסה: הזן ערך זה בשדה שם משתמש">
+                        <span className="break-all">{u.username ?? "—"}</span>
                       </TableCell>
-                      <TableCell>{u.email}</TableCell>
-                      <TableCell>{u.phone || "—"}</TableCell>
-                      <TableCell>
+                      <TableCell className="max-w-[160px] break-all align-top text-right sm:max-w-none">{u.email}</TableCell>
+                      <TableCell className="whitespace-nowrap align-top text-right" dir="ltr">
+                        {u.phone || "—"}
+                      </TableCell>
+                      <TableCell className="align-top">
                         <Badge variant="outline">{u.permissions?.length || 0} הרשאות</Badge>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="align-top">
                         <Badge
                           className={u.status === "active" ? "bg-emerald-600 text-white" : "bg-gray-400 text-white"}
                         >
                           {u.status === "active" ? "פעיל" : "מושבת"}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-sm text-gray-600">
+                      <TableCell className="whitespace-nowrap align-top text-sm text-gray-600">
                         {new Date(u.createdAt).toLocaleDateString("he-IL")}
                       </TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
+                      <TableCell className="align-top">
+                        <div className="flex flex-wrap gap-1">
                           <Button
                             variant="ghost"
                             size="sm"
@@ -586,6 +591,7 @@ export default function UsersPage() {
                   ))}
                 </TableBody>
               </Table>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -597,7 +603,10 @@ export default function UsersPage() {
             if (!open) resetForm()
           }}
         >
-          <DialogContent className="!max-w-[1400px] w-[98vw] max-h-[90vh] overflow-y-auto sm:!max-w-[1400px]" dir="rtl">
+          <DialogContent
+            className="!max-w-[min(1400px,calc(100vw-1rem))] max-h-[85dvh] overflow-y-auto p-4 sm:p-6"
+            dir="rtl"
+          >
             <DialogHeader>
               <DialogTitle>{editingUser ? "עריכת משתמש" : "משתמש חדש"}</DialogTitle>
               <DialogDescription>
@@ -659,11 +668,13 @@ export default function UsersPage() {
 
               {/* בחירת תפקיד */}
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <Label className="text-lg font-semibold">תפקיד</Label>
-                  <span className="text-sm text-muted-foreground">מעבר לתפקיד אחר ממלא הרשאות אוטומטית. שינויים בצ'קבוקסים נשמרים בלחיצה על שמור.</span>
+                  <span className="text-sm text-muted-foreground sm:max-w-[70%] sm:text-left">
+                    מעבר לתפקיד אחר ממלא הרשאות אוטומטית. שינויים בצ&apos;קבוקסים נשמרים בלחיצה על שמור.
+                  </span>
                 </div>
-                <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-6">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
                   {ROLE_PRESETS.map((role) => (
                     <div
                       key={role.id}
@@ -682,12 +693,12 @@ export default function UsersPage() {
               </div>
 
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <Label className="text-lg font-semibold">הרשאות</Label>
                   <Badge variant="outline">{selectedPermissions.length} הרשאות נבחרו</Badge>
                 </div>
 
-                <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {PERMISSION_CATEGORIES.map((category) => {
                     const Icon = categoryIcons[category.id]
                     const allSelected = category.permissions.every((p) => selectedPermissions.includes(p.id))
@@ -695,24 +706,24 @@ export default function UsersPage() {
                     return (
                       <Card
                         key={category.id}
-                        className={`${colorClasses[category.color] || "bg-gray-50 border-gray-200"} border-2 min-w-[200px]`}
+                        className={`min-w-0 w-full border-2 ${colorClasses[category.color] || "bg-gray-50 border-gray-200"}`}
                       >
-                        <CardHeader className="pb-4 px-5">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-3">
-                              <Icon className="h-6 w-6 flex-shrink-0" />
-                              <CardTitle className="text-lg font-semibold">{category.name}</CardTitle>
+                        <CardHeader className="px-3 pb-3 pt-4 sm:px-5">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                              <Icon className="h-6 w-6 shrink-0" />
+                              <CardTitle className="text-base font-semibold sm:text-lg">{category.name}</CardTitle>
                             </div>
                             <Badge
                               variant="secondary"
-                              className="text-sm cursor-pointer flex-shrink-0 px-3 py-1"
+                              className="w-fit shrink-0 cursor-pointer px-3 py-1 text-sm"
                               onClick={() => toggleCategoryAll(category)}
                             >
                               {allSelected ? "ביטול" : "הכל"}
                             </Badge>
                           </div>
                         </CardHeader>
-                        <CardContent className="space-y-5 px-5">
+                        <CardContent className="space-y-3 px-3 sm:space-y-5 sm:px-5">
                           {category.permissions.map((perm) => (
                             <div key={perm.id} className="flex items-start gap-4 p-2 rounded-lg hover:bg-black/5 transition-colors">
                               <Checkbox

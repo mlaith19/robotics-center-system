@@ -135,11 +135,13 @@ export default function StudentsPage() {
   }
 
   return (
-    <div className="space-y-6" dir={isRtl ? "rtl" : "ltr"}>
+    <div className="space-y-4 sm:space-y-6" dir={isRtl ? "rtl" : "ltr"}>
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <PageHeader title={t("students.title")} description={t("students.manageAll")} />
-        <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <PageHeader title={t("students.title")} description={t("students.manageAll")} />
+        </div>
+        <div className="flex w-full flex-wrap items-center gap-2 md:w-auto">
           <div className="flex items-center border rounded-lg p-1">
             <Button
               variant={viewMode === "list" ? "secondary" : "ghost"}

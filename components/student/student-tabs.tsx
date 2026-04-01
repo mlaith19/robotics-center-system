@@ -648,7 +648,7 @@ export function StudentTabs({
 
       {showGeneral && (
       <TabsContent value="general" className="space-y-4 mt-6">
-        <Card className="p-5">
+        <Card className="p-3 sm:p-5">
           <div className="text-sm text-muted-foreground">{tx("סיכום מהיר","Quick Summary","ملخص سريع")}</div>
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="border rounded-lg p-4">
@@ -675,6 +675,7 @@ export function StudentTabs({
 
           {enrollments.length > 0 ? (
             <Card className="overflow-hidden border-2">
+              <div className="overflow-x-auto">
               <Table className="min-w-[920px]">
                 <TableHeader>
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
@@ -738,9 +739,10 @@ export function StudentTabs({
                   })}
                 </TableBody>
               </Table>
+              </div>
             </Card>
           ) : (
-            <Card className="p-8 text-center">
+            <Card className="p-6 text-center sm:p-8">
               <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-2" />
               <p className="text-muted-foreground">{isEn ? "Student is not enrolled in any course right now" : "התלמיד אינו רשום לאף קורס כרגע"}</p>
             </Card>
@@ -1012,6 +1014,7 @@ export function StudentTabs({
 
           {payments.length > 0 ? (
             <Card className="overflow-hidden border-2">
+              <div className="overflow-x-auto">
               <Table className="min-w-[720px]">
                 <TableHeader>
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
@@ -1059,9 +1062,10 @@ export function StudentTabs({
                   })}
                 </TableBody>
               </Table>
+              </div>
             </Card>
           ) : (
-            <Card className="p-8 text-center">
+            <Card className="p-6 text-center sm:p-8">
               <Receipt className="h-12 w-12 text-muted-foreground mx-auto mb-2" />
               <p className="text-muted-foreground">{isEn ? "No payments for this student yet" : "אין תשלומים לתלמיד הזה עדיין"}</p>
             </Card>
@@ -1141,6 +1145,7 @@ export function StudentTabs({
 
           {filteredAttendances.length > 0 ? (
             <Card className="overflow-hidden border-2">
+              <div className="overflow-x-auto">
               <Table className="min-w-[640px]">
                 <TableHeader>
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
@@ -1178,9 +1183,10 @@ export function StudentTabs({
                   })}
                 </TableBody>
               </Table>
+              </div>
             </Card>
           ) : (
-            <Card className="p-8 text-center">
+            <Card className="p-6 text-center sm:p-8">
               <CalendarCheck className="h-12 w-12 text-muted-foreground mx-auto mb-2" />
               <p className="text-muted-foreground">{isEn ? "No attendance records for this student yet" : "אין נוכחות לתלמיד הזה עדיין"}</p>
             </Card>
@@ -1193,6 +1199,7 @@ export function StudentTabs({
         <TabsContent value="sessionFeedback" className="space-y-4 mt-6">
           {sessionFeedbackRows.length > 0 ? (
             <Card className="overflow-hidden border-2">
+              <div className="overflow-x-auto">
               <Table className="min-w-[720px]">
                 <TableHeader>
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
@@ -1213,9 +1220,10 @@ export function StudentTabs({
                   ))}
                 </TableBody>
               </Table>
+              </div>
             </Card>
           ) : (
-            <Card className="p-8 text-center">
+            <Card className="p-6 text-center sm:p-8">
               <p className="text-muted-foreground">{isEn ? "No session feedback yet" : "אין משוב מפגשים עדיין"}</p>
             </Card>
           )}
