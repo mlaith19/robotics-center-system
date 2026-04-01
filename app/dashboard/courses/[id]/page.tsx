@@ -8,8 +8,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { ArrowRight, Pencil, Loader2, BookOpen, Calendar, Users, BarChart3, CalendarCheck, Check, X, Thermometer, Plane } from "lucide-react"
+import { ArrowRight, Pencil, Loader2, BookOpen, Calendar, Users, BarChart3, CalendarCheck, Check, X, Thermometer, Plane, CalendarRange } from "lucide-react"
 import { courseTimeToDisplayValue } from "@/lib/course-db-fields"
 import { useLanguage } from "@/lib/i18n/context"
 
@@ -21,6 +22,7 @@ interface Course {
   duration: number | null
   price: number | null
   status: string
+  courseType?: string | null
   startDate: string | null
   endDate: string | null
   startTime: string | null
@@ -43,6 +45,7 @@ interface Enrollment {
   studentName: string
   status: string
   enrollmentDate: string
+  campGroupId?: string | null
   createdByUserId?: string | null
   createdByUserName?: string | null
   siblingDiscountPackageName?: string | null
@@ -84,6 +87,8 @@ const dayLabels: Record<string, Record<"he" | "en" | "ar", string>> = {
 import { useCurrentUser } from "@/lib/auth-context"
 import { hasPermission, hasFullAccessRole } from "@/lib/permissions"
 import { getCourseStatusPresentation } from "@/lib/course-status"
+import { isCampCourseType } from "@/lib/camp-kaytana"
+import { CourseCampTab } from "./course-camp-tab"
 
 export default function CourseViewPage() {
   const { locale } = useLanguage()
@@ -174,6 +179,8 @@ export default function CourseViewPage() {
   const canTabAttendanceStudents = isAdmin || hasPermission(userPerms, "courses.tab.attendance.students")
   const canTabAttendanceTeachers = isAdmin || hasPermission(userPerms, "courses.tab.attendance.teachers")
   const canTabSessionsFeedback = isAdmin || hasPermission(userPerms, "courses.tab.feedback") || hasPermission(userPerms, "courses.tab.attendance.students")
+  const isCampCourse = !!(course && isCampCourseType(course.courseType))
+  const canTabCamp = isCampCourse && (isAdmin || hasPermission(userPerms, "courses.tab.camp"))
   const [attendanceList, setAttendanceList] = useState<{ id: string; studentId: string | null; teacherId: string | null; date: string; status: string; notes?: string | null; createdByUserName?: string | null }[]>([])
   const [attendanceDate, setAttendanceDate] = useState(() => new Date().toISOString().split("T")[0])
   const [attendanceByStudent, setAttendanceByStudent] = useState<Record<string, string>>({})
@@ -184,6 +191,23 @@ export default function CourseViewPage() {
   const [savingSession, setSavingSession] = useState(false)
   const [feedbackDrafts, setFeedbackDrafts] = useState<Record<string, Record<string, string>>>({})
   const [savingFeedbackBySession, setSavingFeedbackBySession] = useState<Record<string, boolean>>({})
+  const [campGroups, setCampGroups] = useState<{ id: string; label: string }[]>([])
+
+  useEffect(() => {
+    if (!id || !course || !isCampCourseType(course.courseType)) {
+      setCampGroups([])
+      return
+    }
+    fetch(`/api/courses/${id}/camp`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) =>
+        setCampGroups(
+          Array.isArray(d?.groups) ? d.groups.map((g: { id: string; label: string }) => ({ id: g.id, label: g.label })) : [],
+        ),
+      )
+      .catch(() => setCampGroups([]))
+  }, [id, course?.courseType])
+
   useEffect(() => {
     if (!currentUser?.id) return
     fetch(`/api/students/by-user/${currentUser.id}`)
@@ -301,6 +325,24 @@ export default function CourseViewPage() {
     }
   }
 
+  async function saveEnrollmentCampGroup(enrollmentId: string, campGroupId: string) {
+    try {
+      const res = await fetch(`/api/enrollments/${enrollmentId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ campGroupId: campGroupId || null }),
+      })
+      if (!res.ok) return
+      const enrollmentsRes = await fetch(`/api/enrollments?courseId=${id}`)
+      if (enrollmentsRes.ok) {
+        const data = await enrollmentsRes.json()
+        setEnrollments(Array.isArray(data) ? data : [])
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   async function saveStudentAttendance(studentId: string, status: "present" | "absent" | "sick" | "vacation") {
     const prev = attendanceByStudent[studentId]
     setAttendanceByStudent((p) => ({ ...p, [studentId]: status }))
@@ -388,6 +430,7 @@ export default function CourseViewPage() {
     canTabGeneral,
     canTabSessionsFeedback,
     !isStudentUser && canTabStudents,
+    canTabCamp,
     !isStudentUser && canTabPayments,
     canTabAttendanceStudents,
     canTabAttendanceTeachers,
@@ -424,7 +467,7 @@ export default function CourseViewPage() {
       </div>
 
       {/* Tabs - לפי הרשאות טאב בכרטסת קורס */}
-      <Tabs defaultValue={canTabGeneral ? "general" : canTabSessionsFeedback ? "sessions-feedback" : !isStudentUser && canTabStudents ? "students" : canTabPayments ? "payments" : canTabAttendanceStudents ? "attendance-students" : "attendance-teachers"} className="w-full" dir={isRtl ? "rtl" : "ltr"}>
+      <Tabs defaultValue={canTabGeneral ? "general" : canTabSessionsFeedback ? "sessions-feedback" : !isStudentUser && canTabStudents ? "students" : canTabCamp ? "camp" : !isStudentUser && canTabPayments ? "payments" : canTabAttendanceStudents ? "attendance-students" : "attendance-teachers"} className="w-full" dir={isRtl ? "rtl" : "ltr"}>
         <div className="-mx-1 overflow-x-auto px-1 pb-1 sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0">
           <TabsList
             className="mb-4 flex h-auto min-h-10 w-max min-w-full max-w-none flex-nowrap justify-start gap-1 overflow-x-auto p-[3px] sm:mb-6 md:grid md:w-full md:max-w-full md:overflow-visible"
@@ -448,6 +491,12 @@ export default function CourseViewPage() {
             {!isStudentUser && canTabStudents && (
               <TabsTrigger value="students" className="shrink-0 px-2 text-xs sm:text-sm md:min-w-0">
                 {tr.linkedStudents}
+              </TabsTrigger>
+            )}
+            {canTabCamp && (
+              <TabsTrigger value="camp" className="shrink-0 gap-1 px-2 text-xs sm:text-sm md:min-w-0">
+                <CalendarRange className="h-3.5 w-3.5 opacity-70" />
+                {locale === "ar" ? "مخيم" : locale === "en" ? "Camp" : "קייטנה"}
               </TabsTrigger>
             )}
             {!isStudentUser && canTabPayments && (
@@ -685,6 +734,11 @@ export default function CourseViewPage() {
                         <TableHead className="text-right">{tr.siblingRank}</TableHead>
                         <TableHead className="text-right">{tr.packageSource}</TableHead>
                         <TableHead className="text-right">{tr.performedBy}</TableHead>
+                        {isCampCourse && (
+                          <TableHead className="text-right">
+                            {locale === "ar" ? "المجموعة" : locale === "en" ? "Camp group" : "קבוצת קייטנה"}
+                          </TableHead>
+                        )}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -711,6 +765,34 @@ export default function CourseViewPage() {
                           <TableCell className="text-right text-muted-foreground">
                             {enrollment.createdByUserName || enrollment.createdByUserId || "—"}
                           </TableCell>
+                          {isCampCourse && (
+                            <TableCell className="text-right">
+                              {canEditCourses && !isStudentUser ? (
+                                <Select
+                                  value={enrollment.campGroupId || "__none__"}
+                                  onValueChange={(v) =>
+                                    saveEnrollmentCampGroup(enrollment.id, v === "__none__" ? "" : v)
+                                  }
+                                >
+                                  <SelectTrigger className="w-[min(100%,200px)]">
+                                    <SelectValue placeholder="—" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__none__">—</SelectItem>
+                                    {campGroups.map((g) => (
+                                      <SelectItem key={g.id} value={g.id}>
+                                        {g.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <span className="text-muted-foreground">
+                                  {campGroups.find((g) => g.id === enrollment.campGroupId)?.label || "—"}
+                                </span>
+                              )}
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))}
                     </TableBody>
@@ -724,6 +806,12 @@ export default function CourseViewPage() {
             </CardContent>
           </Card>
         </TabsContent>
+        )}
+
+        {canTabCamp && (
+          <TabsContent value="camp" className="space-y-4">
+            <CourseCampTab courseId={id} teachers={teachers} canEdit={!isStudentUser && canEditCourses} />
+          </TabsContent>
         )}
 
         {!isStudentUser && canTabPayments && (

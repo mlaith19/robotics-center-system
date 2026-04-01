@@ -32,6 +32,30 @@ interface Course {
   students?: number
   enrollmentCount?: number
   showRegistrationLink?: boolean
+  /** מפגש קייטנה (משבצת × כיתה) */
+  isCampSlot?: boolean
+  campAssignmentId?: string
+  campSessionDate?: string
+  campLessonTitle?: string
+  campGroupLabel?: string
+  campRoomLabel?: string
+  campCourseId?: string
+}
+
+interface CampScheduleEvent {
+  assignmentId: string
+  sessionDate: string
+  slotStart: string
+  slotEnd: string
+  lessonTitle: string
+  courseId: string
+  courseName: string
+  roomId: string
+  roomLabel: string
+  groupId: string
+  groupLabel: string
+  roomTeacherId: string | null
+  teacherName: string | null
 }
 
 interface Student {
@@ -186,6 +210,45 @@ export default function SchedulePage() {
   const [filterStudent, setFilterStudent] = useState<string>("all")
 
   const canSeeFinancial = !!isAdmin || hasPermission(userPerms, "courses.financial")
+  const canViewSchedule = isAdmin || hasPermission(userPerms, "schedule.view")
+
+  const scheduleRange = useMemo(() => {
+    if (viewMode === "day") {
+      const d = ymd(currentDate)
+      return { start: d, end: d }
+    }
+    if (viewMode === "week") {
+      const start = new Date(currentDate)
+      const day = start.getDay()
+      start.setDate(start.getDate() - day)
+      const end = new Date(start)
+      end.setDate(end.getDate() + 6)
+      return { start: ymd(start), end: ymd(end) }
+    }
+    const y = currentDate.getFullYear()
+    const m = currentDate.getMonth()
+    const first = new Date(y, m, 1)
+    const last = new Date(y, m + 1, 0)
+    return { start: ymd(first), end: ymd(last) }
+  }, [viewMode, currentDate])
+
+  const campEventsUrl =
+    canViewSchedule && scheduleRange.start && scheduleRange.end
+      ? `/api/schedule/camp-events?start=${encodeURIComponent(scheduleRange.start)}&end=${encodeURIComponent(scheduleRange.end)}${
+          filterStudent !== "all" && canViewStudents ? `&studentId=${encodeURIComponent(filterStudent)}` : ""
+        }`
+      : null
+
+  const { data: campPack, isLoading: campEventsLoading } = useSWR<{ events: CampScheduleEvent[] }>(
+    campEventsUrl,
+    async (url) => {
+      const r = await fetch(url)
+      if (!r.ok) return { events: [] }
+      return r.json()
+    },
+    { revalidateOnFocus: true, refreshInterval: 60000 },
+  )
+  const campEvents = Array.isArray(campPack?.events) ? campPack.events : []
 
   const courseColorMap = useMemo(() => {
     const colorMap: Record<string, number> = {}
@@ -248,12 +311,51 @@ export default function SchedulePage() {
     })
   }, [coursesForUser, filterCourse, filterTeacher, isTeacherOnlyView, currentTeacherId])
 
+  function campCoursesForDate(date: Date): Course[] {
+    const dateYmd = ymd(date)
+    return campEvents
+      .filter((e) => e.sessionDate === dateYmd)
+      .filter((e) => {
+        if (filterCourse !== "all" && e.courseId !== filterCourse) return false
+        if (filterTeacher !== "all") {
+          if (e.roomTeacherId !== filterTeacher) return false
+        }
+        return true
+      })
+      .map((e) => {
+        const title =
+          e.lessonTitle?.trim() ?
+            `${e.lessonTitle.trim()} · ${e.courseName}`
+          : `${e.courseName} · ${e.groupLabel}`
+        return {
+          id: `camp-${e.assignmentId}`,
+          name: title,
+          description: [e.roomLabel && `כיתה: ${e.roomLabel}`, e.groupLabel && `קבוצה: ${e.groupLabel}`].filter(Boolean).join(" · "),
+          startTime: e.slotStart,
+          endTime: e.slotEnd,
+          startDate: e.sessionDate,
+          endDate: e.sessionDate,
+          teachers:
+            e.teacherName && e.roomTeacherId ?
+              [{ id: e.roomTeacherId, name: e.teacherName }]
+            : [],
+          isCampSlot: true,
+          campAssignmentId: e.assignmentId,
+          campSessionDate: e.sessionDate,
+          campLessonTitle: e.lessonTitle,
+          campGroupLabel: e.groupLabel,
+          campRoomLabel: e.roomLabel,
+          campCourseId: e.courseId,
+        } satisfies Course
+      })
+  }
+
   const getCoursesForDate = (date: Date) => {
     const dayOfWeek = date.getDay()
     const dayName = Object.keys(weekdayToNumber).find((key) => weekdayToNumber[key] === dayOfWeek)
     const dateYmd = ymd(date)
 
-    return filteredCourses.filter((course) => {
+    const regular = filteredCourses.filter((course) => {
       if (!dayName) return false
       
       // בדוק גם weekdays וגם daysOfWeek (תאימות לאחור)
@@ -287,6 +389,8 @@ export default function SchedulePage() {
       }
       return true
     })
+    const camp = campCoursesForDate(date)
+    return [...regular, ...camp]
   }
 
   const getWeekDates = () => {
@@ -357,7 +461,7 @@ export default function SchedulePage() {
             const hourCourses = dayCourses.filter((course) => {
               if (!course.startTime) return false
               const [startHour] = course.startTime.split(":").map(Number)
-              return startHour === hour
+              return Number.isFinite(startHour) && startHour === hour
             })
 
             return (
@@ -422,7 +526,7 @@ export default function SchedulePage() {
                 const dayCourses = getCoursesForDate(date).filter((course) => {
                   if (!course.startTime) return false
                   const [startHour] = course.startTime.split(":").map(Number)
-                  return startHour === hour
+                  return Number.isFinite(startHour) && startHour === hour
                 })
 
                 return (
@@ -534,7 +638,7 @@ export default function SchedulePage() {
     )
   }
 
-  if (coursesLoading || (canViewStudents && studentsLoading)) {
+  if (coursesLoading || (canViewStudents && studentsLoading) || (canViewSchedule && campEventsLoading)) {
     return (
       <div className="flex min-h-[400px] items-center justify-center p-3 sm:p-6" dir="rtl">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -671,7 +775,54 @@ export default function SchedulePage() {
             <DialogTitle className="text-xl sm:text-2xl">{selectedCourse?.name}</DialogTitle>
             <DialogDescription className="text-pretty">{selectedCourse?.description}</DialogDescription>
           </DialogHeader>
-          {selectedCourse && (
+          {selectedCourse && selectedCourse.isCampSlot ? (
+            <div className="space-y-4 py-2 sm:py-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <div className="mb-1 text-sm text-muted-foreground">תאריך</div>
+                  <div className="font-medium">
+                    {selectedCourse.campSessionDate ?
+                      new Date(selectedCourse.campSessionDate).toLocaleDateString("he-IL")
+                    : "—"}
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-1 text-sm text-muted-foreground">שעות</div>
+                  <div className="font-medium">
+                    {selectedCourse.startTime || "—"} – {selectedCourse.endTime || "—"}
+                  </div>
+                </div>
+              </div>
+              {selectedCourse.campLessonTitle?.trim() ? (
+                <div>
+                  <div className="mb-1 text-sm text-muted-foreground">שם שיעור</div>
+                  <div className="font-medium">{selectedCourse.campLessonTitle}</div>
+                </div>
+              ) : null}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <div className="mb-1 text-sm text-muted-foreground">כיתה</div>
+                  <div className="font-medium">{selectedCourse.campRoomLabel || "—"}</div>
+                </div>
+                <div>
+                  <div className="mb-1 text-sm text-muted-foreground">קבוצה</div>
+                  <div className="font-medium">{selectedCourse.campGroupLabel || "—"}</div>
+                </div>
+              </div>
+              <div>
+                <div className="mb-1 text-sm text-muted-foreground">מורה</div>
+                <div className="font-medium">{selectedCourse.teachers?.map((t) => t.name).join(", ") || "לא צוין"}</div>
+              </div>
+              {selectedCourse.campCourseId ? (
+                <div className="pt-2">
+                  <Link href={`/dashboard/courses/${selectedCourse.campCourseId}`} className="text-sm text-primary underline">
+                    פתח קורס
+                  </Link>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          {selectedCourse && !selectedCourse.isCampSlot && (
             <div className="space-y-4 py-2 sm:py-4">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
