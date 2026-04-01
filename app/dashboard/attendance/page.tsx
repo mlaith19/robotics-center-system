@@ -258,7 +258,7 @@ export default function AttendancePage() {
         size="sm"
         onClick={() => handleStatusChange(personId, status)}
         disabled={isSaving}
-        className={`gap-1 min-h-[44px] text-xs px-2 ${
+        className={`min-h-[44px] flex-1 gap-1 px-2 text-[11px] sm:flex-initial sm:text-xs ${
           isActive
             ? status === "present"
               ? "bg-green-600 hover:bg-green-700"
@@ -293,15 +293,13 @@ export default function AttendancePage() {
   const hasData = getList().length > 0
 
   return (
-    <div className="flex min-h-screen w-full flex-col" dir="rtl">
-      <div className="flex flex-col gap-4 p-4 sm:px-6 sm:py-6 md:gap-8">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => router.back()}>
+    <div className="flex w-full flex-col" dir="rtl">
+      <div className="container mx-auto max-w-7xl space-y-4 p-3 sm:space-y-6 sm:p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+          <Button variant="ghost" size="icon" className="shrink-0 self-start sm:self-center" onClick={() => router.back()}>
             <ArrowRight className="h-5 w-5" />
           </Button>
           <PageHeader title="נוכחות" description="ניהול נוכחות לקורסים, מורים ותלמידים" />
-        </div>
         </div>
 
         {!hasData && (
@@ -316,15 +314,15 @@ export default function AttendancePage() {
         )}
 
         <Card className="border-blue-200 bg-blue-50/50">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <CalendarIcon className="h-5 w-5 text-blue-600" />
+          <CardHeader className="px-3 text-right sm:px-6">
+            <CardTitle className="flex flex-row-reverse items-center justify-end gap-2 text-base sm:text-lg">
+              <CalendarIcon className="h-5 w-5 shrink-0 text-blue-600" />
               בחירת נוכחות
             </CardTitle>
-            <CardDescription>בחר סוג, פריט ותאריך לניהול נוכחות</CardDescription>
+            <CardDescription className="text-right">בחר סוג, פריט ותאריך לניהול נוכחות</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="grid gap-3 md:grid-cols-4">
+          <CardContent className="px-3 sm:px-6">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">סוג</label>
                 <Select
@@ -483,8 +481,8 @@ export default function AttendancePage() {
 
         {selectedId && tableData.length > 0 && (attendanceType === "course" || selectedCourseId) && (
           <Card className="border-green-200 bg-green-50/30">
-            <CardHeader>
-              <CardTitle className="text-lg">
+            <CardHeader className="px-3 text-right sm:px-6">
+              <CardTitle className="break-words text-base sm:text-lg">
                 {attendanceType === "course"
                   ? `נוכחות קורס: ${selectedItem?.name}`
                   : attendanceType === "teacher"
@@ -493,9 +491,48 @@ export default function AttendancePage() {
               </CardTitle>
               <CardDescription>{format(selectedDate, "dd MMMM yyyy", { locale: he })}</CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="rounded-md border bg-white overflow-x-auto">
-                <Table>
+            <CardContent className="space-y-4 px-3 sm:px-6">
+              {/* מובייל: כרטיסים */}
+              <div className="flex flex-col gap-3 lg:hidden">
+                {tableData.map((person: any) => (
+                  <Card key={person.id} className="border bg-white shadow-sm">
+                    <CardContent className="space-y-3 p-4 text-right">
+                      <div>
+                        <div className="font-semibold">{person.name}</div>
+                        <div className="text-sm text-muted-foreground" dir="ltr">
+                          {person.phone}
+                        </div>
+                        <div className="text-xs text-muted-foreground">{format(selectedDate, "dd/MM/yyyy")}</div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {getStatusButton(person.id, "present", "נוכח", Check)}
+                        {getStatusButton(person.id, "absent", "לא נוכח", X)}
+                        {getStatusButton(person.id, "sick", "חולה", Thermometer)}
+                        {getStatusButton(person.id, "vacation", "חופש", Plane)}
+                      </div>
+                      <div className="flex flex-row-reverse items-center justify-between gap-2 border-t pt-2 text-sm">
+                        <span className="text-muted-foreground">
+                          {attendanceCreatedBy[person.id] || "—"}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDelete(person.id)}
+                          disabled={!attendanceData[person.id]}
+                          className="gap-1 text-red-600 hover:bg-red-50 hover:text-red-700"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          מחק
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              {/* דסקטופ: טבלה */}
+              <div className="hidden overflow-x-auto rounded-md border bg-white lg:block">
+                <Table className="min-w-[860px]">
                   <TableHeader>
                     <TableRow className="bg-muted/50">
                       <TableHead className="text-right font-semibold">שם</TableHead>
@@ -503,21 +540,19 @@ export default function AttendancePage() {
                       <TableHead className="text-right font-semibold">תאריך</TableHead>
                       <TableHead className="text-right font-semibold">סטטוס נוכחות</TableHead>
                       <TableHead className="text-right font-semibold">בוצע על ידי</TableHead>
-                      <TableHead className="text-right font-semibold w-16">מחיקה</TableHead>
+                      <TableHead className="w-16 text-right font-semibold">מחיקה</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {tableData.map((person: any) => (
                       <TableRow key={person.id}>
-                        <TableCell className="font-medium">
-                          {person.name}
-                        </TableCell>
+                        <TableCell className="font-medium">{person.name}</TableCell>
                         <TableCell className="text-muted-foreground">{person.phone}</TableCell>
                         <TableCell className="text-muted-foreground">
                           {format(selectedDate, "dd/MM/yyyy")}
                         </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
+                        <TableCell className="min-w-[280px]">
+                          <div className="flex flex-wrap gap-2">
                             {getStatusButton(person.id, "present", "נוכח", Check)}
                             {getStatusButton(person.id, "absent", "לא נוכח", X)}
                             {getStatusButton(person.id, "sick", "חולה", Thermometer)}
@@ -531,7 +566,7 @@ export default function AttendancePage() {
                             size="sm"
                             onClick={() => handleDelete(person.id)}
                             disabled={!attendanceData[person.id]}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            className="text-red-600 hover:bg-red-50 hover:text-red-700"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -547,8 +582,8 @@ export default function AttendancePage() {
 
         {selectedId && tableData.length === 0 && (
           <Card>
-            <CardContent className="flex flex-col items-center justify-center py-10">
-              <p className="text-muted-foreground">
+            <CardContent className="flex flex-col items-center justify-center px-3 py-10 sm:px-6">
+              <p className="text-center text-muted-foreground">
                 {attendanceType === "course" ? "אין תלמידים רשומים לקורס זה" : "לא נמצאו נתונים"}
               </p>
             </CardContent>
@@ -558,13 +593,13 @@ export default function AttendancePage() {
         {/* Attendance History Table */}
         {selectedId && attendanceType === "course" && attendanceHistory.length > 0 && (
           <Card className="border-blue-200 bg-blue-50/30">
-            <CardHeader>
-              <CardTitle className="text-lg">היסטוריית נוכחות - {selectedItem?.name}</CardTitle>
+            <CardHeader className="px-3 text-right sm:px-6">
+              <CardTitle className="break-words text-base sm:text-lg">היסטוריית נוכחות - {selectedItem?.name}</CardTitle>
               <CardDescription>כל הנוכחויות שנרשמו לקורס זה</CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="rounded-md border bg-white overflow-auto max-h-[400px]">
-                <Table>
+            <CardContent className="px-3 sm:px-6">
+              <div className="max-h-[400px] overflow-auto rounded-md border bg-white">
+                <Table className="min-w-[520px]">
                   <TableHeader className="sticky top-0 bg-white">
                     <TableRow className="bg-muted/50">
                       <TableHead className="text-right font-semibold">תאריך</TableHead>
