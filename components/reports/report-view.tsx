@@ -135,16 +135,16 @@ export function ReportView({ title, apiPath, filters = [], optionsFetch = {}, co
         : []
 
   return (
-    <div className="space-y-6" dir="rtl">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold">{title}</h1>
-        <div className="flex gap-2">
-          <Button onClick={fetchReport} disabled={loading}>
+    <div className="container mx-auto max-w-7xl space-y-4 p-3 sm:space-y-6 sm:p-6" dir="rtl">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-right text-xl font-bold sm:text-2xl">{title}</h1>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <Button className="w-full gap-2 sm:w-auto" onClick={fetchReport} disabled={loading}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
             {loading ? "טוען..." : "הצג דוח"}
           </Button>
           {data?.rows?.length ? (
-            <Button variant="outline" onClick={exportCsv}>
+            <Button variant="outline" className="w-full gap-2 sm:w-auto" onClick={exportCsv}>
               <Download className="h-4 w-4" />
               ייצוא CSV
             </Button>
@@ -153,28 +153,38 @@ export function ReportView({ title, apiPath, filters = [], optionsFetch = {}, co
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">סינון</CardTitle>
+        <CardHeader className="px-3 text-right sm:px-6">
+          <CardTitle className="text-base sm:text-lg">סינון</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-4">
-          <div className="flex gap-2 items-end">
-            <div>
+        <CardContent className="flex flex-col gap-4 px-3 sm:flex-row sm:flex-wrap sm:px-6 sm:items-end">
+          <div className="grid w-full grid-cols-1 gap-3 sm:w-auto sm:grid-cols-2 sm:gap-2">
+            <div className="space-y-1.5">
               <Label>מתאריך</Label>
-              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-40" />
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full sm:w-40"
+              />
             </div>
-            <div>
+            <div className="space-y-1.5">
               <Label>עד תאריך</Label>
-              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-40" />
+              <Input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-full sm:w-40"
+              />
             </div>
           </div>
           {filters
             .filter((f) => !isTeacher || (f.key !== "teacherId" && f.key !== "courseId"))
             .map((f) =>
               f.type === "select" && f.options?.length ? (
-                <div key={f.key}>
+                <div key={f.key} className="w-full space-y-1.5 sm:w-auto sm:min-w-[12rem]">
                   <Label>{f.label}</Label>
                   <Select value={filterValues[f.key] || ""} onValueChange={(v) => setFilterValues((prev) => ({ ...prev, [f.key]: v }))}>
-                    <SelectTrigger className="w-48">
+                    <SelectTrigger className="w-full sm:w-48">
                       <SelectValue placeholder={`בחר ${f.label}`} />
                     </SelectTrigger>
                     <SelectContent>
@@ -185,10 +195,10 @@ export function ReportView({ title, apiPath, filters = [], optionsFetch = {}, co
                   </Select>
                 </div>
               ) : f.type === "select" && options[f.key] ? (
-                <div key={f.key}>
+                <div key={f.key} className="w-full space-y-1.5 sm:w-auto sm:min-w-[12rem]">
                   <Label>{f.label}</Label>
                   <Select value={filterValues[f.key] || ""} onValueChange={(v) => setFilterValues((prev) => ({ ...prev, [f.key]: v }))}>
-                    <SelectTrigger className="w-48">
+                    <SelectTrigger className="w-full sm:w-48">
                       <SelectValue placeholder={`בחר ${f.label}`} />
                     </SelectTrigger>
                     <SelectContent>
@@ -205,27 +215,27 @@ export function ReportView({ title, apiPath, filters = [], optionsFetch = {}, co
 
       {error && (
         <Card className="border-destructive">
-          <CardContent className="pt-6 text-destructive">{error}</CardContent>
+          <CardContent className="px-3 pt-6 text-destructive sm:px-6">{error}</CardContent>
         </Card>
       )}
 
       {data?.notAvailable && (
         <Card>
-          <CardContent className="pt-6 text-muted-foreground text-center">
+          <CardContent className="px-3 pt-6 text-center text-muted-foreground sm:px-6">
             {data.notAvailableReason || "אין נתונים זמינים עבור דוח זה."}
           </CardContent>
         </Card>
       )}
 
       {data && !data.notAvailable && data.kpis?.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
           {data.kpis.map((k) => (
             <Card key={k.id}>
-              <CardHeader className="pb-2">
+              <CardHeader className="px-3 pb-2 text-right sm:px-6">
                 <CardTitle className="text-sm font-medium text-muted-foreground">{k.label}</CardTitle>
               </CardHeader>
-              <CardContent>
-                <span className="text-2xl font-bold">{formatKpiValue(k.value, k.format)}</span>
+              <CardContent className="px-3 sm:px-6">
+                <span className="break-words text-xl font-bold sm:text-2xl">{formatKpiValue(k.value, k.format)}</span>
               </CardContent>
             </Card>
           ))}
@@ -235,22 +245,24 @@ export function ReportView({ title, apiPath, filters = [], optionsFetch = {}, co
       {data && !data.notAvailable && Array.isArray(data.rows) && (
         <>
           <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">פרטים</CardTitle>
+            <CardHeader className="px-3 text-right sm:px-6">
+              <CardTitle className="text-base sm:text-lg">פרטים</CardTitle>
               <p className="text-sm text-muted-foreground">
                 {data.pagination.total} רשומות | עמוד {data.pagination.page}
               </p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-3 sm:px-6">
               {data.rows.length === 0 ? (
-                <p className="text-muted-foreground text-center py-8">אין נתונים בתקופה או בסינון שנבחר.</p>
+                <p className="py-8 text-center text-muted-foreground">אין נתונים בתקופה או בסינון שנבחר.</p>
               ) : (
-                <div className="overflow-x-auto">
-                  <Table>
+                <div className="-mx-1 overflow-x-auto px-1 sm:mx-0 sm:px-0">
+                  <Table className="min-w-[640px]">
                     <TableHeader>
                       <TableRow>
                         {Array.isArray(colDefs) && colDefs.map((c) => (
-                          <TableHead key={c.key || c}>{(c as { label?: string }).label ?? c.key ?? c}</TableHead>
+                          <TableHead key={c.key || c} className="whitespace-nowrap text-right">
+                            {(c as { label?: string }).label ?? c.key ?? c}
+                          </TableHead>
                         ))}
                       </TableRow>
                     </TableHeader>
@@ -260,7 +272,11 @@ export function ReportView({ title, apiPath, filters = [], optionsFetch = {}, co
                           {Array.isArray(colDefs) && colDefs.map((col) => {
                             const k = (col as { key: string }).key || (col as string)
                             const v = (row as Record<string, unknown>)[k]
-                            return <TableCell key={k}>{v != null ? String(v) : ""}</TableCell>
+                            return (
+                              <TableCell key={k} className="align-top text-right break-words">
+                                {v != null ? String(v) : ""}
+                              </TableCell>
+                            )
                           })}
                         </TableRow>
                       ))}
@@ -271,10 +287,24 @@ export function ReportView({ title, apiPath, filters = [], optionsFetch = {}, co
             </CardContent>
           </Card>
           {data.pagination.total > data.pagination.limit && (
-            <div className="flex justify-center gap-2">
-              <Button variant="outline" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>הקודם</Button>
-              <span className="py-2">{page}</span>
-              <Button variant="outline" disabled={page * data.pagination.limit >= data.pagination.total} onClick={() => setPage((p) => p + 1)}>הבא</Button>
+            <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-center">
+              <Button
+                variant="outline"
+                className="w-full sm:w-auto"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => p - 1)}
+              >
+                הקודם
+              </Button>
+              <span className="py-2 text-center text-sm">{page}</span>
+              <Button
+                variant="outline"
+                className="w-full sm:w-auto"
+                disabled={page * data.pagination.limit >= data.pagination.total}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                הבא
+              </Button>
             </div>
           )}
         </>

@@ -37,29 +37,29 @@ const reportCategories = [
 
 export default function ReportsPage() {
   return (
-    <div className="space-y-8" dir="rtl">
+    <div className="container mx-auto max-w-7xl space-y-6 p-3 sm:space-y-8 sm:p-6" dir="rtl">
       <PageHeader title="דוחות" description="הפקת דוחות תפעול, כספים וסיכומים" />
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6">
         {reportCategories.map((cat) => (
           <Card key={cat.title}>
-            <CardHeader>
-              <CardTitle className="text-lg">{cat.title}</CardTitle>
+            <CardHeader className="px-3 sm:px-6">
+              <CardTitle className="text-base sm:text-lg">{cat.title}</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className="space-y-2 px-3 sm:px-6">
               {cat.items.map((item) => {
                 const Icon = item.icon
                 return (
-                  <Link key={item.href} href={item.href}>
-                    <div className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10">
+                  <Link key={item.href} href={item.href} className="block">
+                    <div className="flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50 sm:items-center">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10">
                         <Icon className="h-5 w-5 text-primary" />
                       </div>
-                      <div>
+                      <div className="min-w-0 flex-1 text-right">
                         <p className="font-medium">{item.label}</p>
                         <p className="text-sm text-muted-foreground">{item.description}</p>
                       </div>
-                      <FileText className="h-4 w-4 text-muted-foreground mr-auto" />
+                      <FileText className="mt-1 h-4 w-4 shrink-0 text-muted-foreground sm:mt-0" aria-hidden />
                     </div>
                   </Link>
                 )
