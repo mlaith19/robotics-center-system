@@ -16,42 +16,68 @@ export type SiblingDiscountPackage = {
 const INACTIVE_STATUSES = new Set(["inactive", "completed", "stopped", "לא פעיל", "הושלם", "הפסיק"])
 
 export async function ensureSiblingDiscountTables(sql: Sql) {
-  await sql`
-    CREATE TABLE IF NOT EXISTS "SiblingDiscountPackage" (
-      "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-      "name" TEXT NOT NULL,
-      "description" TEXT,
-      "pricingMode" TEXT NOT NULL DEFAULT 'perCourse',
-      "firstAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
-      "secondAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
-      "thirdAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
-      "isActive" BOOLEAN NOT NULL DEFAULT TRUE,
-      "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
-      "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
-    )
-  `
+  const safeExec = async (label: string, query: Promise<unknown>) => {
+    try {
+      await query
+    } catch (err) {
+      console.warn(`[sibling-discount] skip ${label}:`, err)
+    }
+  }
 
-  await sql`
-    ALTER TABLE "Student"
-    ADD COLUMN IF NOT EXISTS "siblingGroupId" TEXT
-  `
-  await sql`
-    ALTER TABLE "Student"
-    ADD COLUMN IF NOT EXISTS "siblingDiscountPackageId" TEXT
-  `
-  await sql`
-    ALTER TABLE "Course"
-    ADD COLUMN IF NOT EXISTS "siblingDiscountPackageId" TEXT
-  `
+  await safeExec(
+    "create sibling package table",
+    sql`
+      CREATE TABLE IF NOT EXISTS "SiblingDiscountPackage" (
+        "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        "name" TEXT NOT NULL,
+        "description" TEXT,
+        "pricingMode" TEXT NOT NULL DEFAULT 'perCourse',
+        "firstAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "secondAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "thirdAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "isActive" BOOLEAN NOT NULL DEFAULT TRUE,
+        "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+        "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `
+  )
 
-  await sql`
-    CREATE INDEX IF NOT EXISTS "idx_student_sibling_group"
-    ON "Student" ("siblingGroupId")
-  `
-  await sql`
-    CREATE INDEX IF NOT EXISTS "idx_course_sibling_package"
-    ON "Course" ("siblingDiscountPackageId")
-  `
+  await safeExec(
+    "add student sibling group column",
+    sql`
+      ALTER TABLE "Student"
+      ADD COLUMN IF NOT EXISTS "siblingGroupId" TEXT
+    `
+  )
+  await safeExec(
+    "add student package column",
+    sql`
+      ALTER TABLE "Student"
+      ADD COLUMN IF NOT EXISTS "siblingDiscountPackageId" TEXT
+    `
+  )
+  await safeExec(
+    "add course package column",
+    sql`
+      ALTER TABLE "Course"
+      ADD COLUMN IF NOT EXISTS "siblingDiscountPackageId" TEXT
+    `
+  )
+
+  await safeExec(
+    "create student sibling group index",
+    sql`
+      CREATE INDEX IF NOT EXISTS "idx_student_sibling_group"
+      ON "Student" ("siblingGroupId")
+    `
+  )
+  await safeExec(
+    "create course sibling package index",
+    sql`
+      CREATE INDEX IF NOT EXISTS "idx_course_sibling_package"
+      ON "Course" ("siblingDiscountPackageId")
+    `
+  )
 }
 
 export function normalizeAmount(value: unknown): number {

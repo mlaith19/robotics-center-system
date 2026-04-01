@@ -42,7 +42,8 @@ export const PATCH = withTenantAuth(async (req, session, { params }: Ctx) => {
     return Response.json(result[0])
   } catch (err) {
     console.error("PATCH /api/sibling-discount-packages/[id] error:", err)
-    return Response.json({ error: "Failed to update sibling package" }, { status: 500 })
+    const message = err instanceof Error ? err.message : String(err)
+    return Response.json({ error: "Failed to update sibling package", message }, { status: 500 })
   }
 })
 
