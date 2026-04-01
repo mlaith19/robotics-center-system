@@ -257,9 +257,9 @@ export default function CoursesPage() {
   }
 
   return (
-    <div dir="rtl" className="container mx-auto max-w-7xl p-6 space-y-6">
+    <div dir="rtl" className="container mx-auto max-w-7xl p-3 sm:p-6 space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-3">
         <PageHeader
           title={t("courses.title")}
           description={
@@ -269,7 +269,7 @@ export default function CoursesPage() {
           }
         />
 
-        <div className="flex gap-2 items-center">
+        <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end">
           {/* View Toggle */}
           <div className="flex border rounded-lg overflow-hidden" aria-label="תצוגה">
             <Button 
@@ -306,23 +306,24 @@ export default function CoursesPage() {
       </div>
 
       {/* Search */}
-      <Card className="p-4">
-        <div className="flex items-center gap-3">
+      <Card className="p-3 sm:p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={t("courses.searchPlaceholder")}
-            className="max-w-md text-right"
+            className="w-full min-w-0 text-right sm:max-w-md"
             dir="rtl"
           />
-          <Button variant="outline" onClick={load} className="gap-2 bg-transparent">
+          <Button variant="outline" onClick={load} className="w-full shrink-0 gap-2 bg-transparent sm:w-auto">
             <RefreshCw className="h-4 w-4" />
             {t("courses.refresh")}
           </Button>
-          <div className="flex items-center gap-1 rounded-lg border p-1">
+          <div className="flex w-full flex-wrap items-center justify-center gap-1 rounded-lg border p-1 sm:w-auto sm:justify-start">
             <Button
               variant={statusFilter === "active" ? "default" : "ghost"}
               size="sm"
+              className="flex-1 sm:flex-none"
               onClick={() => setStatusFilter("active")}
             >
               {t("courses.status.active")}
@@ -330,6 +331,7 @@ export default function CoursesPage() {
             <Button
               variant={statusFilter === "all" ? "default" : "ghost"}
               size="sm"
+              className="flex-1 sm:flex-none"
               onClick={() => setStatusFilter("all")}
             >
               הכל
@@ -337,12 +339,13 @@ export default function CoursesPage() {
             <Button
               variant={statusFilter === "completed" ? "default" : "ghost"}
               size="sm"
+              className="flex-1 sm:flex-none"
               onClick={() => setStatusFilter("completed")}
             >
               {t("courses.status.completed")}
             </Button>
           </div>
-          <div className="text-sm text-muted-foreground mr-auto">
+          <div className="w-full text-center text-sm text-muted-foreground sm:mr-auto sm:w-auto sm:text-right">
             {t("courses.total")}: {filtered.length} {t("courses.title")}
           </div>
         </div>
@@ -372,73 +375,141 @@ export default function CoursesPage() {
           )}
         </Card>
       ) : viewMode === "list" ? (
-        <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50">
-                <tr className="text-right">
-                  <th className="px-4 py-3 font-semibold">{t("courses.title")}</th>
-                  <th className="px-4 py-3 font-semibold">סטטוס</th>
-                  <th className="px-4 py-3 font-semibold">{t("courses.students")}</th>
-                  <th className="px-4 py-3 font-semibold">{t("courses.teachers")}</th>
-                  <th className="px-4 py-3 font-semibold">{t("courses.hours")}</th>
-                  <th className="px-4 py-3 font-semibold">פעולות</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((c) => {
-                  const statusPres = getCourseStatusPresentation({ status: c.status, endDate: c.endDate })
-                  return (
-                    <tr key={c.id} className="border-t">
-                      <td className="px-4 py-3">
-                        <div className="font-medium">{c.name}</div>
-                        {c.description ? <div className="text-xs text-muted-foreground">{c.description}</div> : null}
-                      </td>
-                      <td className="px-4 py-3">
-                        <Badge className={statusPres.badgeClassName}>
-                          {t(`courses.status.${statusPres.key}`) || statusPres.labelHe}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-3">{c.enrollmentCount || 0}</td>
-                      <td className="px-4 py-3">{getTeacherNames(c.teacherIds) || "-"}</td>
-                      <td className="px-4 py-3">{c.startTime && c.endTime ? `${c.startTime} - ${c.endTime}` : "-"}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-2">
-                          {canDeleteCourses && (
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="text-red-500 hover:text-red-700 hover:bg-red-50 bg-transparent"
-                              onClick={() => remove(c.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
-                          {canEditCourses && (
-                            <Link href={`/dashboard/courses/${c.id}/edit`}>
-                              <Button variant="outline" size="icon" className="bg-transparent">
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                            </Link>
-                          )}
-                          {canViewCourses && (
-                            <Link href={`/dashboard/courses/${c.id}`}>
-                              <Button variant="outline" size="icon" className="bg-transparent">
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                            </Link>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+        <>
+          <div className="space-y-3 md:hidden">
+            {filtered.map((c) => {
+              const statusPres = getCourseStatusPresentation({ status: c.status, endDate: c.endDate })
+              return (
+                <Card key={c.id} className="overflow-hidden p-4">
+                  <div className="flex flex-col gap-3 text-right">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold leading-snug">{c.name}</div>
+                        {c.description ? (
+                          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{c.description}</p>
+                        ) : null}
+                      </div>
+                      <Badge className={cn("w-fit shrink-0", statusPres.badgeClassName)}>
+                        {t(`courses.status.${statusPres.key}`) || statusPres.labelHe}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
+                      <div>
+                        <span className="block text-xs opacity-80">{t("courses.students")}</span>
+                        <span className="font-medium text-foreground">{c.enrollmentCount || 0}</span>
+                      </div>
+                      <div className="min-w-0">
+                        <span className="block text-xs opacity-80">{t("courses.hours")}</span>
+                        <span className="font-medium text-foreground break-words">
+                          {c.startTime && c.endTime ? `${c.startTime} - ${c.endTime}` : "—"}
+                        </span>
+                      </div>
+                      <div className="col-span-2 min-w-0">
+                        <span className="block text-xs opacity-80">{t("courses.teachers")}</span>
+                        <span className="font-medium text-foreground break-words">{getTeacherNames(c.teacherIds) || "—"}</span>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 border-t pt-3">
+                      {canDeleteCourses && (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="text-red-500 hover:bg-red-50 hover:text-red-700 bg-transparent"
+                          onClick={() => remove(c.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {canEditCourses && (
+                        <Link href={`/dashboard/courses/${c.id}/edit`}>
+                          <Button variant="outline" size="sm" className="gap-1 bg-transparent">
+                            <Pencil className="h-4 w-4" />
+                            {t("courses.edit")}
+                          </Button>
+                        </Link>
+                      )}
+                      {canViewCourses && (
+                        <Link href={`/dashboard/courses/${c.id}`}>
+                          <Button variant="outline" size="sm" className="gap-1 bg-transparent">
+                            <Eye className="h-4 w-4" />
+                            {t("courses.view")}
+                          </Button>
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                </Card>
+              )
+            })}
           </div>
-        </Card>
+          <Card className="hidden overflow-hidden md:block">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] text-xs sm:text-sm">
+                <thead className="bg-muted/50">
+                  <tr className="text-right">
+                    <th className="px-2 py-3 font-semibold sm:px-4">{t("courses.title")}</th>
+                    <th className="px-2 py-3 font-semibold sm:px-4">סטטוס</th>
+                    <th className="px-2 py-3 font-semibold sm:px-4">{t("courses.students")}</th>
+                    <th className="px-2 py-3 font-semibold sm:px-4">{t("courses.teachers")}</th>
+                    <th className="px-2 py-3 font-semibold sm:px-4">{t("courses.hours")}</th>
+                    <th className="px-2 py-3 font-semibold sm:px-4">פעולות</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((c) => {
+                    const statusPres = getCourseStatusPresentation({ status: c.status, endDate: c.endDate })
+                    return (
+                      <tr key={c.id} className="border-t">
+                        <td className="px-2 py-3 sm:px-4">
+                          <div className="font-medium">{c.name}</div>
+                          {c.description ? <div className="text-xs text-muted-foreground">{c.description}</div> : null}
+                        </td>
+                        <td className="px-2 py-3 sm:px-4">
+                          <Badge className={statusPres.badgeClassName}>
+                            {t(`courses.status.${statusPres.key}`) || statusPres.labelHe}
+                          </Badge>
+                        </td>
+                        <td className="px-2 py-3 sm:px-4">{c.enrollmentCount || 0}</td>
+                        <td className="px-2 py-3 sm:px-4">{getTeacherNames(c.teacherIds) || "-"}</td>
+                        <td className="px-2 py-3 sm:px-4">{c.startTime && c.endTime ? `${c.startTime} - ${c.endTime}` : "-"}</td>
+                        <td className="px-2 py-3 sm:px-4">
+                          <div className="flex gap-2">
+                            {canDeleteCourses && (
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="text-red-500 hover:text-red-700 hover:bg-red-50 bg-transparent"
+                                onClick={() => remove(c.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {canEditCourses && (
+                              <Link href={`/dashboard/courses/${c.id}/edit`}>
+                                <Button variant="outline" size="icon" className="bg-transparent">
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                              </Link>
+                            )}
+                            {canViewCourses && (
+                              <Link href={`/dashboard/courses/${c.id}`}>
+                                <Button variant="outline" size="icon" className="bg-transparent">
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                              </Link>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </>
       ) : (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((c) => {
             const isTotalPriceMode = isTotalCoursePricingType(c.courseType)
             const totalExpected = Number(expectedByCourse[c.id] ?? (isTotalPriceMode
@@ -500,7 +571,7 @@ export default function CoursesPage() {
 
               {/* Payment status - only for users with courses.financial */}
               {canSeeFinancial && (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <div className="bg-green-50 rounded-lg p-3 text-center">
                     <div className="flex items-center justify-center gap-1 text-green-600 text-xs mb-1">
                       <CheckCircle2 className="h-3 w-3" />

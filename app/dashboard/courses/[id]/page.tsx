@@ -363,7 +363,7 @@ export default function CourseViewPage() {
   }
 
   if (!course) {
-    return <div className="p-6 text-center">{tr.notFound}</div>
+    return <div className="p-3 text-center sm:p-6">{tr.notFound}</div>
   }
 
   const courseTeachers = teachers.filter(t => 
@@ -384,29 +384,38 @@ export default function CourseViewPage() {
     endDate: course.endDate,
   })
 
+  const visibleTabCount = [
+    canTabGeneral,
+    canTabSessionsFeedback,
+    !isStudentUser && canTabStudents,
+    !isStudentUser && canTabPayments,
+    canTabAttendanceStudents,
+    canTabAttendanceTeachers,
+  ].filter(Boolean).length
+
   return (
-    <div dir={isRtl ? "rtl" : "ltr"} className="container mx-auto max-w-4xl p-6 space-y-6">
+    <div dir={isRtl ? "rtl" : "ltr"} className="container mx-auto max-w-4xl space-y-4 p-3 sm:space-y-6 sm:p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
           <Link href="/dashboard/courses">
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" className="shrink-0">
               <ArrowRight className="h-5 w-5" />
             </Button>
           </Link>
-          <div>
-            <h1 className="text-3xl font-bold">{tr.courseDetails}</h1>
-            <p className="text-muted-foreground mt-1">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl font-bold sm:text-3xl">{tr.courseDetails}</h1>
+            <p className="mt-1 break-words text-sm text-muted-foreground sm:text-base">
               <Link href="/dashboard/courses" className="hover:underline">{tr.courses}</Link>
               {" > "}
-              {course.name}
+              <span className="font-medium text-foreground">{course.name}</span>
             </p>
           </div>
         </div>
 
         {!isStudentUser && canEditCourses && (
-          <Link href={`/dashboard/courses/${course.id}/edit`}>
-            <Button className="gap-2">
+          <Link href={`/dashboard/courses/${course.id}/edit`} className="w-full shrink-0 sm:w-auto">
+            <Button className="w-full gap-2 sm:w-auto">
               <Pencil className="h-4 w-4" />
               {tr.editCourse}
             </Button>
@@ -416,14 +425,48 @@ export default function CourseViewPage() {
 
       {/* Tabs - לפי הרשאות טאב בכרטסת קורס */}
       <Tabs defaultValue={canTabGeneral ? "general" : canTabSessionsFeedback ? "sessions-feedback" : !isStudentUser && canTabStudents ? "students" : canTabPayments ? "payments" : canTabAttendanceStudents ? "attendance-students" : "attendance-teachers"} className="w-full" dir={isRtl ? "rtl" : "ltr"}>
-        <TabsList className="grid w-full mb-6" style={{ gridTemplateColumns: `repeat(${[canTabGeneral, canTabSessionsFeedback, canTabStudents, canTabPayments, canTabAttendanceStudents, canTabAttendanceTeachers].filter(Boolean).length}, 1fr)` }} dir={isRtl ? "rtl" : "ltr"}>
-          {canTabGeneral && <TabsTrigger value="general">{tr.general}</TabsTrigger>}
-          {canTabSessionsFeedback && <TabsTrigger value="sessions-feedback">{tr.sessionsFeedback}</TabsTrigger>}
-          {!isStudentUser && canTabStudents && <TabsTrigger value="students">{tr.linkedStudents}</TabsTrigger>}
-          {!isStudentUser && canTabPayments && <TabsTrigger value="payments">{tr.costPayments}</TabsTrigger>}
-          {canTabAttendanceStudents && <TabsTrigger value="attendance-students">{tr.studentAttendance}</TabsTrigger>}
-          {canTabAttendanceTeachers && <TabsTrigger value="attendance-teachers">{tr.teacherAttendance}</TabsTrigger>}
-        </TabsList>
+        <div className="-mx-1 overflow-x-auto px-1 pb-1 sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0">
+          <TabsList
+            className="mb-4 flex h-auto min-h-10 w-max min-w-full max-w-none flex-nowrap justify-start gap-1 overflow-x-auto p-[3px] sm:mb-6 md:grid md:w-full md:max-w-full md:overflow-visible"
+            style={
+              visibleTabCount > 0
+                ? { gridTemplateColumns: `repeat(${visibleTabCount}, minmax(0, 1fr))` }
+                : undefined
+            }
+            dir={isRtl ? "rtl" : "ltr"}
+          >
+            {canTabGeneral && (
+              <TabsTrigger value="general" className="shrink-0 px-2 text-xs sm:text-sm md:min-w-0">
+                {tr.general}
+              </TabsTrigger>
+            )}
+            {canTabSessionsFeedback && (
+              <TabsTrigger value="sessions-feedback" className="shrink-0 px-2 text-xs sm:text-sm md:min-w-0">
+                {tr.sessionsFeedback}
+              </TabsTrigger>
+            )}
+            {!isStudentUser && canTabStudents && (
+              <TabsTrigger value="students" className="shrink-0 px-2 text-xs sm:text-sm md:min-w-0">
+                {tr.linkedStudents}
+              </TabsTrigger>
+            )}
+            {!isStudentUser && canTabPayments && (
+              <TabsTrigger value="payments" className="shrink-0 px-2 text-xs sm:text-sm md:min-w-0">
+                {tr.costPayments}
+              </TabsTrigger>
+            )}
+            {canTabAttendanceStudents && (
+              <TabsTrigger value="attendance-students" className="shrink-0 px-2 text-xs sm:text-sm md:min-w-0">
+                {tr.studentAttendance}
+              </TabsTrigger>
+            )}
+            {canTabAttendanceTeachers && (
+              <TabsTrigger value="attendance-teachers" className="shrink-0 px-2 text-xs sm:text-sm md:min-w-0">
+                {tr.teacherAttendance}
+              </TabsTrigger>
+            )}
+          </TabsList>
+        </div>
 
         {canTabGeneral && (
         <TabsContent value="general" className="space-y-6">
@@ -515,9 +558,9 @@ export default function CourseViewPage() {
                   <span className="text-muted-foreground">{tr.totalStudents}:</span>
                   <span className="font-bold text-2xl text-blue-600">{enrollments.length}</span>
                 </div>
-                <div className="mt-3 flex flex-row-reverse justify-between items-center">
-                  <span className="text-muted-foreground">עלות משוערת אחרי הנחות אחים:</span>
-                  <span className="font-bold text-xl text-emerald-600">₪{expectedTotalByEnrollments.toLocaleString()}</span>
+                <div className="mt-3 flex flex-col gap-1 text-right sm:flex-row sm:flex-row-reverse sm:items-center sm:justify-between sm:gap-0">
+                  <span className="break-words text-sm text-muted-foreground sm:text-base">עלות משוערת אחרי הנחות אחים:</span>
+                  <span className="shrink-0 font-bold text-xl text-emerald-600">₪{expectedTotalByEnrollments.toLocaleString()}</span>
                 </div>
               </CardContent>
             </Card>
@@ -583,7 +626,7 @@ export default function CourseViewPage() {
               return (
                 <Card key={s.id}>
                   <CardHeader>
-                    <CardTitle className="text-base">
+                    <CardTitle className="break-words text-base leading-snug">
                       {new Date(s.sessionDate).toLocaleDateString(localeTag)} - {s.generalTopic || "—"}
                     </CardTitle>
                   </CardHeader>
@@ -631,8 +674,8 @@ export default function CourseViewPage() {
             </CardHeader>
             <CardContent>
               {enrollments.length > 0 ? (
-                <div className="rounded-md border overflow-x-auto">
-                  <Table>
+                <div className="rounded-md border">
+                  <Table className="min-w-[640px]">
                     <TableHeader>
                       <TableRow className="bg-muted/50">
                         <TableHead className="text-right">{tr.student}</TableHead>
@@ -703,29 +746,29 @@ export default function CourseViewPage() {
               <CardTitle className="text-lg">{tr.studentAttendanceTitle}</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="mb-4 flex items-center gap-3">
+              <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
                 <span className="text-sm text-muted-foreground">{tr.date}:</span>
                 <input
                   type="date"
                   value={attendanceDate}
                   onChange={(e) => setAttendanceDate(e.target.value)}
-                  className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  className="flex h-10 w-full max-w-full rounded-md border border-input bg-background px-3 py-2 text-sm sm:w-auto"
                 />
               </div>
-              <div className="rounded-md border overflow-x-auto mb-6">
-                <Table>
+              <div className="mb-6 overflow-x-auto rounded-md border">
+                <Table className="min-w-0">
                   <TableHeader>
                     <TableRow className="bg-muted/50">
-                      <TableHead className="text-right">{tr.student}</TableHead>
+                      <TableHead className="max-w-[40%] text-right sm:max-w-none">{tr.student}</TableHead>
                       <TableHead className="text-right">{tr.attendanceStatus}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {enrollments.length > 0 ? enrollments.map((enrollment) => (
                       <TableRow key={enrollment.id}>
-                        <TableCell className="text-right font-medium">{enrollment.studentName || "—"}</TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
+                        <TableCell className="max-w-[40%] break-words text-right font-medium sm:max-w-none">{enrollment.studentName || "—"}</TableCell>
+                        <TableCell className="align-top">
+                          <div className="flex flex-wrap gap-2">
                             {attendanceStatusButton(enrollment.studentId, "present", tr.present, Check)}
                             {attendanceStatusButton(enrollment.studentId, "absent", tr.absent, X)}
                             {attendanceStatusButton(enrollment.studentId, "sick", tr.sick, Thermometer)}
@@ -746,8 +789,8 @@ export default function CourseViewPage() {
               {(() => {
                 const studentAttendance = attendanceList.filter((a) => a.studentId != null)
                 return studentAttendance.length > 0 ? (
-                  <div className="rounded-md border overflow-x-auto">
-                    <Table>
+                  <div className="rounded-md border">
+                    <Table className="min-w-[560px]">
                       <TableHeader>
                         <TableRow className="bg-muted/50">
                           <TableHead className="text-right">{tr.date}</TableHead>
@@ -797,8 +840,8 @@ export default function CourseViewPage() {
               {(() => {
                 const teacherAttendance = attendanceList.filter((a) => a.teacherId != null)
                 return teacherAttendance.length > 0 ? (
-                  <div className="rounded-md border overflow-x-auto">
-                    <Table>
+                  <div className="rounded-md border">
+                    <Table className="min-w-[560px]">
                       <TableHeader>
                         <TableRow className="bg-muted/50">
                           <TableHead className="text-right">{tr.date}</TableHead>

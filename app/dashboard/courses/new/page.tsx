@@ -381,16 +381,16 @@ export default function NewCoursePage() {
   }
 
   return (
-    <div dir={isRtl ? "rtl" : "ltr"} className="container mx-auto max-w-4xl p-6 space-y-6">
-      <div className="flex items-center gap-3">
-        <Link href="/dashboard/courses">
+    <div dir={isRtl ? "rtl" : "ltr"} className="container mx-auto max-w-4xl space-y-4 p-3 sm:space-y-6 sm:p-6">
+      <div className="flex items-start gap-3">
+        <Link href="/dashboard/courses" className="shrink-0">
           <Button variant="ghost" size="icon">
             <ArrowRight className="h-5 w-5" />
           </Button>
         </Link>
-        <div>
-          <h1 className="text-3xl font-bold">{l("קורס חדש", "New Course", "دورة جديدة")}</h1>
-          <p className="text-muted-foreground mt-1">{l("הוסף קורס חדש למערכת הרובוטיקה", "Add a new course to the system", "أضف دورة جديدة إلى النظام")}</p>
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-bold sm:text-3xl">{l("קורס חדש", "New Course", "دورة جديدة")}</h1>
+          <p className="mt-1 text-sm text-muted-foreground sm:text-base">{l("הוסף קורס חדש למערכת הרובוטיקה", "Add a new course to the system", "أضف دورة جديدة إلى النظام")}</p>
         </div>
       </div>
 
@@ -410,7 +410,7 @@ export default function NewCoursePage() {
           <CardDescription className="text-right">{l("בחר את סטטוס הקורס והגדרות בסיסיות", "Choose course status and basic settings", "اختر حالة الدورة والإعدادات الأساسية")}</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div className="space-y-2">
               <Label className="text-right block">{l("סטטוס", "Status", "الحالة")}</Label>
               <Select value={formData.status} onValueChange={(value) => setFormData({...formData, status: value})}>
@@ -480,7 +480,7 @@ export default function NewCoursePage() {
           
           {/* שדות גפ"ן - מוצגים רק כאשר סוג הקורס הוא גפ"ן */}
           {formData.courseType === "gafan" && (
-            <div className="grid grid-cols-2 gap-4 mt-4 p-4 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+            <div className="mt-4 grid grid-cols-1 gap-4 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/20 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label className="text-right block text-amber-700 dark:text-amber-400">בית ספר *</Label>
                 <Select value={formData.schoolId} onValueChange={(value) => setFormData({...formData, schoolId: value})}>
@@ -553,7 +553,7 @@ export default function NewCoursePage() {
   {formData.courseType === "gafan" ? (
     /* שדות גפ"ן */
     <>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label className="text-right block">מס' תוכנית *</Label>
           <Input
@@ -603,7 +603,7 @@ export default function NewCoursePage() {
   ) : (
     /* שדות קורס רגיל */
     <>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label className="text-right block">מס' קורס</Label>
           <Input
@@ -665,7 +665,7 @@ export default function NewCoursePage() {
         />
       </div>
       
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label className="text-right block">רמה</Label>
           <Select value={formData.level} onValueChange={(value) => setFormData({...formData, level: value})}>
@@ -721,7 +721,7 @@ export default function NewCoursePage() {
           <CardDescription className="text-right">{l("בחר את המורים שילמדו בקורס", "Select teachers for this course", "اختر المعلمين لهذه الدورة")}</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
             {teachers.map((teacher) => (
               <div
                 key={teacher.id}
@@ -800,7 +800,7 @@ export default function NewCoursePage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label className="text-right block">תאריך התחלה *</Label>
               <Input 
@@ -823,7 +823,7 @@ export default function NewCoursePage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label className="text-right block">שעה התחלה *</Label>
               <Input 
@@ -849,7 +849,7 @@ export default function NewCoursePage() {
 
           <div className="space-y-2">
             <Label className="text-right block">ימי שבוע *</Label>
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {DAYS_OF_WEEK.map((day) => (
                 <div
                   key={day.value}
