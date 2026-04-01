@@ -56,7 +56,7 @@ export default function StudentsPage() {
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
+  const [viewMode, setViewMode] = useState<"grid" | "list">("list")
 
   const currentUser = useCurrentUser()
   const roleKey = (currentUser?.roleKey || currentUser?.role)?.toString().toLowerCase()
@@ -195,8 +195,92 @@ export default function StudentsPage() {
             </Link>
           )}
         </Card>
+      ) : viewMode === "list" ? (
+        <Card className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50">
+                <tr className="text-right">
+                  <th className="px-4 py-3 font-semibold">תלמיד</th>
+                  <th className="px-4 py-3 font-semibold">טלפון</th>
+                  <th className="px-4 py-3 font-semibold">עיר</th>
+                  <th className="px-4 py-3 font-semibold">סטטוס</th>
+                  <th className="px-4 py-3 font-semibold">פעולות</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredStudents.map((student) => (
+                  <tr key={student.id} className="border-t">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        {student.profileImage ? (
+                          <img src={student.profileImage} alt={student.name} className="w-10 h-10 rounded-full object-contain bg-white p-1 border" />
+                        ) : (
+                          <img src="/api/og-logo" alt="Center logo" className="w-10 h-10 rounded-full object-contain bg-white p-1 border" />
+                        )}
+                        <div>
+                          <div className="font-semibold">{student.name}</div>
+                          {student.email ? <div className="text-xs text-muted-foreground">{student.email}</div> : null}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3" dir="ltr">{student.phone || "-"}</td>
+                    <td className="px-4 py-3">{student.city || "-"}</td>
+                    <td className="px-4 py-3">
+                      <Badge className={statusColors[student.status || "מתעניין"] || "bg-gray-100 text-gray-800"}>
+                        {statusLabels[student.status || "מתעניין"]?.[locale] || student.status || statusLabels["מתעניין"][locale]}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        {canDeleteStudents && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50 px-2 bg-transparent"
+                            onClick={() => {
+                              deleteWithUndo({
+                                entityKey: "student",
+                                itemId: student.id,
+                                itemLabel: student.name,
+                                removeFromUI: () => setStudents((prev) => prev.filter((s) => s.id !== student.id)),
+                                restoreFn: () => setStudents((prev) => [...prev, student]),
+                                deleteFn: async () => {
+                                  const res = await fetch(`/api/students/${student.id}`, { method: "DELETE", credentials: "include" })
+                                  if (!res.ok) throw new Error("Delete failed")
+                                },
+                                confirmPolicy: "dangerous",
+                                undoWindowMs: 10_000,
+                              })
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {canEditStudents && (
+                          <Link href={`/dashboard/students/${student.id}/edit`}>
+                            <Button variant="outline" size="sm" className="bg-transparent">
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          </Link>
+                        )}
+                        {canViewStudents && (
+                          <Link href={`/dashboard/students/${student.id}`}>
+                            <Button variant="outline" size="sm" className="bg-transparent">
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </Link>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       ) : (
-        <div className={viewMode === "grid" ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" : "space-y-4"}>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredStudents.map((student) => (
             <Card key={student.id} className="overflow-hidden hover:shadow-md transition-shadow">
               <CardContent className="p-5">

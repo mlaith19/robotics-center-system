@@ -64,7 +64,8 @@ export default function CoursesPage() {
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [q, setQ] = useState("")
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
+  const [viewMode, setViewMode] = useState<"grid" | "list">("list")
+  const [statusFilter, setStatusFilter] = useState<"active" | "all" | "completed">("active")
   const [copiedCourseId, setCopiedCourseId] = useState<string | null>(null)
 
   const currentUser = useCurrentUser()
@@ -131,6 +132,9 @@ export default function CoursesPage() {
 
   useEffect(() => {
     load()
+    // Keep requested defaults every page entry.
+    setViewMode("list")
+    setStatusFilter("active")
   }, [])
 
   const coursesForUser = useMemo(() => {
@@ -141,14 +145,30 @@ export default function CoursesPage() {
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase()
-    if (!s) return coursesForUser
-    return coursesForUser.filter(
+    const bySearch = !s
+      ? coursesForUser
+      : coursesForUser.filter(
       (c) =>
         c.name.toLowerCase().includes(s) ||
         c.description?.toLowerCase().includes(s) ||
         c.category?.toLowerCase().includes(s),
-    )
-  }, [q, coursesForUser])
+      )
+
+    return bySearch.filter((c) => {
+      const statusKey = getCourseStatusPresentation({ status: c.status, endDate: c.endDate }).key
+      const raw = String(c.status ?? "").trim().toLowerCase()
+      const completedLike =
+        statusKey === "completed" ||
+        raw === "completed" ||
+        raw === "הושלם" ||
+        raw === "סיים" ||
+        raw === "נגמר" ||
+        raw === "הסתיים"
+      if (statusFilter === "all") return true
+      if (statusFilter === "completed") return completedLike
+      return !completedLike && statusKey === "active"
+    })
+  }, [q, coursesForUser, statusFilter])
 
   const pageBusy = loading || (!isAdmin && userTypeLoading)
 
@@ -237,22 +257,26 @@ export default function CoursesPage() {
 
         <div className="flex gap-2 items-center">
           {/* View Toggle */}
-          <div className="flex border rounded-lg overflow-hidden">
+          <div className="flex border rounded-lg overflow-hidden" aria-label="תצוגה">
             <Button 
               variant={viewMode === "list" ? "default" : "ghost"} 
               size="sm"
               onClick={() => setViewMode("list")}
-              className="rounded-none"
+              className="rounded-none gap-1"
+              title="תצוגת רשימה (טבלה)"
             >
               <List className="h-4 w-4" />
+              <span className="hidden sm:inline">רשימה</span>
             </Button>
             <Button 
               variant={viewMode === "grid" ? "default" : "ghost"} 
               size="sm"
               onClick={() => setViewMode("grid")}
-              className="rounded-none"
+              className="rounded-none gap-1"
+              title="תצוגת כרטיסים"
             >
               <LayoutGrid className="h-4 w-4" />
+              <span className="hidden sm:inline">כרטיסים</span>
             </Button>
           </div>
 
@@ -281,6 +305,29 @@ export default function CoursesPage() {
             <RefreshCw className="h-4 w-4" />
             {t("courses.refresh")}
           </Button>
+          <div className="flex items-center gap-1 rounded-lg border p-1">
+            <Button
+              variant={statusFilter === "active" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setStatusFilter("active")}
+            >
+              {t("courses.status.active")}
+            </Button>
+            <Button
+              variant={statusFilter === "all" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setStatusFilter("all")}
+            >
+              הכל
+            </Button>
+            <Button
+              variant={statusFilter === "completed" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setStatusFilter("completed")}
+            >
+              {t("courses.status.completed")}
+            </Button>
+          </div>
           <div className="text-sm text-muted-foreground mr-auto">
             {t("courses.total")}: {filtered.length} {t("courses.title")}
           </div>
@@ -310,8 +357,74 @@ export default function CoursesPage() {
             </Link>
           )}
         </Card>
+      ) : viewMode === "list" ? (
+        <Card className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50">
+                <tr className="text-right">
+                  <th className="px-4 py-3 font-semibold">{t("courses.title")}</th>
+                  <th className="px-4 py-3 font-semibold">סטטוס</th>
+                  <th className="px-4 py-3 font-semibold">{t("courses.students")}</th>
+                  <th className="px-4 py-3 font-semibold">{t("courses.teachers")}</th>
+                  <th className="px-4 py-3 font-semibold">{t("courses.hours")}</th>
+                  <th className="px-4 py-3 font-semibold">פעולות</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((c) => {
+                  const statusPres = getCourseStatusPresentation({ status: c.status, endDate: c.endDate })
+                  return (
+                    <tr key={c.id} className="border-t">
+                      <td className="px-4 py-3">
+                        <div className="font-medium">{c.name}</div>
+                        {c.description ? <div className="text-xs text-muted-foreground">{c.description}</div> : null}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge className={statusPres.badgeClassName}>
+                          {t(`courses.status.${statusPres.key}`) || statusPres.labelHe}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3">{c.enrollmentCount || 0}</td>
+                      <td className="px-4 py-3">{getTeacherNames(c.teacherIds) || "-"}</td>
+                      <td className="px-4 py-3">{c.startTime && c.endTime ? `${c.startTime} - ${c.endTime}` : "-"}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-2">
+                          {canDeleteCourses && (
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="text-red-500 hover:text-red-700 hover:bg-red-50 bg-transparent"
+                              onClick={() => remove(c.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {canEditCourses && (
+                            <Link href={`/dashboard/courses/${c.id}/edit`}>
+                              <Button variant="outline" size="icon" className="bg-transparent">
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            </Link>
+                          )}
+                          {canViewCourses && (
+                            <Link href={`/dashboard/courses/${c.id}`}>
+                              <Button variant="outline" size="icon" className="bg-transparent">
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            </Link>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       ) : (
-        <div className={viewMode === "grid" ? "grid md:grid-cols-2 lg:grid-cols-3 gap-4" : "space-y-4"}>
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((c) => {
             const isTotalPriceMode = isTotalCoursePricingType(c.courseType)
             const totalExpected = isTotalPriceMode

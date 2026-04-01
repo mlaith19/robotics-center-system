@@ -4,6 +4,7 @@ export type SiblingDiscountPackage = {
   id: string
   name: string
   description: string | null
+  pricingMode: "perCourse" | "perSession" | "perHour"
   firstAmount: number
   secondAmount: number
   thirdAmount: number
@@ -20,6 +21,7 @@ export async function ensureSiblingDiscountTables(sql: Sql) {
       "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
       "name" TEXT NOT NULL,
       "description" TEXT,
+      "pricingMode" TEXT NOT NULL DEFAULT 'perCourse',
       "firstAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
       "secondAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
       "thirdAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
@@ -32,6 +34,10 @@ export async function ensureSiblingDiscountTables(sql: Sql) {
   await sql`
     ALTER TABLE "Student"
     ADD COLUMN IF NOT EXISTS "siblingGroupId" TEXT
+  `
+  await sql`
+    ALTER TABLE "Student"
+    ADD COLUMN IF NOT EXISTS "siblingDiscountPackageId" TEXT
   `
 
   await sql`
@@ -47,9 +53,13 @@ export function normalizeAmount(value: unknown): number {
 }
 
 export function normalizeSiblingPayload(body: any) {
+  const pricingModeRaw = String(body?.pricingMode ?? "perCourse")
+  const pricingMode =
+    pricingModeRaw === "perSession" || pricingModeRaw === "perHour" ? pricingModeRaw : "perCourse"
   return {
     name: String(body?.name ?? "").trim(),
     description: String(body?.description ?? "").trim() || null,
+    pricingMode,
     firstAmount: normalizeAmount(body?.firstAmount),
     secondAmount: normalizeAmount(body?.secondAmount),
     thirdAmount: normalizeAmount(body?.thirdAmount),
@@ -85,5 +95,29 @@ export function resolveSiblingAmountByRank(pkg: SiblingDiscountPackage, rank: nu
   if (rank === 1) return pkg.firstAmount
   if (rank === 2) return pkg.secondAmount
   return pkg.thirdAmount
+}
+
+function diffHours(startTime: string | null | undefined, endTime: string | null | undefined): number {
+  if (!startTime || !endTime) return 0
+  const sh = startTime.slice(0, 2)
+  const sm = startTime.slice(3, 5)
+  const eh = endTime.slice(0, 2)
+  const em = endTime.slice(3, 5)
+  const start = Number(sh) * 60 + Number(sm)
+  const end = Number(eh) * 60 + Number(em)
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0
+  return (end - start) / 60
+}
+
+export function resolveEffectiveCoursePriceByPackage(
+  packagePricingMode: "perCourse" | "perSession" | "perHour",
+  amountForRank: number,
+  course: { duration?: number | null; startTime?: string | null; endTime?: string | null }
+): number {
+  if (packagePricingMode === "perCourse") return Math.max(0, amountForRank)
+  const sessions = Math.max(0, Number(course.duration || 0))
+  if (packagePricingMode === "perSession") return Math.max(0, amountForRank * sessions)
+  const hours = diffHours(course.startTime, course.endTime)
+  return Math.max(0, amountForRank * sessions * hours)
 }
 

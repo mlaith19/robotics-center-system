@@ -4,6 +4,7 @@ import { requireFeatureFromRequest } from "@/lib/feature-gate"
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant, ensureSessionMatchesTenant } from "@/lib/tenant/resolve-tenant"
 import { ensureProfileImageColumns, resolveProfileImageWithFallback } from "@/lib/profile-image"
+import { ensureSiblingDiscountTables } from "@/lib/sibling-discount"
 
 const PRIVILEGED_ROLES = ["owner", "admin", "administrator", "manager", "super_admin", "center_admin"]
 const ALLOWED_ROLES    = [...PRIVILEGED_ROLES, "teacher", "student"]
@@ -128,6 +129,7 @@ export const POST = withTenantAuth(async (req, session) => {
   try {
     const body = await req.json()
     await ensureProfileImageColumns(db as unknown as (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown[]>)
+    await ensureSiblingDiscountTables(db)
     if (!body.name) return Response.json({ error: "name is required" }, { status: 400 })
     const profileImage = resolveProfileImageWithFallback(body.profileImage)
 
@@ -172,7 +174,7 @@ export const POST = withTenantAuth(async (req, session) => {
       INSERT INTO "Student" (
         id, name, email, phone, address, city, status, "birthDate",
         "idNumber", father, mother, "additionalPhone", "healthFund", allergies,
-        "totalSessions", "courseIds", "courseSessions", "profileImage", "userId", "createdAt", "updatedAt"
+        "siblingDiscountPackageId", "totalSessions", "courseIds", "courseSessions", "profileImage", "userId", "createdAt", "updatedAt"
       )
       VALUES (
         ${studentId}, ${body.name}, ${body.email || null}, ${body.phone || null},
@@ -180,6 +182,7 @@ export const POST = withTenantAuth(async (req, session) => {
         ${body.status || 'מתעניין'}, ${normalizeBirthDateInput(body.birthDate)},
         ${body.idNumber || null}, ${body.father || null}, ${body.mother || null},
         ${body.additionalPhone || null}, ${body.healthFund || null}, ${body.allergies || null},
+        ${body.siblingDiscountPackageId || null},
         ${body.totalSessions || 12},
         ${JSON.stringify(body.courseIds || [])}::jsonb,
         ${JSON.stringify(body.courseSessions || {})}::jsonb,

@@ -31,6 +31,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 
+type SiblingPackage = {
+  id: string
+  name: string
+  pricingMode: "perCourse" | "perSession" | "perHour"
+  isActive: boolean
+}
+
 export default function EditStudentPage() {
   const { locale } = useLanguage()
   const isEn = locale === "en"
@@ -86,8 +93,11 @@ export default function EditStudentPage() {
   const courses = Array.isArray(rawCourses) ? rawCourses : []
   const { data: studentData, error: studentError } = useSWR(id ? `/api/students/${id}` : null, apiFetcher)
   const { data: allStudentsData } = useSWR("/api/students", arrayFetcher)
+  const { data: siblingPackagesData } = useSWR("/api/sibling-discount-packages", arrayFetcher)
   const allStudents = Array.isArray(allStudentsData) ? allStudentsData : []
+  const siblingPackages = (Array.isArray(siblingPackagesData) ? siblingPackagesData : []) as SiblingPackage[]
   const [siblingStudentIds, setSiblingStudentIds] = useState<string[]>([])
+  const [siblingDiscountPackageId, setSiblingDiscountPackageId] = useState<string>("none")
 
   const [student, setStudent] = useState({
     name: "",
@@ -103,6 +113,7 @@ export default function EditStudentPage() {
     healthFund: "",
     allergies: "",
     profileImage: "",
+    siblingDiscountPackageId: null as string | null,
     courseIds: [] as string[],
     status: "פעיל",
     totalSessions: 12,
@@ -132,6 +143,7 @@ export default function EditStudentPage() {
         healthFund: studentData.healthFund || "",
         allergies: studentData.allergies || "",
         profileImage: studentData.profileImage || "",
+        siblingDiscountPackageId: studentData.siblingDiscountPackageId || null,
         courseIds: studentData.courseIds || [],
         status: studentData.status || "פעיל",
         totalSessions: studentData.totalSessions || 12,
@@ -139,6 +151,7 @@ export default function EditStudentPage() {
       })
       // Check if student already has a user account
       setHasUserAccount(!!studentData.userId)
+      setSiblingDiscountPackageId(studentData.siblingDiscountPackageId || "none")
     }
   }, [studentData, studentError])
 
@@ -178,6 +191,7 @@ export default function EditStudentPage() {
         body: JSON.stringify({
           ...student,
           profileImage: student.profileImage.trim() || null,
+          siblingDiscountPackageId: siblingDiscountPackageId === "none" ? null : siblingDiscountPackageId,
           // User account data (only if creating new account)
           createUserAccount: createUserAccount && !hasUserAccount,
           username: createUserAccount && !hasUserAccount ? username.trim() : null,
@@ -760,6 +774,24 @@ export default function EditStudentPage() {
             </div>
           </div>
           <div className="border-2 border-amber-200 rounded-lg p-5 bg-white">
+            <div className="mb-4">
+              <Label className="text-base font-medium">חבילת אחים לתלמיד</Label>
+              <Select value={siblingDiscountPackageId} onValueChange={(v) => { setSiblingDiscountPackageId(v); setHasChanges(true) }}>
+                <SelectTrigger className="mt-2 bg-white">
+                  <SelectValue placeholder="בחר חבילת אחים" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">ללא חבילה</SelectItem>
+                  {siblingPackages
+                    .filter((p) => p.isActive !== false)
+                    .map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name} ({p.pricingMode === "perCourse" ? "לפי קורס" : p.pricingMode === "perSession" ? "לפי מפגש" : "לפי שעה"})
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
             {allStudents.filter((s: any) => String(s.id) !== id).length > 0 ? (
               <div className="grid grid-cols-2 gap-3">
                 {allStudents

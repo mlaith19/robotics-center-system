@@ -3,6 +3,7 @@ import { requireFeatureFromRequest } from "@/lib/feature-gate"
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
 import { ensureProfileImageColumns, resolveProfileImageWithFallback } from "@/lib/profile-image"
+import { ensureSiblingDiscountTables } from "@/lib/sibling-discount"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -95,6 +96,7 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
 
   try {
     await ensureProfileImageColumns(db as unknown as (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown[]>)
+    await ensureSiblingDiscountTables(db)
     const existing = await db`SELECT "userId" FROM "Student" WHERE id = ${id}`
     if (existing.length > 0) {
       const userId = (existing[0] as { userId: string | null })?.userId ?? null
@@ -137,6 +139,7 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
         "healthFund" = ${body.healthFund || null},
         allergies = ${body.allergies || null},
         "profileImage" = ${profileImage},
+        "siblingDiscountPackageId" = ${body.siblingDiscountPackageId || null},
         "totalSessions" = ${body.totalSessions || 12},
         "courseIds" = ${JSON.stringify(body.courseIds || [])}::jsonb,
         "courseSessions" = ${JSON.stringify(body.courseSessions || {})}::jsonb,

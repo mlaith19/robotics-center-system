@@ -55,6 +55,7 @@ interface SiblingPackageRow {
   id: string
   name: string
   description: string | null
+  pricingMode: "perCourse" | "perSession" | "perHour"
   firstAmount: number
   secondAmount: number
   thirdAmount: number
@@ -109,6 +110,7 @@ export default function SettingsPage() {
     firstAmount: string
     secondAmount: string
     thirdAmount: string
+    pricingMode: "perCourse" | "perSession" | "perHour"
     isActive: boolean
   }>({
     open: false,
@@ -118,6 +120,7 @@ export default function SettingsPage() {
     firstAmount: "",
     secondAmount: "",
     thirdAmount: "",
+    pricingMode: "perCourse",
     isActive: true,
   })
   const [siblingSaving, setSiblingSaving] = useState(false)
@@ -278,6 +281,7 @@ export default function SettingsPage() {
       firstAmount: "",
       secondAmount: "",
       thirdAmount: "",
+      pricingMode: "perCourse",
       isActive: true,
     })
   }
@@ -291,6 +295,7 @@ export default function SettingsPage() {
       firstAmount: String(pkg.firstAmount ?? ""),
       secondAmount: String(pkg.secondAmount ?? ""),
       thirdAmount: String(pkg.thirdAmount ?? ""),
+      pricingMode: pkg.pricingMode || "perCourse",
       isActive: pkg.isActive !== false,
     })
   }
@@ -308,6 +313,7 @@ export default function SettingsPage() {
         firstAmount: Number(siblingDialog.firstAmount || 0),
         secondAmount: Number(siblingDialog.secondAmount || 0),
         thirdAmount: Number(siblingDialog.thirdAmount || 0),
+        pricingMode: siblingDialog.pricingMode,
         isActive: siblingDialog.isActive,
       }
       const url = siblingDialog.edit
@@ -549,6 +555,7 @@ export default function SettingsPage() {
                       <div className="text-right">
                         <div className="font-medium">{pkg.name}</div>
                         <div className="text-xs text-muted-foreground">
+                          {pkg.pricingMode === "perCourse" ? "לפי קורס" : pkg.pricingMode === "perSession" ? "לפי מפגש" : "לפי שעה"} |
                           ראשון: ₪{pkg.firstAmount} | שני: ₪{pkg.secondAmount} | שלישי+: ₪{pkg.thirdAmount}
                           {pkg.isActive ? " | פעיל" : " | לא פעיל"}
                         </div>
@@ -863,6 +870,24 @@ export default function SettingsPage() {
                 <Label>שלישי+</Label>
                 <Input type="number" value={siblingDialog.thirdAmount} onChange={(e) => setSiblingDialog((d) => ({ ...d, thirdAmount: e.target.value }))} />
               </div>
+            </div>
+            <div className="space-y-1">
+              <Label>שיטת חישוב חבילה</Label>
+              <Select
+                value={siblingDialog.pricingMode}
+                onValueChange={(value: "perCourse" | "perSession" | "perHour") =>
+                  setSiblingDialog((d) => ({ ...d, pricingMode: value }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="perCourse">לפי קורס (סכום כולל)</SelectItem>
+                  <SelectItem value="perSession">לפי מפגש</SelectItem>
+                  <SelectItem value="perHour">לפי שעה</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <label className="flex flex-row-reverse items-center gap-2 text-sm">
               <input

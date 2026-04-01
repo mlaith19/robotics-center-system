@@ -48,9 +48,9 @@ export const POST = withTenantAuth(async (req, session) => {
     const id = crypto.randomUUID()
     const result = await db`
       INSERT INTO "SiblingDiscountPackage"
-        ("id", "name", "description", "firstAmount", "secondAmount", "thirdAmount", "isActive", "createdAt", "updatedAt")
+        ("id", "name", "description", "pricingMode", "firstAmount", "secondAmount", "thirdAmount", "isActive", "createdAt", "updatedAt")
       VALUES
-        (${id}, ${payload.name}, ${payload.description}, ${payload.firstAmount}, ${payload.secondAmount}, ${payload.thirdAmount}, ${payload.isActive}, NOW(), NOW())
+        (${id}, ${payload.name}, ${payload.description}, ${payload.pricingMode}, ${payload.firstAmount}, ${payload.secondAmount}, ${payload.thirdAmount}, ${payload.isActive}, NOW(), NOW())
       RETURNING *
     `
     return Response.json(result[0], { status: 201 })

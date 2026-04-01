@@ -29,6 +29,7 @@ export const PATCH = withTenantAuth(async (req, session, { params }: Ctx) => {
       SET
         "name" = ${payload.name},
         "description" = ${payload.description},
+        "pricingMode" = ${payload.pricingMode},
         "firstAmount" = ${payload.firstAmount},
         "secondAmount" = ${payload.secondAmount},
         "thirdAmount" = ${payload.thirdAmount},
