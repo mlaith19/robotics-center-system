@@ -35,6 +35,13 @@ interface GafanProgram {
   priceMax?: number
 }
 
+interface SiblingPackage {
+  id: string
+  name: string
+  pricingMode: "perCourse" | "perSession" | "perHour"
+  isActive: boolean
+}
+
 const DAYS_OF_WEEK = [
   { value: "sunday", label: "ראשון" },
   { value: "monday", label: "שני" },
@@ -119,6 +126,7 @@ export default function EditCoursePage() {
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [schools, setSchools] = useState<School[]>([])
   const [gafanPrograms, setGafanPrograms] = useState<GafanProgram[]>([])
+  const [siblingPackages, setSiblingPackages] = useState<SiblingPackage[]>([])
   const [courseCategories, setCourseCategories] = useState<{ id: string; name: string }[]>([])
 
   const [formData, setFormData] = useState({
@@ -142,6 +150,7 @@ export default function EditCoursePage() {
     gafanProgramId: "",
     validYear: new Date().getFullYear().toString(),
     showRegistrationLink: false,
+    siblingDiscountPackageId: "",
     pricingMode: "perStudent" as "perStudent" | "perCourse" | "perSession" | "perHour",
   })
   const needsSessionCount = formData.pricingMode === "perSession" || formData.pricingMode === "perHour"
@@ -171,9 +180,10 @@ export default function EditCoursePage() {
       fetch("/api/teachers", { credentials: "include" }).then(res => res.json()),
       fetch("/api/schools", { credentials: "include" }).then(res => res.json()),
       fetch("/api/gafan", { credentials: "include" }).then(res => res.json()),
-      fetch("/api/course-categories", { credentials: "include" }).then(res => res.json())
+      fetch("/api/course-categories", { credentials: "include" }).then(res => res.json()),
+      fetch("/api/sibling-discount-packages", { credentials: "include" }).then(res => res.json())
     ])
-      .then(([course, teacherList, schoolList, gafanList, categoryList]) => {
+      .then(([course, teacherList, schoolList, gafanList, categoryList, siblingPackageList]) => {
         if (course && !course.error) {
           setFormData({
             name: course.name || "",
@@ -196,6 +206,7 @@ export default function EditCoursePage() {
             gafanProgramId: course.gafanProgramId || "",
             validYear: course.validYear?.toString() || new Date().getFullYear().toString(),
             showRegistrationLink: course.showRegistrationLink === true,
+            siblingDiscountPackageId: course.siblingDiscountPackageId || "",
             pricingMode: isTotalCoursePricingType(course.courseType || "")
               ? "perCourse"
               : isSessionPricingType(course.courseType || "")
@@ -209,6 +220,7 @@ export default function EditCoursePage() {
         if (Array.isArray(schoolList)) setSchools(schoolList)
         if (Array.isArray(gafanList)) setGafanPrograms(gafanList)
         if (Array.isArray(categoryList)) setCourseCategories(categoryList)
+        if (Array.isArray(siblingPackageList)) setSiblingPackages(siblingPackageList.filter((p: any) => p?.isActive !== false))
         setLoading(false)
       })
       .catch(err => {
@@ -760,6 +772,25 @@ export default function EditCoursePage() {
               </Select>
             </div>
           )}
+          <div className="space-y-2 mb-4">
+            <Label className="text-right block">חבילת הנחת אחים לקורס (אופציונלי)</Label>
+            <Select
+              value={formData.siblingDiscountPackageId || "none"}
+              onValueChange={(value) => setFormData({ ...formData, siblingDiscountPackageId: value === "none" ? "" : value })}
+            >
+              <SelectTrigger className="text-right" dir="rtl">
+                <SelectValue placeholder="ללא חבילה" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">ללא חבילה</SelectItem>
+                {siblingPackages.map((pkg) => (
+                  <SelectItem key={pkg.id} value={pkg.id}>
+                    {pkg.name} ({pkg.pricingMode === "perCourse" ? "לפי קורס" : pkg.pricingMode === "perSession" ? "לפי מפגש" : "לפי שעה"})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="space-y-2">
             <Label className="text-right block">
               {formData.courseType === "gafan"

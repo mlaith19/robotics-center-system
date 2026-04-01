@@ -5,6 +5,7 @@ import { runAutoCompleteExpiredCourses } from "@/lib/course-status"
 import { hasPermission, sessionRolesGrantFullAccess } from "@/lib/permissions"
 import { parseCourseDateForDb, parseCourseTimeForDb, courseTimeToDisplayValue } from "@/lib/course-db-fields"
 import { getCourseRegistrationVisibilityMap, setCourseRegistrationVisibility } from "@/lib/course-registration-visibility"
+import { ensureSiblingDiscountTables } from "@/lib/sibling-discount"
 
 export const GET = withTenantAuth(async (req, session) => {
   const featureErr = await requireFeatureFromRequest(req, "courses", session)
@@ -22,6 +23,7 @@ export const GET = withTenantAuth(async (req, session) => {
   if (tenantErr) return tenantErr
   const db = tenant.db
   try {
+    await ensureSiblingDiscountTables(db)
     // Avoid blocking/slowing every courses read request.
     // Keep status sync as best-effort background work.
     runAutoCompleteExpiredCourses(db).catch((e) => {
@@ -96,6 +98,7 @@ export const POST = withTenantAuth(async (req, session) => {
   if (tenantErr) return tenantErr
   const db = tenant.db
   try {
+    await ensureSiblingDiscountTables(db)
     const body = await req.json()
     const name = body.name ? String(body.name).trim() : null
     if (!name) return Response.json({ error: "name is required" }, { status: 400 })
@@ -119,6 +122,7 @@ export const POST = withTenantAuth(async (req, session) => {
     const teacherIds = Array.isArray(body.teacherIds) ? body.teacherIds : []
     const schoolId = body.schoolId ? String(body.schoolId).trim() : null
     const gafanProgramId = body.gafanProgramId ? String(body.gafanProgramId).trim() : null
+    const siblingDiscountPackageId = body.siblingDiscountPackageId ? String(body.siblingDiscountPackageId).trim() : null
     // Force TEXT type (OID 25) so postgres.js skips its timestamp serializer
     const startTimeVal = startTime !== null ? db.typed(startTime, 25) : null
     const endTimeVal   = endTime   !== null ? db.typed(endTime,   25) : null
@@ -128,14 +132,14 @@ export const POST = withTenantAuth(async (req, session) => {
         id, name, description, level, duration, price, status, 
         "courseNumber", category, "courseType", location,
         "startDate", "endDate", "startTime", "endTime",
-        "daysOfWeek", "teacherIds", "schoolId", "gafanProgramId",
+        "daysOfWeek", "teacherIds", "schoolId", "gafanProgramId", "siblingDiscountPackageId",
         "createdAt", "updatedAt"
       )
       VALUES (
         ${id}, ${name}, ${description}, ${level}, ${duration}, ${price}, ${status},
         ${courseNumber}, ${category}, ${courseType}, ${location},
         ${startDate}, ${endDate}, ${startTimeVal}::timestamp, ${endTimeVal}::timestamp,
-        ${daysOfWeek}, ${teacherIds}, ${schoolId}, ${gafanProgramId},
+        ${daysOfWeek}, ${teacherIds}, ${schoolId}, ${gafanProgramId}, ${siblingDiscountPackageId},
         ${now}, ${now}
       )
       RETURNING *

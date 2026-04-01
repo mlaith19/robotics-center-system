@@ -34,6 +34,13 @@ interface GafanProgram {
   priceMax?: number
 }
 
+interface SiblingPackage {
+  id: string
+  name: string
+  pricingMode: "perCourse" | "perSession" | "perHour"
+  isActive: boolean
+}
+
 const DAYS_OF_WEEK = [
   { value: "sunday", label: "ראשון" },
   { value: "monday", label: "שני" },
@@ -116,6 +123,7 @@ export default function NewCoursePage() {
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [schools, setSchools] = useState<School[]>([])
   const [gafanPrograms, setGafanPrograms] = useState<GafanProgram[]>([])
+  const [siblingPackages, setSiblingPackages] = useState<SiblingPackage[]>([])
   const [courseCategories, setCourseCategories] = useState<{ id: string; name: string }[]>([])
 
   const [formData, setFormData] = useState({
@@ -139,6 +147,7 @@ export default function NewCoursePage() {
     gafanProgramId: "",
     validYear: new Date().getFullYear().toString(),
     showRegistrationLink: false,
+    siblingDiscountPackageId: "",
     /** שיטת תמחור */
     pricingMode: "perStudent" as "perStudent" | "perCourse" | "perSession" | "perHour",
   })
@@ -203,6 +212,13 @@ export default function NewCoursePage() {
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) setCourseCategories(data)
+      })
+      .catch(console.error)
+
+    fetch("/api/sibling-discount-packages", { credentials: "include" })
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) setSiblingPackages(data.filter((p: any) => p?.isActive !== false))
       })
       .catch(console.error)
   }, [])
@@ -799,6 +815,25 @@ export default function NewCoursePage() {
       </Select>
     </div>
   )}
+  <div className="space-y-2">
+    <Label className="text-right block">חבילת הנחת אחים לקורס (אופציונלי)</Label>
+    <Select
+      value={formData.siblingDiscountPackageId || "none"}
+      onValueChange={(value) => setFormData({ ...formData, siblingDiscountPackageId: value === "none" ? "" : value })}
+    >
+      <SelectTrigger className="text-right" dir="rtl">
+        <SelectValue placeholder="ללא חבילה" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="none">ללא חבילה</SelectItem>
+        {siblingPackages.map((pkg) => (
+          <SelectItem key={pkg.id} value={pkg.id}>
+            {pkg.name} ({pkg.pricingMode === "perCourse" ? "לפי קורס" : pkg.pricingMode === "perSession" ? "לפי מפגש" : "לפי שעה"})
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  </div>
   <div className="space-y-2">
   <Label className="text-right block">
     {formData.courseType === "gafan"

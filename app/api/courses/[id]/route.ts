@@ -4,6 +4,7 @@ import { requireTenant } from "@/lib/tenant/resolve-tenant"
 import { runAutoCompleteExpiredCourses } from "@/lib/course-status"
 import { parseCourseDateForDb, parseCourseTimeForDb, courseTimeToDisplayValue } from "@/lib/course-db-fields"
 import { getCourseRegistrationVisibilityMap, setCourseRegistrationVisibility } from "@/lib/course-registration-visibility"
+import { ensureSiblingDiscountTables } from "@/lib/sibling-discount"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -21,6 +22,7 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
   const db = tenant.db
   const { id } = await params
   try {
+    await ensureSiblingDiscountTables(db)
     await runAutoCompleteExpiredCourses(db)
     const result = await db`
       SELECT
@@ -60,6 +62,7 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
   if (!name) return Response.json({ error: "name is required" }, { status: 400 })
 
   try {
+    await ensureSiblingDiscountTables(db)
     const now = new Date().toISOString()
     const startDate = parseCourseDateForDb(body.startDate)
     const endDate = parseCourseDateForDb(body.endDate)
@@ -90,6 +93,7 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
           "teacherIds" = ${Array.isArray(body.teacherIds) ? body.teacherIds : []},
           "schoolId"       = ${cleanStr(body.schoolId)},
           "gafanProgramId" = ${cleanStr(body.gafanProgramId)},
+          "siblingDiscountPackageId" = ${cleanStr(body.siblingDiscountPackageId)},
           "updatedAt" = ${now}
       WHERE id = ${id}
       RETURNING *

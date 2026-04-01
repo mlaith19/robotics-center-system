@@ -39,10 +39,18 @@ export async function ensureSiblingDiscountTables(sql: Sql) {
     ALTER TABLE "Student"
     ADD COLUMN IF NOT EXISTS "siblingDiscountPackageId" TEXT
   `
+  await sql`
+    ALTER TABLE "Course"
+    ADD COLUMN IF NOT EXISTS "siblingDiscountPackageId" TEXT
+  `
 
   await sql`
     CREATE INDEX IF NOT EXISTS "idx_student_sibling_group"
     ON "Student" ("siblingGroupId")
+  `
+  await sql`
+    CREATE INDEX IF NOT EXISTS "idx_course_sibling_package"
+    ON "Course" ("siblingDiscountPackageId")
   `
 }
 
