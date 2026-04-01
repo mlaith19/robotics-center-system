@@ -26,6 +26,7 @@ interface Expense {
   bankName?: string
   bankBranch?: string
   accountNumber?: string
+  createdByUserName?: string
 }
 
 interface Payment {
@@ -39,6 +40,7 @@ interface Payment {
   studentName?: string
   student?: { id: string; firstName: string; lastName: string }
   school?: { id: string; name: string }
+  createdByUserName?: string
 }
 
 interface Student {
@@ -411,26 +413,28 @@ export default function CashierPage() {
 
   if (expensesLoading || paymentsLoading) {
     return (
-      <div className="min-h-screen bg-background p-6 flex items-center justify-center" dir="rtl">
-        <Loader2 className="h-8 w-8 animate-spin" />
+      <div className="flex min-h-[300px] items-center justify-center bg-background p-3 sm:p-6" dir="rtl">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-background p-6" dir="rtl">
-      <div className="mb-6 flex items-center gap-2">
-        <Button variant="ghost" size="icon" onClick={() => router.push("/dashboard")}>
-          <ArrowRight className="h-5 w-5" />
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-3xl font-bold">הכנסות והוצאות</h1>
-          <p className="text-muted-foreground">ניהול תקציב ומעקב פיננסי</p>
+    <div className="container mx-auto max-w-7xl space-y-4 bg-background p-3 sm:space-y-6 sm:p-6" dir="rtl">
+      <div className="flex flex-col gap-3 sm:mb-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-2 sm:items-center">
+          <Button variant="ghost" size="icon" className="shrink-0" onClick={() => router.push("/dashboard")}>
+            <ArrowRight className="h-5 w-5" />
+          </Button>
+          <div className="min-w-0 flex-1 text-right">
+            <h1 className="text-2xl font-bold sm:text-3xl">הכנסות והוצאות</h1>
+            <p className="text-sm text-muted-foreground sm:text-base">ניהול תקציב ומעקב פיננסי</p>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Calendar className="h-5 w-5 text-muted-foreground" />
+        <div className="flex w-full items-center gap-2 sm:w-auto sm:shrink-0">
+          <Calendar className="h-5 w-5 shrink-0 text-muted-foreground" />
           <Select value={timePeriod} onValueChange={(value: any) => setTimePeriod(value)}>
-            <SelectTrigger className="w-full sm:w-[140px]">
+            <SelectTrigger className="w-full sm:w-[160px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -445,43 +449,43 @@ export default function CashierPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="mb-4 grid gap-3 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Card className="border-green-200 bg-green-50">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base text-green-700">
-              <TrendingUp className="h-4 w-4" />
+          <CardHeader className="px-3 pb-2 text-right sm:px-6">
+            <CardTitle className="flex flex-row-reverse items-center justify-end gap-2 text-base text-green-700">
+              <TrendingUp className="h-4 w-4 shrink-0" />
               סך הכנסות
             </CardTitle>
             <CardDescription className="text-xs text-green-600">
               ב{getTimePeriodLabel(timePeriod)} הנוכחי
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-3 sm:px-6">
             <div className="text-2xl font-bold text-green-700">₪{totalIncomes.toLocaleString()}</div>
           </CardContent>
         </Card>
 
         <Card className="border-red-200 bg-red-50">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base text-red-700">
-              <TrendingDown className="h-4 w-4" />
+          <CardHeader className="px-3 pb-2 text-right sm:px-6">
+            <CardTitle className="flex flex-row-reverse items-center justify-end gap-2 text-base text-red-700">
+              <TrendingDown className="h-4 w-4 shrink-0" />
               סך הוצאות
             </CardTitle>
             <CardDescription className="text-xs text-red-600">ב{getTimePeriodLabel(timePeriod)} הנוכחי</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-3 sm:px-6">
             <div className="text-2xl font-bold text-red-700">₪{totalExpenses.toLocaleString()}</div>
           </CardContent>
         </Card>
 
         <Card className={balance >= 0 ? "border-blue-200 bg-blue-50" : "border-orange-200 bg-orange-50"}>
-          <CardHeader className="pb-2">
+          <CardHeader className="px-3 pb-2 text-right sm:px-6">
             <CardTitle className={`text-base ${balance >= 0 ? "text-blue-700" : "text-orange-700"}`}>יתרה</CardTitle>
             <CardDescription className={`text-xs ${balance >= 0 ? "text-blue-600" : "text-orange-600"}`}>
               ב{getTimePeriodLabel(timePeriod)} הנוכחי
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-3 sm:px-6">
             <div className={`text-2xl font-bold ${balance >= 0 ? "text-blue-700" : "text-orange-700"}`}>
               ₪{balance.toLocaleString()}
             </div>
@@ -490,85 +494,85 @@ export default function CashierPage() {
       </div>
 
       {/* Payment Method Breakdown */}
-      <div className="mb-6 grid gap-3 md:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5 lg:gap-3">
         <Card className="border-purple-200 bg-purple-50">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm text-purple-700">
-              <CreditCard className="h-4 w-4" />
+          <CardHeader className="px-3 pb-2 text-right sm:px-6">
+            <CardTitle className="flex flex-row-reverse items-center justify-end gap-2 text-sm text-purple-700">
+              <CreditCard className="h-4 w-4 shrink-0" />
               מזומן
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold text-purple-700">₪{getIncomeByPaymentMethod("cash").toLocaleString()}</div>
+          <CardContent className="px-3 sm:px-6">
+            <div className="text-lg font-bold text-purple-700 sm:text-xl">₪{getIncomeByPaymentMethod("cash").toLocaleString()}</div>
           </CardContent>
         </Card>
 
         <Card className="border-indigo-200 bg-indigo-50">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm text-indigo-700">
-              <CreditCard className="h-4 w-4" />
+          <CardHeader className="px-3 pb-2 text-right sm:px-6">
+            <CardTitle className="flex flex-row-reverse items-center justify-end gap-2 text-sm text-indigo-700">
+              <CreditCard className="h-4 w-4 shrink-0" />
               אשראי
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold text-indigo-700">₪{getIncomeByPaymentMethod("credit").toLocaleString()}</div>
+          <CardContent className="px-3 sm:px-6">
+            <div className="text-lg font-bold text-indigo-700 sm:text-xl">₪{getIncomeByPaymentMethod("credit").toLocaleString()}</div>
           </CardContent>
         </Card>
 
         <Card className="border-cyan-200 bg-cyan-50">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm text-cyan-700">
-              <CreditCard className="h-4 w-4" />
+          <CardHeader className="px-3 pb-2 text-right sm:px-6">
+            <CardTitle className="flex flex-row-reverse items-center justify-end gap-2 text-sm text-cyan-700">
+              <CreditCard className="h-4 w-4 shrink-0" />
               העברה
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold text-cyan-700">₪{getIncomeByPaymentMethod("transfer").toLocaleString()}</div>
+          <CardContent className="px-3 sm:px-6">
+            <div className="text-lg font-bold text-cyan-700 sm:text-xl">₪{getIncomeByPaymentMethod("transfer").toLocaleString()}</div>
           </CardContent>
         </Card>
 
         <Card className="border-teal-200 bg-teal-50">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm text-teal-700">
-              <CreditCard className="h-4 w-4" />
+          <CardHeader className="px-3 pb-2 text-right sm:px-6">
+            <CardTitle className="flex flex-row-reverse items-center justify-end gap-2 text-sm text-teal-700">
+              <CreditCard className="h-4 w-4 shrink-0" />
               שיק
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold text-teal-700">₪{getIncomeByPaymentMethod("check").toLocaleString()}</div>
+          <CardContent className="px-3 sm:px-6">
+            <div className="text-lg font-bold text-teal-700 sm:text-xl">₪{getIncomeByPaymentMethod("check").toLocaleString()}</div>
           </CardContent>
         </Card>
 
-        <Card className="border-amber-200 bg-amber-50">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm text-amber-700">
-              <CreditCard className="h-4 w-4" />
+        <Card className="col-span-2 border-amber-200 bg-amber-50 sm:col-span-1">
+          <CardHeader className="px-3 pb-2 text-right sm:px-6">
+            <CardTitle className="flex flex-row-reverse items-center justify-end gap-2 text-sm text-amber-700">
+              <CreditCard className="h-4 w-4 shrink-0" />
               ביט
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold text-amber-700">₪{getIncomeByPaymentMethod("bit").toLocaleString()}</div>
+          <CardContent className="px-3 sm:px-6">
+            <div className="text-lg font-bold text-amber-700 sm:text-xl">₪{getIncomeByPaymentMethod("bit").toLocaleString()}</div>
           </CardContent>
         </Card>
       </div>
 
       <Tabs defaultValue="expenses" dir="rtl">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1">
           <TabsTrigger value="expenses">הוצאות</TabsTrigger>
           <TabsTrigger value="incomes">הכנסות</TabsTrigger>
         </TabsList>
 
         <TabsContent value="expenses" className="space-y-4">
           <Card className="border-red-200">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingDown className="h-5 w-5" />
+            <CardHeader className="px-3 text-right sm:px-6">
+              <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
+                <TrendingDown className="h-5 w-5 shrink-0" />
                 הוספת הוצאה חדשה
               </CardTitle>
               <CardDescription>הוסף הוצאה חד-פעמית או קבועה</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
+            <CardContent className="space-y-4 px-3 sm:px-6">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="expense-description">תיאור ההוצאה *</Label>
                   <Input
@@ -661,7 +665,7 @@ export default function CashierPage() {
               )}
 
               {(expensePaymentMethod === "transfer" || expensePaymentMethod === "check") && (
-                <div className="grid gap-4 md:grid-cols-3">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                   <div className="space-y-2">
                     <Label htmlFor="expense-bank-name">שם הבנק *</Label>
                     <Select value={expenseBankName} onValueChange={setExpenseBankName}>
@@ -702,13 +706,14 @@ export default function CashierPage() {
                 </div>
               )}
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-start gap-2">
                 <Checkbox
                   id="recurring"
+                  className="mt-0.5 shrink-0"
                   checked={isRecurring}
                   onCheckedChange={(checked) => setIsRecurring(checked as boolean)}
                 />
-                <Label htmlFor="recurring" className="cursor-pointer">
+                <Label htmlFor="recurring" className="cursor-pointer leading-snug">
                   הוצאה קבועה (חודשית)
                 </Label>
               </div>
@@ -739,58 +744,97 @@ export default function CashierPage() {
           </Card>
 
           <Card>
-            <CardHeader>
+            <CardHeader className="px-3 text-right sm:px-6">
               <CardTitle>רשימת הוצאות</CardTitle>
               <CardDescription>הוצאות ב{getTimePeriodLabel(timePeriod)} הנוכחי</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-3 sm:px-6">
               {filteredExpenses.length === 0 ? (
                 <div className="py-8 text-center text-muted-foreground">
                   לא נרשמו הוצאות ב{getTimePeriodLabel(timePeriod)} הנוכחי
                 </div>
               ) : (
-                <div className="overflow-x-auto w-full">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-right">תיאור</TableHead>
-                      <TableHead className="text-right">קטגוריה</TableHead>
-                      <TableHead className="text-right">סכום</TableHead>
-                      <TableHead className="text-right">תאריך</TableHead>
-                      <TableHead className="text-right">סוג</TableHead>
-                      <TableHead className="text-right">אופן תשלום</TableHead>
-                      <TableHead className="text-right">בוצע על ידי</TableHead>
-                      <TableHead className="text-right">פעולות</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                <>
+                  <div className="flex flex-col gap-3 lg:hidden">
                     {filteredExpenses.map((expense) => (
-                      <TableRow key={expense.id}>
-                        <TableCell className="font-medium">{formatExpenseDescription(expense.description)}</TableCell>
-                        <TableCell>{getCategoryLabel(expense.category)}</TableCell>
-                        <TableCell className="text-red-600 font-semibold">₪{Number(expense.amount).toLocaleString()}</TableCell>
-                        <TableCell>{new Date(expense.date).toLocaleDateString("he-IL")}</TableCell>
-                        <TableCell>
-                          {expense.isRecurring ? (
-                            <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded">
-                              קבוע - יום {expense.recurringDay}
-                            </span>
-                          ) : (
-                            <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">חד פעמי</span>
-                          )}
-                        </TableCell>
-                        <TableCell>{getPaymentMethodLabel(expense.paymentMethod)}</TableCell>
-                        <TableCell className="text-muted-foreground">{expense.createdByUserName ?? "—"}</TableCell>
-                        <TableCell>
-                          <Button variant="ghost" size="icon" onClick={() => deleteExpense(expense.id)}>
-                            <Trash2 className="h-4 w-4 text-red-600" />
+                      <Card key={expense.id} className="border bg-card shadow-sm">
+                        <CardContent className="space-y-3 p-4 text-right">
+                          <div className="break-words font-medium">{formatExpenseDescription(expense.description)}</div>
+                          <div className="flex flex-wrap items-center justify-end gap-2 text-sm text-muted-foreground">
+                            <span>{getCategoryLabel(expense.category)}</span>
+                            <span>{new Date(expense.date).toLocaleDateString("he-IL")}</span>
+                            <span>{getPaymentMethodLabel(expense.paymentMethod)}</span>
+                          </div>
+                          <div className="text-xl font-bold text-red-600">₪{Number(expense.amount).toLocaleString()}</div>
+                          <div>
+                            {expense.isRecurring ? (
+                              <span className="rounded bg-orange-100 px-2 py-1 text-xs text-orange-700">
+                                קבוע - יום {expense.recurringDay}
+                              </span>
+                            ) : (
+                              <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700">חד פעמי</span>
+                            )}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            בוצע על ידי: {expense.createdByUserName ?? "—"}
+                          </div>
+                          <Button
+                            variant="outline"
+                            className="w-full gap-2 text-red-600 hover:bg-red-50"
+                            onClick={() => deleteExpense(expense.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            מחק הוצאה
                           </Button>
-                        </TableCell>
-                      </TableRow>
+                        </CardContent>
+                      </Card>
                     ))}
-                  </TableBody>
-                </Table>
-                </div>
+                  </div>
+                  <div className="hidden w-full overflow-x-auto lg:block">
+                    <Table className="min-w-[920px]">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-right">תיאור</TableHead>
+                          <TableHead className="text-right">קטגוריה</TableHead>
+                          <TableHead className="text-right">סכום</TableHead>
+                          <TableHead className="text-right">תאריך</TableHead>
+                          <TableHead className="text-right">סוג</TableHead>
+                          <TableHead className="text-right">אופן תשלום</TableHead>
+                          <TableHead className="text-right">בוצע על ידי</TableHead>
+                          <TableHead className="text-right">פעולות</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredExpenses.map((expense) => (
+                          <TableRow key={expense.id}>
+                            <TableCell className="max-w-[220px] font-medium break-words">
+                              {formatExpenseDescription(expense.description)}
+                            </TableCell>
+                            <TableCell>{getCategoryLabel(expense.category)}</TableCell>
+                            <TableCell className="font-semibold text-red-600">₪{Number(expense.amount).toLocaleString()}</TableCell>
+                            <TableCell>{new Date(expense.date).toLocaleDateString("he-IL")}</TableCell>
+                            <TableCell>
+                              {expense.isRecurring ? (
+                                <span className="rounded bg-orange-100 px-2 py-1 text-xs text-orange-700">
+                                  קבוע - יום {expense.recurringDay}
+                                </span>
+                              ) : (
+                                <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700">חד פעמי</span>
+                              )}
+                            </TableCell>
+                            <TableCell>{getPaymentMethodLabel(expense.paymentMethod)}</TableCell>
+                            <TableCell className="text-muted-foreground">{expense.createdByUserName ?? "—"}</TableCell>
+                            <TableCell>
+                              <Button variant="ghost" size="icon" onClick={() => deleteExpense(expense.id)}>
+                                <Trash2 className="h-4 w-4 text-red-600" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -798,15 +842,15 @@ export default function CashierPage() {
 
         <TabsContent value="incomes" className="space-y-4">
           <Card className="border-green-200">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5" />
+            <CardHeader className="px-3 text-right sm:px-6">
+              <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
+                <TrendingUp className="h-5 w-5 shrink-0" />
                 הוספת הכנסה חדשה
               </CardTitle>
               <CardDescription>רשום הכנסה מתלמיד, בית ספר או מקור אחר</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
+            <CardContent className="space-y-4 px-3 sm:px-6">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="income-type">סוג ההכנסה *</Label>
                   <Select
@@ -996,7 +1040,7 @@ export default function CashierPage() {
               )}
 
               {(paymentMethod === "transfer" || paymentMethod === "check") && (
-                <div className="grid gap-4 md:grid-cols-3">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                   <div className="space-y-2">
                     <Label htmlFor="bank-name">בנק *</Label>
                     <Select value={bankName} onValueChange={setBankName}>
@@ -1043,56 +1087,95 @@ export default function CashierPage() {
           </Card>
 
           <Card>
-            <CardHeader>
+            <CardHeader className="px-3 text-right sm:px-6">
               <CardTitle>רשימת הכנסות</CardTitle>
               <CardDescription>הכנסות ב{getTimePeriodLabel(timePeriod)} הנוכחי</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-3 sm:px-6">
               {filteredPayments.length === 0 ? (
                 <div className="py-8 text-center text-muted-foreground">
                   לא נרשמו הכנסות ב{getTimePeriodLabel(timePeriod)} הנוכחי
                 </div>
               ) : (
-                <div className="overflow-x-auto w-full">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-right">תיאור</TableHead>
-                      <TableHead className="text-right">מקור</TableHead>
-                      <TableHead className="text-right">אופן תשלום</TableHead>
-                      <TableHead className="text-right">סכום</TableHead>
-                      <TableHead className="text-right">תאריך</TableHead>
-                      <TableHead className="text-right">בוצע על ידי</TableHead>
-                      <TableHead className="text-right">פעולות</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredPayments.map((payment) => (
-                      <TableRow key={payment.id}>
-                        <TableCell className="font-medium">{payment.description || "-"}</TableCell>
-                        <TableCell>
-                          {payment.studentName
-                            ? payment.studentName
-                            : payment.student
-                            ? `${payment.student.firstName} ${payment.student.lastName}`
-                            : payment.school
+                <>
+                  <div className="flex flex-col gap-3 lg:hidden">
+                    {filteredPayments.map((payment) => {
+                      const sourceLabel = payment.studentName
+                        ? payment.studentName
+                        : payment.student
+                          ? `${payment.student.firstName} ${payment.student.lastName}`
+                          : payment.school
                             ? payment.school.name
-                            : "-"}
-                        </TableCell>
-                        <TableCell>{getPaymentMethodLabel(payment.paymentType)}</TableCell>
-                        <TableCell className="text-green-600 font-semibold">₪{Number(payment.amount).toLocaleString()}</TableCell>
-                        <TableCell>{payment.paymentDate ? new Date(payment.paymentDate).toLocaleDateString("he-IL") : "-"}</TableCell>
-                        <TableCell className="text-muted-foreground">{payment.createdByUserName ?? "—"}</TableCell>
-                        <TableCell>
-                          <Button variant="ghost" size="icon" onClick={() => deleteIncome(payment.id)}>
-                            <Trash2 className="h-4 w-4 text-red-600" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                </div>
+                            : "-"
+                      return (
+                        <Card key={payment.id} className="border bg-card shadow-sm">
+                          <CardContent className="space-y-3 p-4 text-right">
+                            <div className="break-words font-medium">{payment.description || "—"}</div>
+                            <div className="text-sm text-muted-foreground">מקור: {sourceLabel}</div>
+                            <div className="flex flex-wrap justify-end gap-2 text-sm text-muted-foreground">
+                              <span>{getPaymentMethodLabel(payment.paymentType)}</span>
+                              <span>
+                                {payment.paymentDate ? new Date(payment.paymentDate).toLocaleDateString("he-IL") : "-"}
+                              </span>
+                            </div>
+                            <div className="text-xl font-bold text-green-600">₪{Number(payment.amount).toLocaleString()}</div>
+                            <div className="text-sm text-muted-foreground">בוצע על ידי: {payment.createdByUserName ?? "—"}</div>
+                            <Button
+                              variant="outline"
+                              className="w-full gap-2 text-red-600 hover:bg-red-50"
+                              onClick={() => deleteIncome(payment.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              מחק הכנסה
+                            </Button>
+                          </CardContent>
+                        </Card>
+                      )
+                    })}
+                  </div>
+                  <div className="hidden w-full overflow-x-auto lg:block">
+                    <Table className="min-w-[800px]">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-right">תיאור</TableHead>
+                          <TableHead className="text-right">מקור</TableHead>
+                          <TableHead className="text-right">אופן תשלום</TableHead>
+                          <TableHead className="text-right">סכום</TableHead>
+                          <TableHead className="text-right">תאריך</TableHead>
+                          <TableHead className="text-right">בוצע על ידי</TableHead>
+                          <TableHead className="text-right">פעולות</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredPayments.map((payment) => (
+                          <TableRow key={payment.id}>
+                            <TableCell className="max-w-[200px] break-words font-medium">{payment.description || "-"}</TableCell>
+                            <TableCell>
+                              {payment.studentName
+                                ? payment.studentName
+                                : payment.student
+                                  ? `${payment.student.firstName} ${payment.student.lastName}`
+                                  : payment.school
+                                    ? payment.school.name
+                                    : "-"}
+                            </TableCell>
+                            <TableCell>{getPaymentMethodLabel(payment.paymentType)}</TableCell>
+                            <TableCell className="font-semibold text-green-600">₪{Number(payment.amount).toLocaleString()}</TableCell>
+                            <TableCell>
+                              {payment.paymentDate ? new Date(payment.paymentDate).toLocaleDateString("he-IL") : "-"}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">{payment.createdByUserName ?? "—"}</TableCell>
+                            <TableCell>
+                              <Button variant="ghost" size="icon" onClick={() => deleteIncome(payment.id)}>
+                                <Trash2 className="h-4 w-4 text-red-600" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
