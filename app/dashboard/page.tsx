@@ -106,7 +106,7 @@ export default function DashboardPage() {
   // מורה שמפנים לפרופיל – הצג טעינה כדי לא להראות דף בית לרגע
   if (currentUser && isTeacherRole && !showHomeInSidebar) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]" dir={dir}>
+      <div className="flex min-h-[400px] items-center justify-center p-3 sm:p-6" dir={dir}>
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
         <span className={`text-muted-foreground ${dir === "rtl" ? "mr-2" : "ml-2"}`}>{t("nav.redirecting")}</span>
       </div>
@@ -116,7 +116,7 @@ export default function DashboardPage() {
   // Show loading while checking user type (but not for admins - they always see admin dashboard)
   if (!isAdmin && (userTypeLoading || !userTypeData)) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]" dir={dir}>
+      <div className="flex min-h-[400px] items-center justify-center p-3 sm:p-6" dir={dir}>
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
         <span className={`text-muted-foreground ${dir === "rtl" ? "mr-2" : "ml-2"}`}>{t("nav.checkingPermissions")}</span>
       </div>
@@ -127,7 +127,7 @@ export default function DashboardPage() {
   const shouldRedirectToProfile = isTeacherOrStudent && (showMyProfileInSidebar || !showHomeInSidebar)
   if (isTeacherOrStudent && shouldRedirectToProfile) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]" dir={dir}>
+      <div className="flex min-h-[400px] items-center justify-center p-3 sm:p-6" dir={dir}>
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
         <span className={`text-muted-foreground ${dir === "rtl" ? "mr-2" : "ml-2"}`}>{t("nav.redirecting")}</span>
       </div>
@@ -136,14 +136,14 @@ export default function DashboardPage() {
 
   if (loading || !currentUser) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]" dir={dir}>
+      <div className="flex min-h-[400px] items-center justify-center p-3 sm:p-6" dir={dir}>
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
   }
 
   return (
-    <div className="space-y-8" dir="rtl">
+    <div className="container mx-auto max-w-7xl space-y-4 p-3 sm:space-y-8 sm:p-6" dir="rtl">
       <PageHeader 
         title="דף הבית" 
         description="סקירה כללית של" 
@@ -153,93 +153,93 @@ export default function DashboardPage() {
       />
 
       {/* Stats Row 1 */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="p-5 bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/20 border-blue-200 dark:border-blue-800">
-          <div className="flex items-center justify-between">
-            <div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
+        <Card className="border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100/50 p-4 dark:border-blue-800 dark:from-blue-950/30 dark:to-blue-900/20 sm:p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1 text-right">
               <p className="text-sm font-medium text-blue-600 dark:text-blue-400">סה"כ קורסים</p>
-              <p className="text-3xl font-bold text-blue-700 dark:text-blue-300 mt-1">{stats?.totalCourses || 0}</p>
+              <p className="mt-1 text-2xl font-bold text-blue-700 dark:text-blue-300 sm:text-3xl">{stats?.totalCourses || 0}</p>
             </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-500/20">
-              <BookOpen className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-500/20 sm:h-12 sm:w-12">
+              <BookOpen className="h-5 w-5 text-blue-600 dark:text-blue-400 sm:h-6 sm:w-6" />
             </div>
           </div>
         </Card>
 
-        <Card className="p-5 bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-950/30 dark:to-green-900/20 border-green-200 dark:border-green-800">
-          <div className="flex items-center justify-between">
-            <div>
+        <Card className="border-green-200 bg-gradient-to-br from-green-50 to-green-100/50 p-4 dark:border-green-800 dark:from-green-950/30 dark:to-green-900/20 sm:p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1 text-right">
               <p className="text-sm font-medium text-green-600 dark:text-green-400">תלמידים פעילים</p>
-              <p className="text-3xl font-bold text-green-700 dark:text-green-300 mt-1">{stats?.activeStudents || 0}</p>
+              <p className="mt-1 text-2xl font-bold text-green-700 dark:text-green-300 sm:text-3xl">{stats?.activeStudents || 0}</p>
             </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-green-500/20">
-              <Users className="h-6 w-6 text-green-600 dark:text-green-400" />
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-500/20 sm:h-12 sm:w-12">
+              <Users className="h-5 w-5 text-green-600 dark:text-green-400 sm:h-6 sm:w-6" />
             </div>
           </div>
         </Card>
 
-        <Card className="p-5 bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-950/30 dark:to-purple-900/20 border-purple-200 dark:border-purple-800">
-          <div className="flex items-center justify-between">
-            <div>
+        <Card className="border-purple-200 bg-gradient-to-br from-purple-50 to-purple-100/50 p-4 dark:border-purple-800 dark:from-purple-950/30 dark:to-purple-900/20 sm:p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1 text-right">
               <p className="text-sm font-medium text-purple-600 dark:text-purple-400">מורים פעילים</p>
-              <p className="text-3xl font-bold text-purple-700 dark:text-purple-300 mt-1">{stats?.activeTeachers || 0}</p>
+              <p className="mt-1 text-2xl font-bold text-purple-700 dark:text-purple-300 sm:text-3xl">{stats?.activeTeachers || 0}</p>
             </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-purple-500/20">
-              <GraduationCap className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-purple-500/20 sm:h-12 sm:w-12">
+              <GraduationCap className="h-5 w-5 text-purple-600 dark:text-purple-400 sm:h-6 sm:w-6" />
             </div>
           </div>
         </Card>
 
-        <Card className="p-5 bg-gradient-to-br from-orange-50 to-orange-100/50 dark:from-orange-950/30 dark:to-orange-900/20 border-orange-200 dark:border-orange-800">
-          <div className="flex items-center justify-between">
-            <div>
+        <Card className="border-orange-200 bg-gradient-to-br from-orange-50 to-orange-100/50 p-4 dark:border-orange-800 dark:from-orange-950/30 dark:to-orange-900/20 sm:p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1 text-right">
               <p className="text-sm font-medium text-orange-600 dark:text-orange-400">בתי ספר</p>
-              <p className="text-3xl font-bold text-orange-700 dark:text-orange-300 mt-1">{stats?.totalSchools || 0}</p>
+              <p className="mt-1 text-2xl font-bold text-orange-700 dark:text-orange-300 sm:text-3xl">{stats?.totalSchools || 0}</p>
             </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-orange-500/20">
-              <Building2 className="h-6 w-6 text-orange-600 dark:text-orange-400" />
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-orange-500/20 sm:h-12 sm:w-12">
+              <Building2 className="h-5 w-5 text-orange-600 dark:text-orange-400 sm:h-6 sm:w-6" />
             </div>
           </div>
         </Card>
       </div>
 
       {/* Stats Row 2 - Financial */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="p-5">
-          <div className="flex items-center justify-between">
-            <div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
+        <Card className="p-4 sm:p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1 text-right">
               <p className="text-sm font-medium text-muted-foreground">רישומים לקורסים</p>
-              <p className="text-2xl font-bold text-foreground mt-1">{stats?.totalEnrollments || 0}</p>
+              <p className="mt-1 text-xl font-bold text-foreground sm:text-2xl">{stats?.totalEnrollments || 0}</p>
             </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
               <Calendar className="h-5 w-5 text-primary" />
             </div>
           </div>
         </Card>
 
-        <Card className="p-5 bg-green-50/50 dark:bg-green-950/20">
-          <div className="flex items-center justify-between">
-            <div>
+        <Card className="bg-green-50/50 p-4 dark:bg-green-950/20 sm:p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1 text-right">
               <p className="text-sm font-medium text-green-600 dark:text-green-400">הכנסות החודש</p>
-              <p className="text-2xl font-bold text-green-700 dark:text-green-300 mt-1">
+              <p className="mt-1 break-words text-xl font-bold text-green-700 dark:text-green-300 sm:text-2xl">
                 {(stats?.monthlyIncome || 0).toLocaleString()} ₪
               </p>
             </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/20">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-green-500/20">
               <TrendingUp className="h-5 w-5 text-green-600" />
             </div>
           </div>
         </Card>
 
-        <Card className="p-5 bg-red-50/50 dark:bg-red-950/20">
-          <div className="flex items-center justify-between">
-            <div>
+        <Card className="bg-red-50/50 p-4 dark:bg-red-950/20 sm:col-span-2 sm:p-5 lg:col-span-1">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1 text-right">
               <p className="text-sm font-medium text-red-600 dark:text-red-400">הוצאות החודש</p>
-              <p className="text-2xl font-bold text-red-700 dark:text-red-300 mt-1">
+              <p className="mt-1 break-words text-xl font-bold text-red-700 dark:text-red-300 sm:text-2xl">
                 {(stats?.monthlyExpenses || 0).toLocaleString()} ₪
               </p>
             </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-500/20">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-500/20">
               <Banknote className="h-5 w-5 text-red-600" />
             </div>
           </div>
@@ -247,17 +247,17 @@ export default function DashboardPage() {
       </div>
 
       {/* Recent Activity */}
-      <Card className="p-6">
-        <h2 className="text-xl font-semibold text-foreground mb-4">פעילות אחרונה</h2>
-        <div className="space-y-4">
+      <Card className="p-4 sm:p-6">
+        <h2 className="mb-3 text-lg font-semibold text-foreground sm:mb-4 sm:text-xl">פעילות אחרונה</h2>
+        <div className="space-y-3 sm:space-y-4">
           {stats?.recentActivity && stats.recentActivity.length > 0 ? (
             stats.recentActivity.map((item, index) => (
               <div
                 key={item.id}
-                className={`flex items-center gap-4 pb-4 ${index < stats.recentActivity.length - 1 ? "border-b border-border" : ""}`}
+                className={`flex items-start gap-3 pb-3 sm:items-center sm:gap-4 sm:pb-4 ${index < stats.recentActivity.length - 1 ? "border-b border-border" : ""}`}
               >
                 <div
-                  className={`flex h-10 w-10 items-center justify-center rounded-full ${item.type === "course" ? "bg-blue-100 dark:bg-blue-900/30" : "bg-green-100 dark:bg-green-900/30"}`}
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${item.type === "course" ? "bg-blue-100 dark:bg-blue-900/30" : "bg-green-100 dark:bg-green-900/30"}`}
                 >
                   {item.type === "course" ? (
                     <BookOpen className="h-5 w-5 text-blue-600 dark:text-blue-400" />
@@ -265,8 +265,8 @@ export default function DashboardPage() {
                     <Users className="h-5 w-5 text-green-600 dark:text-green-400" />
                   )}
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-foreground">
+                <div className="min-w-0 flex-1 text-right">
+                  <p className="break-words text-sm font-medium text-foreground">
                     {item.type === "course" ? `קורס חדש נוסף: ${item.name}` : `תלמיד חדש נרשם: ${item.name}`}
                   </p>
                   <p className="text-xs text-muted-foreground">{formatTimeAgo(item.createdAt)}</p>
@@ -274,7 +274,7 @@ export default function DashboardPage() {
               </div>
             ))
           ) : (
-            <p className="text-center text-muted-foreground py-4">אין פעילות אחרונה</p>
+            <p className="py-4 text-center text-muted-foreground">אין פעילות אחרונה</p>
           )}
         </div>
       </Card>
