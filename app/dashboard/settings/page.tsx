@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Building2, Save, Upload, X, Loader2, Hash, Settings2, FolderOpen, Plus, Pencil, Trash2, FileSpreadsheet } from "lucide-react"
+import { Building2, Save, Upload, X, Loader2, Hash, Settings2, FolderOpen, Plus, Pencil, Trash2, FileSpreadsheet, Banknote } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { useToast } from "@/hooks/use-toast"
 import { useLanguage } from "@/lib/i18n/context"
@@ -25,6 +25,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { ImportFromExcel } from "@/components/settings/import-from-excel"
+import { Checkbox } from "@/components/ui/checkbox"
 
 interface CenterSettings {
   id?: number
@@ -64,6 +65,22 @@ interface SiblingPackageRow {
   createdAt: string
 }
 
+interface TeacherTariffProfileRow {
+  id: string
+  name: string
+  description: string | null
+  pricingMethod: "standard" | "per_student_tier"
+  centerHourlyRate: number | null
+  travelRate: number | null
+  externalCourseRate: number | null
+  studentTierRates: { upToStudents: number; hourlyRate: number }[]
+  bonusEnabled: boolean
+  bonusMinStudents: number | null
+  bonusPerHour: number
+  isActive: boolean
+  createdAt: string
+}
+
 const fetcher = (url: string) =>
   fetch(url, { credentials: "include" }).then((res) => {
     if (!res.ok) throw new Error("Failed to load settings")
@@ -79,6 +96,10 @@ export default function SettingsPage() {
   )
   const { data: siblingPackages = [], mutate: mutateSiblingPackages } = useSWR<SiblingPackageRow[]>(
     "/api/sibling-discount-packages",
+    (url: string) => fetch(url, { credentials: "include" }).then((r) => (r.ok ? r.json() : []))
+  )
+  const { data: teacherTariffProfiles = [], mutate: mutateTeacherTariffProfiles } = useSWR<TeacherTariffProfileRow[]>(
+    "/api/teacher-tariff-profiles",
     (url: string) => fetch(url, { credentials: "include" }).then((r) => (r.ok ? r.json() : []))
   )
 
@@ -125,6 +146,36 @@ export default function SettingsPage() {
     isActive: true,
   })
   const [siblingSaving, setSiblingSaving] = useState(false)
+  const [tariffDialog, setTariffDialog] = useState<{
+    open: boolean
+    edit: TeacherTariffProfileRow | null
+    name: string
+    description: string
+    pricingMethod: "standard" | "per_student_tier"
+    centerHourlyRate: string
+    travelRate: string
+    externalCourseRate: string
+    tierRates: number[]
+    bonusEnabled: boolean
+    bonusMinStudents: string
+    bonusPerHour: string
+    isActive: boolean
+  }>({
+    open: false,
+    edit: null,
+    name: "",
+    description: "",
+    pricingMethod: "standard",
+    centerHourlyRate: "50",
+    travelRate: "0",
+    externalCourseRate: "80",
+    tierRates: Array.from({ length: 10 }, (_, i) => (i === 0 ? 32 : 0)),
+    bonusEnabled: false,
+    bonusMinStudents: "",
+    bonusPerHour: "",
+    isActive: true,
+  })
+  const [tariffSaving, setTariffSaving] = useState(false)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -342,6 +393,105 @@ export default function SettingsPage() {
     }
   }
 
+  const openAddTeacherTariff = () => {
+    setTariffDialog({
+      open: true,
+      edit: null,
+      name: "",
+      description: "",
+      pricingMethod: "standard",
+      centerHourlyRate: "50",
+      travelRate: "0",
+      externalCourseRate: "80",
+      tierRates: Array.from({ length: 10 }, (_, i) => (i === 0 ? 32 : 0)),
+      bonusEnabled: false,
+      bonusMinStudents: "",
+      bonusPerHour: "",
+      isActive: true,
+    })
+  }
+  const openEditTeacherTariff = (row: TeacherTariffProfileRow) => {
+    const tiers = Array.from({ length: 10 }, (_, i) => {
+      const r = (Array.isArray(row.studentTierRates) ? row.studentTierRates : []).find(
+        (x) => Number(x?.upToStudents) === i + 1,
+      )
+      return Number(r?.hourlyRate || 0)
+    })
+    setTariffDialog({
+      open: true,
+      edit: row,
+      name: row.name,
+      description: row.description || "",
+      pricingMethod: row.pricingMethod === "per_student_tier" ? "per_student_tier" : "standard",
+      centerHourlyRate: String(row.centerHourlyRate ?? ""),
+      travelRate: String(row.travelRate ?? ""),
+      externalCourseRate: String(row.externalCourseRate ?? ""),
+      tierRates: tiers,
+      bonusEnabled: row.bonusEnabled === true,
+      bonusMinStudents: row.bonusMinStudents != null ? String(row.bonusMinStudents) : "",
+      bonusPerHour: String(row.bonusPerHour ?? ""),
+      isActive: row.isActive !== false,
+    })
+  }
+  const saveTeacherTariffProfile = async () => {
+    if (!tariffDialog.name.trim()) {
+      toast({ title: "נא להזין שם פרופיל", variant: "destructive" })
+      return
+    }
+    setTariffSaving(true)
+    try {
+      const studentTierRates = tariffDialog.tierRates.map((hourlyRate, idx) => ({
+        upToStudents: idx + 1,
+        hourlyRate: Number(hourlyRate || 0),
+      }))
+      const payload = {
+        name: tariffDialog.name.trim(),
+        description: tariffDialog.description.trim(),
+        pricingMethod: tariffDialog.pricingMethod,
+        centerHourlyRate: tariffDialog.centerHourlyRate === "" ? null : Number(tariffDialog.centerHourlyRate),
+        travelRate: tariffDialog.travelRate === "" ? null : Number(tariffDialog.travelRate),
+        externalCourseRate: tariffDialog.externalCourseRate === "" ? null : Number(tariffDialog.externalCourseRate),
+        studentTierRates,
+        bonusEnabled: tariffDialog.bonusEnabled,
+        bonusMinStudents: tariffDialog.bonusEnabled && tariffDialog.bonusMinStudents !== "" ? Number(tariffDialog.bonusMinStudents) : null,
+        bonusPerHour: tariffDialog.bonusEnabled && tariffDialog.bonusPerHour !== "" ? Number(tariffDialog.bonusPerHour) : 0,
+        isActive: tariffDialog.isActive,
+      }
+      const url = tariffDialog.edit
+        ? `/api/teacher-tariff-profiles/${tariffDialog.edit.id}`
+        : "/api/teacher-tariff-profiles"
+      const method = tariffDialog.edit ? "PATCH" : "POST"
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || "שגיאה בשמירת פרופיל תעריף")
+      }
+      setTariffDialog((d) => ({ ...d, open: false }))
+      mutateTeacherTariffProfiles()
+      toast({ title: tariffDialog.edit ? "פרופיל עודכן" : "פרופיל נוסף" })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "שגיאה בשמירה"
+      toast({ title: msg, variant: "destructive" })
+    } finally {
+      setTariffSaving(false)
+    }
+  }
+  const deleteTeacherTariffProfile = async (id: string) => {
+    const res = await fetch(`/api/teacher-tariff-profiles/${id}`, { method: "DELETE", credentials: "include" })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      toast({ title: data.error || "שגיאה במחיקה", variant: "destructive" })
+      return
+    }
+    mutateTeacherTariffProfiles()
+    toast({ title: "הפרופיל נמחק" })
+  }
+
   const deleteSiblingPackage = async (id: string) => {
     const res = await fetch(`/api/sibling-discount-packages/${id}`, { method: "DELETE", credentials: "include" })
     if (!res.ok) {
@@ -381,7 +531,7 @@ export default function SettingsPage() {
       </div>
 
       <Tabs defaultValue="general" className="w-full" dir="rtl">
-        <TabsList className="w-full grid grid-cols-6 mb-6">
+        <TabsList className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-1 mb-6">
           <TabsTrigger value="general" className="flex flex-row-reverse items-center justify-center gap-2">
             <Building2 className="h-4 w-4" />
             <span>כללי</span>
@@ -397,6 +547,10 @@ export default function SettingsPage() {
           <TabsTrigger value="siblings" className="flex flex-row-reverse items-center justify-center gap-2">
             <Hash className="h-4 w-4" />
             <span>חבילות אחים</span>
+          </TabsTrigger>
+          <TabsTrigger value="teacher-tariffs" className="flex flex-row-reverse items-center justify-center gap-2">
+            <Banknote className="h-4 w-4" />
+            <span>תעריפי מורים</span>
           </TabsTrigger>
           <TabsTrigger value="import" className="flex flex-row-reverse items-center justify-center gap-2">
             <FileSpreadsheet className="h-4 w-4" />
@@ -566,6 +720,63 @@ export default function SettingsPage() {
                           <Pencil className="h-4 w-4" />
                         </Button>
                         <Button type="button" variant="outline" size="icon" onClick={() => deleteSiblingPackage(pkg.id)} title="מחק">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="teacher-tariffs">
+          <Card>
+            <CardHeader className="text-right">
+              <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
+                <Banknote className="h-5 w-5 text-primary" />
+                פרופילי תעריף למורים
+              </CardTitle>
+              <CardDescription className="text-right">
+                כאן מגדירים את מחירי השעה (רגיל / לפי מספר תלמידים / בונוס). בעריכת קורס תבחרו לאיזה מורה איזה פרופיל
+                חל — כל מורה בקורס יכולה לקבל פרופיל אחר. נדרשת הרשאת עריכת הגדרות לשינוי כאן; לשיוך בקורס נדרשת עריכת קורסים.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-row-reverse justify-end">
+                <Button type="button" onClick={openAddTeacherTariff} className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  הוסף פרופיל תעריף
+                </Button>
+              </div>
+              {teacherTariffProfiles.length === 0 ? (
+                <p className="text-muted-foreground text-right">לא הוגדרו פרופילים — הוסף פרופיל לפני שמירת קורס עם מורים.</p>
+              ) : (
+                <ul className="space-y-2 border rounded-lg p-2">
+                  {teacherTariffProfiles.map((row) => (
+                    <li
+                      key={row.id}
+                      className="flex flex-row-reverse items-center justify-between gap-2 rounded-md border bg-card px-3 py-2"
+                    >
+                      <div className="text-right">
+                        <div className="font-medium">{row.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {row.pricingMethod === "per_student_tier" ? "לפי תלמידים" : "רגיל (מרכז/חיצוני)"}
+                          {row.isActive ? " | פעיל" : " | לא פעיל"}
+                        </div>
+                      </div>
+                      <div className="flex gap-1">
+                        <Button type="button" variant="outline" size="icon" onClick={() => openEditTeacherTariff(row)} title="ערוך">
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() => deleteTeacherTariffProfile(row.id)}
+                          title="מחק"
+                        >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
@@ -907,6 +1118,150 @@ export default function SettingsPage() {
             <Button type="button" onClick={saveSiblingPackage} disabled={siblingSaving}>
               {siblingSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {siblingDialog.edit ? "עדכן" : "הוסף"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={tariffDialog.open} onOpenChange={(open) => setTariffDialog((d) => ({ ...d, open }))}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>{tariffDialog.edit ? "עריכת פרופיל תעריף" : "פרופיל תעריף חדש"}</DialogTitle>
+            <DialogDescription>הגדרות אלה חלות על כל המורים שישויכו לפרופיל זה מתוך קורס.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label>שם הפרופיל</Label>
+              <Input
+                value={tariffDialog.name}
+                onChange={(e) => setTariffDialog((d) => ({ ...d, name: e.target.value }))}
+                className="text-right"
+                dir="rtl"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>תיאור</Label>
+              <Input
+                value={tariffDialog.description}
+                onChange={(e) => setTariffDialog((d) => ({ ...d, description: e.target.value }))}
+                className="text-right"
+                dir="rtl"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>שיטת חישוב</Label>
+              <Select
+                value={tariffDialog.pricingMethod}
+                onValueChange={(v: "standard" | "per_student_tier") =>
+                  setTariffDialog((d) => ({ ...d, pricingMethod: v }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="standard">רגיל: מרכז / חיצוני / נסיעות</SelectItem>
+                  <SelectItem value="per_student_tier">לפי מספר תלמידים (במרכז)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {tariffDialog.pricingMethod === "standard" && (
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <div className="space-y-1">
+                  <Label>שעה במרכז (₪)</Label>
+                  <Input
+                    type="number"
+                    value={tariffDialog.centerHourlyRate}
+                    onChange={(e) => setTariffDialog((d) => ({ ...d, centerHourlyRate: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>נסיעות (₪)</Label>
+                  <Input
+                    type="number"
+                    value={tariffDialog.travelRate}
+                    onChange={(e) => setTariffDialog((d) => ({ ...d, travelRate: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>שעה חיצוני (₪)</Label>
+                  <Input
+                    type="number"
+                    value={tariffDialog.externalCourseRate}
+                    onChange={(e) => setTariffDialog((d) => ({ ...d, externalCourseRate: e.target.value }))}
+                  />
+                </div>
+              </div>
+            )}
+            {tariffDialog.pricingMethod === "per_student_tier" && (
+              <div className="space-y-2 rounded-md border p-2">
+                <Label>מחיר לשעה לפי כמות תלמידים (עד 10)</Label>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                  {tariffDialog.tierRates.map((rate, idx) => (
+                    <div key={idx} className="space-y-1">
+                      <Label className="text-xs">עד {idx + 1}</Label>
+                      <Input
+                        type="number"
+                        value={rate}
+                        onChange={(e) => {
+                          const next = [...tariffDialog.tierRates]
+                          next[idx] = Number(e.target.value || 0)
+                          setTariffDialog((d) => ({ ...d, tierRates: next }))
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="flex flex-row-reverse items-center gap-2">
+              <Checkbox
+                id="tariff-bonus"
+                checked={tariffDialog.bonusEnabled}
+                onCheckedChange={(c) => setTariffDialog((d) => ({ ...d, bonusEnabled: c === true }))}
+              />
+              <Label htmlFor="tariff-bonus" className="cursor-pointer">
+                בונוס לשעה מעל מספר תלמידים
+              </Label>
+            </div>
+            {tariffDialog.bonusEnabled && (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label>מינימום תלמידים</Label>
+                  <Input
+                    type="number"
+                    value={tariffDialog.bonusMinStudents}
+                    onChange={(e) => setTariffDialog((d) => ({ ...d, bonusMinStudents: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>בונוס לשעה (₪)</Label>
+                  <Input
+                    type="number"
+                    value={tariffDialog.bonusPerHour}
+                    onChange={(e) => setTariffDialog((d) => ({ ...d, bonusPerHour: e.target.value }))}
+                  />
+                </div>
+              </div>
+            )}
+            <div className="flex flex-row-reverse items-center gap-2">
+              <Checkbox
+                id="tariff-active"
+                checked={tariffDialog.isActive}
+                onCheckedChange={(c) => setTariffDialog((d) => ({ ...d, isActive: c === true }))}
+              />
+              <Label htmlFor="tariff-active" className="cursor-pointer">
+                פרופיל פעיל (מופיע בבחירה בקורס)
+              </Label>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setTariffDialog((d) => ({ ...d, open: false }))}>
+              ביטול
+            </Button>
+            <Button type="button" onClick={saveTeacherTariffProfile} disabled={tariffSaving}>
+              {tariffSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {tariffDialog.edit ? "עדכן" : "הוסף"}
             </Button>
           </DialogFooter>
         </DialogContent>

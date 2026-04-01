@@ -5,7 +5,8 @@ import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
 import { hasFullAccessRole, hasPermission } from "@/lib/permissions"
 import { ensureProfileImageColumns, resolveProfileImageWithFallback } from "@/lib/profile-image"
-import { ensureTeacherPricingColumns, normalizeStudentTierRates } from "@/lib/teacher-pricing"
+import { ensureTeacherPricingColumns } from "@/lib/teacher-pricing"
+import { ensureTeacherTariffTables, resolveHourlyRateForAttendance } from "@/lib/teacher-tariff-profiles"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -32,6 +33,7 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
   const db = tenant.db
   try {
     await ensureTeacherPricingColumns(db)
+    await ensureTeacherTariffTables(db)
     const result = await db`SELECT * FROM "Teacher" WHERE id = ${id}`
     if (result.length === 0) return Response.json({ error: "Teacher not found" }, { status: 404 })
     const row = result[0] as { userId?: string | null }
@@ -45,13 +47,24 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
       SELECT 
         c.id, c.name, c."daysOfWeek", c."startTime", c."endTime",
         c."startDate", c."endDate", c.price, c.status, c.location,
-        COALESCE(enrollment_stats."enrollmentCount", 0) as "enrollmentCount"
+        COALESCE(enrollment_stats."enrollmentCount", 0) as "enrollmentCount",
+        ctt."tariffProfileId" as "tariffProfileId",
+        p.name as "tariffProfileName",
+        p."pricingMethod" as "tp_pricingMethod",
+        p."centerHourlyRate" as "tp_centerHourlyRate",
+        p."externalCourseRate" as "tp_externalCourseRate",
+        p."studentTierRates" as "tp_studentTierRates",
+        p."bonusEnabled" as "tp_bonusEnabled",
+        p."bonusMinStudents" as "tp_bonusMinStudents",
+        p."bonusPerHour" as "tp_bonusPerHour"
       FROM "Course" c
       LEFT JOIN (
         SELECT "courseId", COUNT(*) as "enrollmentCount"
         FROM "Enrollment"
         GROUP BY "courseId"
       ) enrollment_stats ON c.id = enrollment_stats."courseId"
+      LEFT JOIN "CourseTeacherTariff" ctt ON ctt."courseId" = c.id AND ctt."teacherId" = ${teacherIdParam}
+      LEFT JOIN "TeacherTariffProfile" p ON p.id = ctt."tariffProfileId"
       WHERE c."teacherIds" IS NOT NULL
         AND jsonb_array_length(c."teacherIds") > 0
         AND EXISTS (
@@ -61,17 +74,54 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
       ORDER BY c.name
     `
 
+    const teacherRow = result[0] as Record<string, unknown>
     const teacher = {
       ...result[0],
-      teacherCourses: courses.map((c: any) => ({
-        course: {
-          id: c.id, name: c.name, daysOfWeek: c.daysOfWeek,
-          startTime: c.startTime, endTime: c.endTime,
-          startDate: c.startDate, endDate: c.endDate,
-          price: c.price, status: c.status, location: c.location,
-          enrollmentCount: c.enrollmentCount
+      teacherCourses: courses.map((c: any) => {
+        const profileRow =
+          c.tariffProfileId && c.tp_pricingMethod != null
+            ? ({
+                pricingMethod: c.tp_pricingMethod,
+                centerHourlyRate: c.tp_centerHourlyRate,
+                externalCourseRate: c.tp_externalCourseRate,
+                studentTierRates: c.tp_studentTierRates,
+                bonusEnabled: c.tp_bonusEnabled,
+                bonusMinStudents: c.tp_bonusMinStudents,
+                bonusPerHour: c.tp_bonusPerHour,
+              } as Record<string, unknown>)
+            : null
+        const enrollmentCount = Number(c.enrollmentCount || 0)
+        const effectiveHourlyRate = resolveHourlyRateForAttendance({
+          tariffProfileRow: profileRow,
+          teacherRow,
+          location: c.location != null ? String(c.location) : null,
+          enrollmentCount,
+        })
+        const baseCourse = {
+          id: c.id,
+          name: c.name,
+          daysOfWeek: c.daysOfWeek,
+          startTime: c.startTime,
+          endTime: c.endTime,
+          startDate: c.startDate,
+          endDate: c.endDate,
+          price: c.price,
+          status: c.status,
+          location: c.location,
+          enrollmentCount,
+          tariffProfileId: c.tariffProfileId ?? null,
+          tariffProfileName: c.tariffProfileName ?? null,
+          pricingMethod: profileRow
+            ? String(c.tp_pricingMethod) === "per_student_tier"
+              ? "per_student_tier"
+              : "standard"
+            : String(teacherRow.pricingMethod || "standard") === "per_student_tier"
+              ? "per_student_tier"
+              : "standard",
+          effectiveHourlyRate,
         }
-      }))
+        return { course: baseCourse }
+      }),
     }
     return Response.json(teacher)
   } catch (err) {
@@ -98,7 +148,6 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
 
   try {
     await ensureProfileImageColumns(db as unknown as (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown[]>)
-    await ensureTeacherPricingColumns(db)
     const name = String(body.name ?? "").trim()
     const email = body.email ? String(body.email).trim() : null
     const phone = body.phone ? String(body.phone).trim() : null
@@ -108,14 +157,6 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
     const specialty = body.specialization ? String(body.specialization).trim() : null
     const status = body.status ? String(body.status).trim() : null
     const bio = body.bio ? String(body.bio).trim() : null
-    const centerHourlyRate = body.centerHourlyRate ?? null
-    const travelRate = body.travelRate ?? null
-    const externalCourseRate = body.externalCourseRate ?? null
-    const pricingMethod = body.pricingMethod === "per_student_tier" ? "per_student_tier" : "standard"
-    const studentTierRates = normalizeStudentTierRates(body.studentTierRates)
-    const bonusEnabled = body.bonusEnabled === true
-    const bonusMinStudents = body.bonusMinStudents != null && body.bonusMinStudents !== "" ? Number(body.bonusMinStudents) : null
-    const bonusPerHour = body.bonusPerHour != null && body.bonusPerHour !== "" ? Number(body.bonusPerHour) : 0
     const profileImage = resolveProfileImageWithFallback(body.profileImage)
     const now = new Date().toISOString()
 
@@ -144,10 +185,6 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
         name = ${name}, email = ${email}, phone = ${phone},
         "idNumber" = ${idNumber}, "birthDate" = ${birthDate}, city = ${city},
         specialty = ${specialty}, status = ${status}, bio = ${bio},
-        "centerHourlyRate" = ${centerHourlyRate}, "travelRate" = ${travelRate},
-        "externalCourseRate" = ${externalCourseRate}, "pricingMethod" = ${pricingMethod},
-        "studentTierRates" = ${JSON.stringify(studentTierRates)}::jsonb,
-        "bonusEnabled" = ${bonusEnabled}, "bonusMinStudents" = ${bonusMinStudents}, "bonusPerHour" = ${bonusPerHour},
         "profileImage" = ${profileImage},
         "userId" = COALESCE(${userId}, "userId"),
         "updatedAt" = ${now}

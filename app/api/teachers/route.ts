@@ -3,7 +3,7 @@ import { requireFeatureFromRequest } from "@/lib/feature-gate"
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
 import { ensureProfileImageColumns, resolveProfileImageWithFallback } from "@/lib/profile-image"
-import { ensureTeacherPricingColumns, normalizeStudentTierRates, resolveTeacherHourlyRate } from "@/lib/teacher-pricing"
+import { ensureTeacherTariffTables, resolveHourlyRateForAttendance } from "@/lib/teacher-tariff-profiles"
 
 export const GET = withTenantAuth(async (req, session) => {
   const featureErr = await requireFeatureFromRequest(req, "teachers", session)
@@ -12,8 +12,8 @@ export const GET = withTenantAuth(async (req, session) => {
   if (tenantErr) return tenantErr
   const db = tenant.db
   try {
-    await ensureTeacherPricingColumns(db)
-    const [teachers, expenses, attendances, enrollments] = await Promise.all([
+    await ensureTeacherTariffTables(db)
+    const [teachers, expenses, attendances, enrollments, tariffLinks] = await Promise.all([
       db`SELECT * FROM "Teacher" ORDER BY "createdAt" DESC`,
       db`SELECT "teacherId", SUM(amount) as total_paid FROM "Expense" WHERE "teacherId" IS NOT NULL GROUP BY "teacherId"`,
       db`
@@ -23,6 +23,10 @@ export const GET = withTenantAuth(async (req, session) => {
         WHERE a."teacherId" IS NOT NULL
       `,
       db`SELECT "courseId", COUNT(*)::int as cnt FROM "Enrollment" GROUP BY "courseId"`,
+      db`
+        SELECT ctt."courseId", ctt."teacherId", ctt."tariffProfileId"
+        FROM "CourseTeacherTariff" ctt
+      `,
     ])
 
     const paidMap = new Map<string, number>()
@@ -31,6 +35,21 @@ export const GET = withTenantAuth(async (req, session) => {
     ;(enrollments as any[]).forEach((r) => enrollmentMap.set(String(r.courseId), Number(r.cnt || 0)))
     const teacherMap = new Map<string, any>()
     ;(teachers as any[]).forEach((t) => teacherMap.set(String(t.id), t))
+
+    const profileIds = [...new Set((tariffLinks as { tariffProfileId: string }[]).map((l) => String(l.tariffProfileId)))]
+    const profilesRows =
+      profileIds.length > 0
+        ? await db`
+            SELECT * FROM "TeacherTariffProfile" WHERE id = ANY(${profileIds}::text[])
+          `
+        : []
+    const profileById = new Map<string, Record<string, unknown>>()
+    ;(profilesRows as any[]).forEach((p) => profileById.set(String(p.id), p as Record<string, unknown>))
+    const courseTeacherTariffProfile = new Map<string, Record<string, unknown>>()
+    ;(tariffLinks as { courseId: string; teacherId: string; tariffProfileId: string }[]).forEach((l) => {
+      const pr = profileById.get(String(l.tariffProfileId))
+      if (pr) courseTeacherTariffProfile.set(`${String(l.courseId)}|${String(l.teacherId)}`, pr)
+    })
 
     const owedMap = new Map<string, number>()
     ;(attendances as any[]).forEach((a) => {
@@ -54,14 +73,11 @@ export const GET = withTenantAuth(async (req, session) => {
 
       const teacher = teacherMap.get(teacherId)
       if (!teacher) return
-      const rate = resolveTeacherHourlyRate({
-        pricingMethod: (teacher.pricingMethod as any) || "standard",
-        centerHourlyRate: Number(teacher.centerHourlyRate || 0),
-        externalCourseRate: Number(teacher.externalCourseRate || 0),
-        studentTierRates: normalizeStudentTierRates(teacher.studentTierRates),
-        bonusEnabled: teacher.bonusEnabled === true,
-        bonusMinStudents: teacher.bonusMinStudents != null ? Number(teacher.bonusMinStudents) : null,
-        bonusPerHour: teacher.bonusPerHour != null ? Number(teacher.bonusPerHour) : 0,
+      const cid = a.courseId ? String(a.courseId) : ""
+      const profileRow = cid ? courseTeacherTariffProfile.get(`${cid}|${teacherId}`) ?? null : null
+      const rate = resolveHourlyRateForAttendance({
+        tariffProfileRow: profileRow,
+        teacherRow: teacher as Record<string, unknown>,
         location: a.location ? String(a.location) : null,
         enrollmentCount: a.courseId ? enrollmentMap.get(String(a.courseId)) ?? 0 : 0,
       })
@@ -95,7 +111,6 @@ export const POST = withTenantAuth(async (req, session) => {
   try {
     const body = await req.json()
     await ensureProfileImageColumns(db as unknown as (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown[]>)
-    await ensureTeacherPricingColumns(db)
     const name = String(body.name ?? "").trim()
     const email = body.email ? String(body.email).trim() : null
     const phone = body.phone ? String(body.phone).trim() : null
@@ -105,14 +120,6 @@ export const POST = withTenantAuth(async (req, session) => {
     const specialty = body.specialization ? String(body.specialization).trim() : null
     const status = body.status ? String(body.status).trim() : "פעיל"
     const bio = body.bio ? String(body.bio).trim() : null
-    const centerHourlyRate = body.centerHourlyRate ?? null
-    const travelRate = body.travelRate ?? null
-    const externalCourseRate = body.externalCourseRate ?? null
-    const pricingMethod = body.pricingMethod === "per_student_tier" ? "per_student_tier" : "standard"
-    const studentTierRates = normalizeStudentTierRates(body.studentTierRates)
-    const bonusEnabled = body.bonusEnabled === true
-    const bonusMinStudents = body.bonusMinStudents != null && body.bonusMinStudents !== "" ? Number(body.bonusMinStudents) : null
-    const bonusPerHour = body.bonusPerHour != null && body.bonusPerHour !== "" ? Number(body.bonusPerHour) : 0
     const profileImage = resolveProfileImageWithFallback(body.profileImage)
 
     const createUserAccount = body.createUserAccount === true
@@ -147,11 +154,11 @@ export const POST = withTenantAuth(async (req, session) => {
     const result = await db`
       INSERT INTO "Teacher" (
         id, name, email, phone, "idNumber", "birthDate", city, specialty, status, bio,
-        "centerHourlyRate", "travelRate", "externalCourseRate", "pricingMethod", "studentTierRates", "bonusEnabled", "bonusMinStudents", "bonusPerHour", "profileImage", "userId", "createdAt", "updatedAt"
+        "profileImage", "userId", "createdAt", "updatedAt"
       )
       VALUES (
         ${teacherId}, ${name}, ${email}, ${phone}, ${idNumber}, ${birthDate}, ${city}, ${specialty}, ${status}, ${bio},
-        ${centerHourlyRate}, ${travelRate}, ${externalCourseRate}, ${pricingMethod}, ${JSON.stringify(studentTierRates)}::jsonb, ${bonusEnabled}, ${bonusMinStudents}, ${bonusPerHour}, ${profileImage}, ${userId}, ${now}, ${now}
+        ${profileImage}, ${userId}, ${now}, ${now}
       )
       RETURNING *
     `

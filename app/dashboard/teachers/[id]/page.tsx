@@ -14,7 +14,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { normalizeStudentTierRates, resolveTeacherHourlyRate } from "@/lib/teacher-pricing"
 
 type Teacher = {
   id: string
@@ -27,9 +26,6 @@ type Teacher = {
   specialty?: string | null
   status?: string | null
   bio?: string | null
-  centerHourlyRate?: number | null
-  travelRate?: number | null
-  externalCourseRate?: number | null
   pricingMethod?: "standard" | "per_student_tier" | null
   studentTierRates?: { upToStudents: number; hourlyRate: number }[] | null
   bonusEnabled?: boolean | null
@@ -51,6 +47,10 @@ type Teacher = {
       status?: string
       location?: string
       enrollmentCount?: number
+      tariffProfileId?: string | null
+      tariffProfileName?: string | null
+      pricingMethod?: string
+      effectiveHourlyRate?: number | null
     } 
   }[]
   payments?: {
@@ -70,6 +70,8 @@ type Teacher = {
     course?: { id: string; name: string } | null
   }[]
 }
+
+type TeacherCourseRow = NonNullable<Teacher["teacherCourses"]>[number]["course"]
 
 function fmtDate(d?: string) {
   if (!d) return "-"
@@ -126,7 +128,6 @@ export default function TeacherViewPage() {
   const [selectedAttendanceCourse, setSelectedAttendanceCourse] = useState<string>("all")
   const [payments, setPayments] = useState<any[]>([]) // Declare payments variable
   const [isTeacherUser, setIsTeacherUser] = useState(false)
-  const [enrollmentCountByCourse, setEnrollmentCountByCourse] = useState<Record<string, number>>({})
 
   // Redirect to new page if id is "create" or "new"
   useEffect(() => {
@@ -188,6 +189,10 @@ export default function TeacherViewPage() {
   const canTabCourses = isAdmin || selfProfileFallback || hasAnyPermission("myProfile.tab.courses", "teachers.tab.courses")
   const canTabPayments = isAdmin || selfProfileFallback || hasAnyPermission("myProfile.tab.payments", "teachers.tab.payments")
   const canTabAttendance = isAdmin || selfProfileFallback || hasAnyPermission("myProfile.tab.attendance", "teachers.tab.attendance")
+  const canSeeTeacherTariffUi =
+    isTeacherUser ||
+    isAdmin ||
+    hasPermission(userPerms, "teachers.financial")
 
   const israeliBanks = [
     "בנק לאומי",
@@ -205,7 +210,7 @@ export default function TeacherViewPage() {
   ]
 
   // Course dialog state
-  const [selectedCourse, setSelectedCourse] = useState(null)
+  const [selectedCourse, setSelectedCourse] = useState<TeacherCourseRow | null>(null)
   const [isCourseDialogOpen, setIsCourseDialogOpen] = useState(false)
 
   // Attendance dialog state
@@ -217,7 +222,7 @@ export default function TeacherViewPage() {
   const [attendanceNote, setAttendanceNote] = useState("")
   const [isAddingAttendance, setIsAddingAttendance] = useState(false) // Declare isAddingAttendance variable
 
-  const openCourseDialog = (course) => {
+  const openCourseDialog = (course: TeacherCourseRow) => {
     setSelectedCourse(course)
     setIsCourseDialogOpen(true)
   }
@@ -297,20 +302,6 @@ export default function TeacherViewPage() {
     }, 500)
   }, [id, loading, teacher])
 
-  useEffect(() => {
-    fetch("/api/enrollments", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : []))
-      .then((rows) => {
-        const map: Record<string, number> = {}
-        ;(Array.isArray(rows) ? rows : []).forEach((x: any) => {
-          const cid = String(x?.courseId || x?.courseIdRef || "")
-          if (!cid) return
-          map[cid] = (map[cid] || 0) + 1
-        })
-        setEnrollmentCountByCourse(map)
-      })
-      .catch(() => setEnrollmentCountByCourse({}))
-  }, [])
 
   // Teacher payments are expenses for the center (paying the teacher for their work)
   const handleAddPayment = async () => {
@@ -441,30 +432,23 @@ export default function TeacherViewPage() {
   
   // Calculate total owed to teacher based on hours worked - filtered by period
   const owedToTeacher = useMemo(() => {
-    const tiers = normalizeStudentTierRates(teacher?.studentTierRates || [])
-    
+    const courseMeta = new Map<string, { location?: string; enrollmentCount: number; effectiveRate: number }>()
+    courses.forEach((c: TeacherCourseRow) => {
+      const ec = Number(c.enrollmentCount || 0)
+      const rate = Number(c.effectiveHourlyRate ?? 0)
+      courseMeta.set(c.id, { location: c.location, enrollmentCount: ec, effectiveRate: rate })
+    })
     return filteredAttendanceForPayments.reduce((sum, a: any) => {
       const status = a.status?.toLowerCase()
       const isPresent = status === "נוכח" || status === "present"
       if (!isPresent) return sum
-      
       const hours = calcAttendanceHours(a)
-      
-      const rate = resolveTeacherHourlyRate({
-        pricingMethod: (teacher?.pricingMethod as any) || "standard",
-        centerHourlyRate: teacher?.centerHourlyRate || 0,
-        externalCourseRate: teacher?.externalCourseRate || 0,
-        studentTierRates: tiers,
-        bonusEnabled: teacher?.bonusEnabled === true,
-        bonusMinStudents: teacher?.bonusMinStudents ?? null,
-        bonusPerHour: teacher?.bonusPerHour ?? 0,
-        location: a.courseLocation || null,
-        enrollmentCount: a.courseId ? enrollmentCountByCourse[String(a.courseId)] ?? 0 : 0,
-      })
-      
-      return sum + (hours * rate)
+      const cid = a.courseId ? String(a.courseId) : ""
+      const meta = cid ? courseMeta.get(cid) : undefined
+      const rate = meta?.effectiveRate ?? 0
+      return sum + hours * rate
     }, 0)
-  }, [filteredAttendanceForPayments, teacher, enrollmentCountByCourse])
+  }, [filteredAttendanceForPayments, courses])
   
   // Pending/debt = total owed minus manual expense payments only.
   const pendingSum = useMemo(() => {
@@ -617,7 +601,7 @@ export default function TeacherViewPage() {
               </div>
               <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800">
                 <div className="text-xs text-muted-foreground mb-1">תאריך לידה</div>
-                <div className="font-semibold text-sm">{fmtDate(teacher.birthDate)}</div>
+                <div className="font-semibold text-sm">{fmtDate(teacher.birthDate ?? undefined)}</div>
               </div>
               <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800">
                 <div className="text-xs text-muted-foreground mb-1">עיר</div>
@@ -644,23 +628,14 @@ export default function TeacherViewPage() {
               </div>
             )}
 
-            <div className="p-3 rounded-lg bg-green-50/50 dark:bg-green-950/20 border border-green-100 dark:border-green-900">
-              <div className="text-xs text-green-600 dark:text-green-400 mb-2">תעריפים</div>
-              <div className="grid gap-3 md:grid-cols-3">
-                <div>
-                  <div className="text-xs text-muted-foreground">מחיר שעה במרכז</div>
-                  <div className="font-semibold text-green-700 dark:text-green-400">{teacher.centerHourlyRate ?? 0} ₪</div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">נסיעות</div>
-                  <div className="font-semibold text-green-700 dark:text-green-400">{teacher.travelRate ?? 0} ₪</div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">מחיר שעה בקורס חיצוני</div>
-                  <div className="font-semibold text-green-700 dark:text-green-400">{teacher.externalCourseRate ?? 0} ₪</div>
-                </div>
+            {canSeeTeacherTariffUi ? (
+              <div className="p-3 rounded-lg bg-green-50/50 dark:bg-green-950/20 border border-green-100 dark:border-green-900">
+                <div className="text-xs text-green-600 dark:text-green-400 mb-1">תעריפי שכר</div>
+                <p className="text-sm text-muted-foreground">
+                  התעריף לכל קורס מוגדר ב&quot;הגדרות המרכז&quot; (פרופיל תעריף) ונבחר בעריכת הקורס לכל מורה בנפרד. הפרטים מופיעים בטאב &quot;קורסים&quot;.
+                </p>
               </div>
-            </div>
+            ) : null}
           </TabsContent>
           )}
 
@@ -680,6 +655,13 @@ export default function TeacherViewPage() {
                       <th className="text-right p-3 font-medium">ימים</th>
                       <th className="text-right p-3 font-medium">שעות</th>
                       <th className="text-right p-3 font-medium">תלמידים</th>
+                      {canSeeTeacherTariffUi && (
+                        <>
+                          <th className="text-right p-3 font-medium">פרופיל תעריף</th>
+                          <th className="text-right p-3 font-medium">שיטה</th>
+                          <th className="text-right p-3 font-medium">שעה משוערת (₪)</th>
+                        </>
+                      )}
                       <th className="text-right p-3 font-medium">ת. התחלה</th>
                     </tr>
                   </thead>
@@ -698,6 +680,17 @@ export default function TeacherViewPage() {
                             {c.enrollmentCount || 0}
                           </span>
                         </td>
+                        {canSeeTeacherTariffUi && (
+                          <>
+                            <td className="p-3 text-muted-foreground">{c.tariffProfileName || "—"}</td>
+                            <td className="p-3 text-muted-foreground">
+                              {c.pricingMethod === "per_student_tier" ? "לפי תלמידים" : "רגיל (מרכז/חיצוני)"}
+                            </td>
+                            <td className="p-3 font-medium text-green-700 dark:text-green-400">
+                              {c.effectiveHourlyRate != null ? Number(c.effectiveHourlyRate).toFixed(2) : "—"}
+                            </td>
+                          </>
+                        )}
                         <td className="p-3 text-muted-foreground">{fmtDate(c.startDate)}</td>
                       </tr>
                     ))}

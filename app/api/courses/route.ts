@@ -6,6 +6,7 @@ import { hasPermission, sessionRolesGrantFullAccess } from "@/lib/permissions"
 import { parseCourseDateForDb, parseCourseTimeForDb, courseTimeToDisplayValue } from "@/lib/course-db-fields"
 import { getCourseRegistrationVisibilityMap, setCourseRegistrationVisibility } from "@/lib/course-registration-visibility"
 import { ensureSiblingDiscountTables } from "@/lib/sibling-discount"
+import { syncCourseTeacherTariffs } from "@/lib/teacher-tariff-profiles"
 
 export const GET = withTenantAuth(async (req, session) => {
   const featureErr = await requireFeatureFromRequest(req, "courses", session)
@@ -123,6 +124,23 @@ export const POST = withTenantAuth(async (req, session) => {
     const schoolId = body.schoolId ? String(body.schoolId).trim() : null
     const gafanProgramId = body.gafanProgramId ? String(body.gafanProgramId).trim() : null
     const siblingDiscountPackageId = body.siblingDiscountPackageId ? String(body.siblingDiscountPackageId).trim() : null
+    const rawTariffPost = body.teacherTariffByTeacherId
+    const tariffMapPost =
+      rawTariffPost && typeof rawTariffPost === "object" && !Array.isArray(rawTariffPost)
+        ? (Object.fromEntries(
+            Object.entries(rawTariffPost as Record<string, unknown>).map(([k, v]) => [k, v != null ? String(v) : ""]),
+          ) as Record<string, string>)
+        : undefined
+    if (tariffMapPost && teacherIds.length > 0) {
+      for (const tid of teacherIds) {
+        if (!String(tariffMapPost[tid] || "").trim()) {
+          return Response.json(
+            { error: "יש לבחור פרופיל תעריף לכל מורה משויך לקורס", code: "teacherTariff.missingProfile" },
+            { status: 400 },
+          )
+        }
+      }
+    }
     // Force TEXT type (OID 25) so postgres.js skips its timestamp serializer
     const startTimeVal = startTime !== null ? db.typed(startTime, 25) : null
     const endTimeVal   = endTime   !== null ? db.typed(endTime,   25) : null
@@ -149,6 +167,15 @@ export const POST = withTenantAuth(async (req, session) => {
       id,
       body.showRegistrationLink === true
     )
+
+    const sync = await syncCourseTeacherTariffs(db, id, teacherIds, tariffMapPost)
+    if (!sync.ok) {
+      return Response.json(
+        { error: "יש לבחור פרופיל תעריף לכל מורה משויך לקורס", code: sync.error },
+        { status: 400 },
+      )
+    }
+
     return Response.json(result[0], { status: 201 })
   } catch (err: any) {
     console.error("POST /api/courses error:", err)

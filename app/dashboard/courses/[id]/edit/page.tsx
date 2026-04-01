@@ -42,6 +42,13 @@ interface SiblingPackage {
   isActive: boolean
 }
 
+interface TariffProfile {
+  id: string
+  name: string
+  pricingMethod?: string
+  isActive?: boolean
+}
+
 const DAYS_OF_WEEK = [
   { value: "sunday", label: "ראשון" },
   { value: "monday", label: "שני" },
@@ -128,6 +135,8 @@ export default function EditCoursePage() {
   const [gafanPrograms, setGafanPrograms] = useState<GafanProgram[]>([])
   const [siblingPackages, setSiblingPackages] = useState<SiblingPackage[]>([])
   const [courseCategories, setCourseCategories] = useState<{ id: string; name: string }[]>([])
+  const [tariffProfiles, setTariffProfiles] = useState<TariffProfile[]>([])
+  const [teacherTariffByTeacherId, setTeacherTariffByTeacherId] = useState<Record<string, string>>({})
 
   const [formData, setFormData] = useState({
     name: "",
@@ -181,10 +190,17 @@ export default function EditCoursePage() {
       fetch("/api/schools", { credentials: "include" }).then(res => res.json()),
       fetch("/api/gafan", { credentials: "include" }).then(res => res.json()),
       fetch("/api/course-categories", { credentials: "include" }).then(res => res.json()),
-      fetch("/api/sibling-discount-packages", { credentials: "include" }).then(res => res.json())
+      fetch("/api/sibling-discount-packages", { credentials: "include" }).then(res => res.json()),
+      fetch("/api/teacher-tariff-profiles", { credentials: "include" }).then((res) => (res.ok ? res.json() : [])),
     ])
-      .then(([course, teacherList, schoolList, gafanList, categoryList, siblingPackageList]) => {
+      .then(([course, teacherList, schoolList, gafanList, categoryList, siblingPackageList, tariffList]) => {
         if (course && !course.error) {
+          const tmap = course.teacherTariffByTeacherId
+          if (tmap && typeof tmap === "object" && !Array.isArray(tmap)) {
+            setTeacherTariffByTeacherId(
+              Object.fromEntries(Object.entries(tmap).map(([k, v]) => [k, v != null ? String(v) : ""])),
+            )
+          }
           setFormData({
             name: course.name || "",
             description: course.description || "",
@@ -221,6 +237,7 @@ export default function EditCoursePage() {
         if (Array.isArray(gafanList)) setGafanPrograms(gafanList)
         if (Array.isArray(categoryList)) setCourseCategories(categoryList)
         if (Array.isArray(siblingPackageList)) setSiblingPackages(siblingPackageList.filter((p: any) => p?.isActive !== false))
+        if (Array.isArray(tariffList)) setTariffProfiles(tariffList)
         setLoading(false)
       })
       .catch(err => {
@@ -229,6 +246,22 @@ export default function EditCoursePage() {
         setLoading(false)
       })
   }, [id])
+
+  useEffect(() => {
+    if (loading || tariffProfiles.length === 0) return
+    setTeacherTariffByTeacherId((prev) => {
+      const def = tariffProfiles.find((p) => p.isActive !== false)?.id || tariffProfiles[0]?.id || ""
+      let changed = false
+      const next = { ...prev }
+      formData.teacherIds.forEach((tid) => {
+        if (!String(next[tid] || "").trim()) {
+          next[tid] = def
+          changed = true
+        }
+      })
+      return changed ? next : prev
+    })
+  }, [loading, tariffProfiles, formData.teacherIds])
 
   function toggleDay(day: string) {
     setFormData(prev => ({
@@ -240,12 +273,22 @@ export default function EditCoursePage() {
   }
 
   function toggleTeacher(teacherId: string) {
-    setFormData(prev => ({
-      ...prev,
-      teacherIds: prev.teacherIds.includes(teacherId)
-        ? prev.teacherIds.filter(tid => tid !== teacherId)
-        : [...prev.teacherIds, teacherId]
-    }))
+    setFormData((prev) => {
+      const adding = !prev.teacherIds.includes(teacherId)
+      const nextIds = adding
+        ? [...prev.teacherIds, teacherId]
+        : prev.teacherIds.filter((tid) => tid !== teacherId)
+      setTeacherTariffByTeacherId((tm) => {
+        if (adding) {
+          const def =
+            tariffProfiles.find((p) => p.isActive !== false)?.id || tariffProfiles[0]?.id || ""
+          return { ...tm, [teacherId]: tm[teacherId] || def }
+        }
+        const { [teacherId]: _, ...rest } = tm
+        return rest
+      })
+      return { ...prev, teacherIds: nextIds }
+    })
   }
 
   async function save() {
@@ -253,6 +296,19 @@ export default function EditCoursePage() {
       setErr(l("שם הקורס הוא שדה חובה", "Course name is required", "اسم الدورة مطلوب"))
       return
     }
+    if (formData.teacherIds.length > 0) {
+      if (tariffProfiles.length === 0) {
+        setErr("יש להגדיר פרופיל תעריף מורה בהגדרות המרכז (תעריפי מורים) לפני שמירת קורס עם מורים")
+        return
+      }
+      for (const tid of formData.teacherIds) {
+        if (!String(teacherTariffByTeacherId[tid] || "").trim()) {
+          setErr("יש לבחור פרופיל תעריף לכל מורה משויך לקורס")
+          return
+        }
+      }
+    }
+
     if (needsSessionCount) {
       if (!formData.startDate || !formData.endDate) {
         setErr("לתמחור לפי מפגש/שעה יש למלא תאריך התחלה ותאריך סיום")
@@ -281,6 +337,7 @@ export default function EditCoursePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
+          teacherTariffByTeacherId,
           courseType:
             formData.courseType === "gafan"
               ? "gafan"
@@ -660,6 +717,46 @@ export default function EditCoursePage() {
               <p className="text-muted-foreground col-span-full text-center py-4">{l("לא נמצאו מורים במערכת", "No teachers found", "لم يتم العثور على معلمين")}</p>
             )}
           </div>
+          {formData.teacherIds.length > 0 && (
+            <div className="mt-4 space-y-3 border-t pt-4">
+              <Label className="text-right block text-sm font-medium">
+                פרופיל תעריף לפי מורה (מוגדר בהגדרות המרכז)
+              </Label>
+              <p className="text-xs text-muted-foreground text-right">
+                לכל מורה בקורס נבחרת שיטת חישוב נפרדת. אם יש יותר ממורה — לכל אחד פרופיל משלו.
+              </p>
+              <div className="space-y-2">
+                {formData.teacherIds.map((tid) => {
+                  const tname = teachers.find((x) => x.id === tid)?.name || tid
+                  return (
+                    <div key={tid} className="flex flex-col gap-1 rounded-md border bg-white p-3 md:flex-row md:items-center md:justify-between">
+                      <span className="text-sm font-medium">{tname}</span>
+                      <Select
+                        value={teacherTariffByTeacherId[tid] || ""}
+                        onValueChange={(v) =>
+                          setTeacherTariffByTeacherId((prev) => ({ ...prev, [tid]: v }))
+                        }
+                      >
+                        <SelectTrigger className="md:w-72">
+                          <SelectValue placeholder="בחר פרופיל" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {tariffProfiles
+                            .filter((p) => p.isActive !== false)
+                            .map((p) => (
+                              <SelectItem key={p.id} value={p.id}>
+                                {p.name}
+                                {p.pricingMethod === "per_student_tier" ? " (לפי תלמידים)" : " (רגיל)"}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

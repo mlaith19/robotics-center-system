@@ -9,10 +9,9 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { CityCombobox } from "@/components/ui/combobox-city"
-import { ArrowRight, User, Mail, Phone, GraduationCap, FileText, Banknote, Calendar, Award as IdCard, MapPin, KeyRound, X } from "lucide-react"
+import { ArrowRight, User, Mail, Phone, GraduationCap, FileText, Calendar, Award as IdCard, MapPin, KeyRound, X } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { fileToProfileImageDataUrl } from "@/lib/profile-image-client"
-import { normalizeStudentTierRates } from "@/lib/teacher-pricing"
 
 export default function NewTeacherPage() {
   const router = useRouter()
@@ -30,14 +29,6 @@ export default function NewTeacherPage() {
     specialization: "",
     status: "פעיל",
     bio: "",
-    centerHourlyRate: 50,
-    travelRate: 30,
-    externalCourseRate: 80,
-    pricingMethod: "standard" as "standard" | "per_student_tier",
-    tierRates: Array.from({ length: 10 }, (_, i) => (i === 0 ? 32 : 0)),
-    bonusEnabled: false,
-    bonusMinStudents: 0,
-    bonusPerHour: 0,
     profileImage: "",
   })
 
@@ -74,16 +65,6 @@ export default function NewTeacherPage() {
           specialization: newTeacher.specialization.trim() || null,
           status: newTeacher.status || null,
           bio: newTeacher.bio.trim() || null,
-          centerHourlyRate: newTeacher.centerHourlyRate || null,
-          travelRate: newTeacher.travelRate || null,
-          externalCourseRate: newTeacher.externalCourseRate || null,
-          pricingMethod: newTeacher.pricingMethod,
-          studentTierRates: normalizeStudentTierRates(
-            newTeacher.tierRates.map((hourlyRate, idx) => ({ upToStudents: idx + 1, hourlyRate }))
-          ),
-          bonusEnabled: newTeacher.bonusEnabled,
-          bonusMinStudents: newTeacher.bonusEnabled ? Number(newTeacher.bonusMinStudents || 0) : null,
-          bonusPerHour: newTeacher.bonusEnabled ? Number(newTeacher.bonusPerHour || 0) : 0,
           profileImage: newTeacher.profileImage.trim() || null,
           // User account data
           createUserAccount,
@@ -374,118 +355,6 @@ export default function NewTeacherPage() {
                     dir="ltr"
                   />
                 </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Rates (UI only for now) */}
-        <Card className="border-orange-200 bg-orange-50/50">
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-orange-100 rounded-lg">
-                <Banknote className="h-5 w-5 text-orange-600" />
-              </div>
-              <div>
-                <CardTitle>תעריפים</CardTitle>
-                <CardDescription>הגדרת מחירי השעה למורה</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-2">
-              <Label htmlFor="centerHourlyRate">מחיר שעה במרכז (₪)</Label>
-              <Input
-                id="centerHourlyRate"
-                type="number"
-                value={newTeacher.centerHourlyRate}
-                onChange={(e) => setNewTeacher({ ...newTeacher, centerHourlyRate: Number(e.target.value) })}
-                placeholder="50"
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="travelRate">נסיעות (₪)</Label>
-              <Input
-                id="travelRate"
-                type="number"
-                value={newTeacher.travelRate}
-                onChange={(e) => setNewTeacher({ ...newTeacher, travelRate: Number(e.target.value) })}
-                placeholder="30"
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="externalCourseRate">מחיר שעה בקורס חיצוני (₪)</Label>
-              <Input
-                id="externalCourseRate"
-                type="number"
-                value={newTeacher.externalCourseRate}
-                onChange={(e) => setNewTeacher({ ...newTeacher, externalCourseRate: Number(e.target.value) })}
-                placeholder="80"
-              />
-            </div>
-            <div className="grid gap-2 border-t pt-4">
-              <Label>שיטת חישוב שכר מורה</Label>
-              <Select
-                value={newTeacher.pricingMethod}
-                onValueChange={(v: "standard" | "per_student_tier") => setNewTeacher({ ...newTeacher, pricingMethod: v })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="standard">שיטה רגילה: מרכז / חיצוני / נסיעות</SelectItem>
-                  <SelectItem value="per_student_tier">שיטה לפי כמות תלמידים (במרכז)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {newTeacher.pricingMethod === "per_student_tier" && (
-              <div className="space-y-3 rounded-md border p-3">
-                <Label>מחיר לשעה לפי כמות תלמידים (עד 10)</Label>
-                <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
-                  {newTeacher.tierRates.map((rate, idx) => (
-                    <div key={idx} className="space-y-1">
-                      <Label className="text-xs">עד תלמיד {idx + 1}</Label>
-                      <Input
-                        type="number"
-                        value={rate}
-                        onChange={(e) => {
-                          const next = [...newTeacher.tierRates]
-                          next[idx] = Number(e.target.value || 0)
-                          setNewTeacher({ ...newTeacher, tierRates: next })
-                        }}
-                      />
-                    </div>
-                  ))}
-                </div>
-                <label className="flex items-center gap-2 text-sm">
-                  <Checkbox
-                    checked={newTeacher.bonusEnabled}
-                    onCheckedChange={(checked) => setNewTeacher({ ...newTeacher, bonusEnabled: checked === true })}
-                  />
-                  הפעל בונוס לשעה מעל סף תלמידים
-                </label>
-                {newTeacher.bonusEnabled && (
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <Label>מינימום תלמידים לבונוס</Label>
-                      <Input
-                        type="number"
-                        value={newTeacher.bonusMinStudents}
-                        onChange={(e) => setNewTeacher({ ...newTeacher, bonusMinStudents: Number(e.target.value || 0) })}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>בונוס לשעה (₪)</Label>
-                      <Input
-                        type="number"
-                        value={newTeacher.bonusPerHour}
-                        onChange={(e) => setNewTeacher({ ...newTeacher, bonusPerHour: Number(e.target.value || 0) })}
-                      />
-                    </div>
-                  </div>
-                )}
               </div>
             )}
           </CardContent>

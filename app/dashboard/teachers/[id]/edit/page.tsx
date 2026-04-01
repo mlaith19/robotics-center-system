@@ -10,10 +10,9 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { CityCombobox } from "@/components/ui/combobox-city"
-import { ArrowRight, User, Mail, Phone, GraduationCap, FileText, Banknote, Calendar, Award as IdCard, MapPin, Save, Loader2, KeyRound, X } from "lucide-react"
+import { ArrowRight, User, Mail, Phone, GraduationCap, FileText, Calendar, Award as IdCard, MapPin, Save, Loader2, KeyRound, X } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { fileToProfileImageDataUrl } from "@/lib/profile-image-client"
-import { normalizeStudentTierRates } from "@/lib/teacher-pricing"
 
 type Teacher = {
   id: string
@@ -26,14 +25,6 @@ type Teacher = {
   specialization?: string | null
   status?: string | null
   bio?: string | null
-  centerHourlyRate?: number | null
-  travelRate?: number | null
-  externalCourseRate?: number | null
-  pricingMethod?: "standard" | "per_student_tier" | null
-  studentTierRates?: { upToStudents: number; hourlyRate: number }[] | null
-  bonusEnabled?: boolean | null
-  bonusMinStudents?: number | null
-  bonusPerHour?: number | null
   profileImage?: string | null
   userId?: string | null
 }
@@ -63,14 +54,6 @@ export default function EditTeacherPage() {
     specialization: "",
     status: "פעיל",
     bio: "",
-    centerHourlyRate: 0,
-    travelRate: 0,
-    externalCourseRate: 0,
-    pricingMethod: "standard" as "standard" | "per_student_tier",
-    tierRates: Array.from({ length: 10 }, () => 0),
-    bonusEnabled: false,
-    bonusMinStudents: 0,
-    bonusPerHour: 0,
     profileImage: "",
   })
 
@@ -100,17 +83,6 @@ export default function EditTeacherPage() {
             specialization: (t as any).specialty ?? "",
             status: t.status ?? "פעיל",
             bio: t.bio ?? "",
-            centerHourlyRate: t.centerHourlyRate ?? 0,
-            travelRate: t.travelRate ?? 0,
-            externalCourseRate: t.externalCourseRate ?? 0,
-            pricingMethod: t.pricingMethod === "per_student_tier" ? "per_student_tier" : "standard",
-            tierRates: Array.from({ length: 10 }, (_, i) => {
-              const row = (Array.isArray(t.studentTierRates) ? t.studentTierRates : []).find((x: any) => Number(x?.upToStudents) === i + 1)
-              return Number(row?.hourlyRate || 0)
-            }),
-            bonusEnabled: t.bonusEnabled === true,
-            bonusMinStudents: Number(t.bonusMinStudents || 0),
-            bonusPerHour: Number(t.bonusPerHour || 0),
             profileImage: t.profileImage ?? "",
           })
           // Check if teacher has user account
@@ -157,16 +129,6 @@ export default function EditTeacherPage() {
           specialization: form.specialization.trim() || null,
           status: form.status || null,
           bio: form.bio.trim() || null,
-          centerHourlyRate: form.centerHourlyRate || null,
-          travelRate: form.travelRate || null,
-          externalCourseRate: form.externalCourseRate || null,
-          pricingMethod: form.pricingMethod,
-          studentTierRates: normalizeStudentTierRates(
-            form.tierRates.map((hourlyRate, idx) => ({ upToStudents: idx + 1, hourlyRate }))
-          ),
-          bonusEnabled: form.bonusEnabled,
-          bonusMinStudents: form.bonusEnabled ? Number(form.bonusMinStudents || 0) : null,
-          bonusPerHour: form.bonusEnabled ? Number(form.bonusPerHour || 0) : 0,
           profileImage: form.profileImage.trim() || null,
           // User account data
           createUserAccount: createUserAccount && !hasUserAccount,
@@ -474,118 +436,6 @@ export default function EditTeacherPage() {
                 placeholder="050-1234567"
               />
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Rates */}
-        <Card className="border-orange-200 bg-orange-50/50">
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-orange-100 rounded-lg">
-                <Banknote className="h-5 w-5 text-orange-600" />
-              </div>
-              <div>
-                <CardTitle>תעריפים</CardTitle>
-                <CardDescription>הגדרת מחירי השעה למורה</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-2">
-              <Label htmlFor="centerHourlyRate">מחיר שעה במרכז (₪)</Label>
-              <Input
-                id="centerHourlyRate"
-                type="number"
-                value={form.centerHourlyRate}
-                onChange={(e) => setForm({ ...form, centerHourlyRate: Number(e.target.value) })}
-                placeholder="50"
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="travelRate">נסיעות (₪)</Label>
-              <Input
-                id="travelRate"
-                type="number"
-                value={form.travelRate}
-                onChange={(e) => setForm({ ...form, travelRate: Number(e.target.value) })}
-                placeholder="30"
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="externalCourseRate">מחיר שעה בקורס חיצוני (₪)</Label>
-              <Input
-                id="externalCourseRate"
-                type="number"
-                value={form.externalCourseRate}
-                onChange={(e) => setForm({ ...form, externalCourseRate: Number(e.target.value) })}
-                placeholder="80"
-              />
-            </div>
-            <div className="grid gap-2 border-t pt-4">
-              <Label>שיטת חישוב שכר מורה</Label>
-              <Select
-                value={form.pricingMethod}
-                onValueChange={(v: "standard" | "per_student_tier") => setForm({ ...form, pricingMethod: v })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="standard">שיטה רגילה: מרכז / חיצוני / נסיעות</SelectItem>
-                  <SelectItem value="per_student_tier">שיטה לפי כמות תלמידים (במרכז)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {form.pricingMethod === "per_student_tier" && (
-              <div className="space-y-3 rounded-md border p-3">
-                <Label>מחיר לשעה לפי כמות תלמידים (עד 10)</Label>
-                <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
-                  {form.tierRates.map((rate, idx) => (
-                    <div key={idx} className="space-y-1">
-                      <Label className="text-xs">עד תלמיד {idx + 1}</Label>
-                      <Input
-                        type="number"
-                        value={rate}
-                        onChange={(e) => {
-                          const next = [...form.tierRates]
-                          next[idx] = Number(e.target.value || 0)
-                          setForm({ ...form, tierRates: next })
-                        }}
-                      />
-                    </div>
-                  ))}
-                </div>
-                <label className="flex items-center gap-2 text-sm">
-                  <Checkbox
-                    checked={form.bonusEnabled}
-                    onCheckedChange={(checked) => setForm({ ...form, bonusEnabled: checked === true })}
-                  />
-                  הפעל בונוס לשעה מעל סף תלמידים
-                </label>
-                {form.bonusEnabled && (
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <Label>מינימום תלמידים לבונוס</Label>
-                      <Input
-                        type="number"
-                        value={form.bonusMinStudents}
-                        onChange={(e) => setForm({ ...form, bonusMinStudents: Number(e.target.value || 0) })}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>בונוס לשעה (₪)</Label>
-                      <Input
-                        type="number"
-                        value={form.bonusPerHour}
-                        onChange={(e) => setForm({ ...form, bonusPerHour: Number(e.target.value || 0) })}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
           </CardContent>
         </Card>
 

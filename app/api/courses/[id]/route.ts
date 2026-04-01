@@ -5,6 +5,7 @@ import { runAutoCompleteExpiredCourses } from "@/lib/course-status"
 import { parseCourseDateForDb, parseCourseTimeForDb, courseTimeToDisplayValue } from "@/lib/course-db-fields"
 import { getCourseRegistrationVisibilityMap, setCourseRegistrationVisibility } from "@/lib/course-registration-visibility"
 import { ensureSiblingDiscountTables } from "@/lib/sibling-discount"
+import { ensureTeacherTariffTables, loadCourseTeacherTariffMap, syncCourseTeacherTariffs } from "@/lib/teacher-tariff-profiles"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -38,11 +39,13 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
       db as unknown as (strings: TemplateStringsArray, ...values: unknown[]) => Promise<any[]>,
       [String(id)]
     )
+    const teacherTariffByTeacherId = await loadCourseTeacherTariffMap(db, String(id))
     return Response.json({
       ...row,
       startTime: courseTimeToDisplayValue(row.startTime as string | null | undefined),
       endTime: courseTimeToDisplayValue(row.endTime as string | null | undefined),
       showRegistrationLink: visibilityMap.get(String(id)) === true,
+      teacherTariffByTeacherId,
     })
   } catch (err) {
     console.error("GET /api/courses/[id] error:", err)
@@ -63,6 +66,24 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
 
   try {
     await ensureSiblingDiscountTables(db)
+    const teacherIdsPre = Array.isArray(body.teacherIds) ? body.teacherIds.map((x: unknown) => String(x)) : []
+    const rawTariffPre = body.teacherTariffByTeacherId
+    const tariffMapPre =
+      rawTariffPre && typeof rawTariffPre === "object" && !Array.isArray(rawTariffPre)
+        ? (Object.fromEntries(
+            Object.entries(rawTariffPre as Record<string, unknown>).map(([k, v]) => [k, v != null ? String(v) : ""]),
+          ) as Record<string, string>)
+        : undefined
+    if (tariffMapPre && teacherIdsPre.length > 0) {
+      for (const tid of teacherIdsPre) {
+        if (!String(tariffMapPre[tid] || "").trim()) {
+          return Response.json(
+            { error: "יש לבחור פרופיל תעריף (מהגדרות המרכז) לכל מורה משויך לקורס", code: "teacherTariff.missingProfile" },
+            { status: 400 },
+          )
+        }
+      }
+    }
     const now = new Date().toISOString()
     const startDate = parseCourseDateForDb(body.startDate)
     const endDate = parseCourseDateForDb(body.endDate)
@@ -104,6 +125,15 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
       body.showRegistrationLink === true
     )
     if (result.length === 0) return Response.json({ error: "Course not found" }, { status: 404 })
+
+    const sync = await syncCourseTeacherTariffs(db, String(id), teacherIdsPre, tariffMapPre)
+    if (!sync.ok) {
+      return Response.json(
+        { error: "יש לבחור פרופיל תעריף (מהגדרות המרכז) לכל מורה משויך לקורס", code: sync.error },
+        { status: 400 },
+      )
+    }
+
     return Response.json(result[0])
   } catch (err) {
     console.error("PUT /api/courses/[id] error:", err)
@@ -119,6 +149,8 @@ export const DELETE = withTenantAuth(async (req, session, { params }: Ctx) => {
   const db = tenant.db
   const { id } = await params
   try {
+    await ensureTeacherTariffTables(db)
+    await db`DELETE FROM "CourseTeacherTariff" WHERE "courseId" = ${id}`
     await db`DELETE FROM "Course" WHERE id = ${id}`
     return new Response(null, { status: 204 })
   } catch (err) {
