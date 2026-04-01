@@ -1,7 +1,5 @@
 "use client"
 
-import { useRouter } from "next/navigation"
-
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
@@ -106,24 +104,24 @@ export default function SchoolViewPage() {
   const status = school.status || "active"
 
   return (
-    <div dir="rtl" className="container mx-auto max-w-5xl p-6 space-y-6">
+    <div dir="rtl" className="container mx-auto max-w-7xl space-y-4 p-3 sm:space-y-6 sm:p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link href="/dashboard/schools">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 flex-1 items-start gap-2 sm:gap-3">
+          <Link href="/dashboard/schools" className="shrink-0">
             <Button variant="ghost" size="icon">
               <ArrowRight className="h-5 w-5" />
             </Button>
           </Link>
-          <div>
-            <h1 className="text-3xl font-bold">פרטי בית ספר</h1>
-            <p className="text-muted-foreground mt-1">בתי ספר &gt; {school.name}</p>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold break-words sm:text-3xl">פרטי בית ספר</h1>
+            <p className="mt-1 break-words text-muted-foreground">בתי ספר &gt; {school.name}</p>
           </div>
         </div>
 
-        <Link href={`/dashboard/schools/${school.id}/edit`}>
-          <Button className="gap-2">
-            <Pencil className="h-4 w-4" />
+        <Link href={`/dashboard/schools/${school.id}/edit`} className="w-full shrink-0 sm:w-auto">
+          <Button className="w-full gap-2 sm:w-auto">
+            <Pencil className="h-4 w-4 shrink-0" />
             ערוך פרטים
           </Button>
         </Link>
@@ -132,32 +130,43 @@ export default function SchoolViewPage() {
       {/* Main Card with Tabs */}
       <Card className="overflow-hidden">
         <Tabs defaultValue="general" dir="rtl">
-          <TabsList className="w-full grid grid-cols-4 rounded-none border-b bg-muted/30">
-            <TabsTrigger value="general" className="rounded-none data-[state=active]:bg-background">כללי</TabsTrigger>
-            <TabsTrigger value="courses" className="rounded-none data-[state=active]:bg-background">קורסים</TabsTrigger>
-            <TabsTrigger value="students" className="rounded-none data-[state=active]:bg-background">תלמידים</TabsTrigger>
-            <TabsTrigger value="activity" className="rounded-none data-[state=active]:bg-background">פעילות</TabsTrigger>
+          <TabsList className="grid h-auto w-full grid-cols-2 rounded-none border-b bg-muted/30 sm:grid-cols-4">
+            <TabsTrigger value="general" className="rounded-none text-xs data-[state=active]:bg-background sm:text-sm">
+              כללי
+            </TabsTrigger>
+            <TabsTrigger value="courses" className="rounded-none text-xs data-[state=active]:bg-background sm:text-sm">
+              קורסים
+            </TabsTrigger>
+            <TabsTrigger value="students" className="rounded-none text-xs data-[state=active]:bg-background sm:text-sm">
+              תלמידים
+            </TabsTrigger>
+            <TabsTrigger value="activity" className="rounded-none text-xs data-[state=active]:bg-background sm:text-sm">
+              פעילות
+            </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="general" className="p-6 space-y-6">
+          <TabsContent value="general" className="space-y-4 p-3 sm:space-y-6 sm:p-6">
             {/* School Header */}
             <div className="flex flex-col items-center text-center py-6">
               <div className="w-20 h-20 rounded-full bg-blue-100 flex items-center justify-center mb-4">
                 <Users className="h-10 w-10 text-blue-600" />
               </div>
-              <h2 className="text-2xl font-bold">{school.name}</h2>
+              <h2 className="text-xl font-bold break-words sm:text-2xl">{school.name}</h2>
               <Badge className={`mt-2 ${statusColors[status] || "bg-gray-100 text-gray-800"}`}>
                 {statusLabels[status] || status}
               </Badge>
             </div>
 
             {/* Info Cards Grid */}
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid gap-4 md:grid-cols-2">
               <div className="p-4 border rounded-lg bg-slate-50/50 flex items-start gap-3">
                 <MapPin className="h-5 w-5 text-blue-600 mt-1" />
-                <div className="text-right flex-1">
+                <div className="min-w-0 flex-1 text-right">
                   <div className="text-sm text-muted-foreground">כתובת</div>
-                  <div className="font-medium">{safe(school.address)}{school.city ? `, ${school.city}` : ""}</div>
+                  <div className="break-words font-medium">
+                    {safe(school.address)}
+                    {school.city ? `, ${school.city}` : ""}
+                  </div>
                 </div>
               </div>
 
@@ -207,7 +216,7 @@ export default function SchoolViewPage() {
                   <CreditCard className="h-5 w-5 text-orange-600" />
                   <span className="font-semibold">פרטי חשבון בנק</span>
                 </div>
-                <div className="grid md:grid-cols-4 gap-4 text-right">
+                <div className="grid gap-4 text-right sm:grid-cols-2 lg:grid-cols-4">
                   <div>
                     <div className="text-sm text-muted-foreground">בנק</div>
                     <div className="font-medium">{safe(school.bankName)}</div>
@@ -237,21 +246,21 @@ export default function SchoolViewPage() {
             )}
           </TabsContent>
 
-          <TabsContent value="courses" className="p-6">
+          <TabsContent value="courses" className="p-3 sm:p-6">
             <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
               <BookOpen className="h-12 w-12 mb-4 opacity-50" />
               <p>אין קורסים משויכים לבית ספר זה</p>
             </div>
           </TabsContent>
 
-          <TabsContent value="students" className="p-6">
+          <TabsContent value="students" className="p-3 sm:p-6">
             <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
               <Users className="h-12 w-12 mb-4 opacity-50" />
               <p>אין תלמידים משויכים לבית ספר זה</p>
             </div>
           </TabsContent>
 
-          <TabsContent value="activity" className="p-6">
+          <TabsContent value="activity" className="p-3 sm:p-6">
             <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
               <Activity className="h-12 w-12 mb-4 opacity-50" />
               <p>אין פעילות לבית ספר זה</p>

@@ -99,34 +99,34 @@ export default function NewGafanProgramPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-5xl p-6" dir="rtl">
-      <div className="mb-8">
-        <div className="flex items-center gap-3 mb-2">
-          <Link href="/dashboard/gafan">
+    <div className="container mx-auto max-w-7xl p-3 sm:p-6" dir="rtl">
+      <div className="mb-6 sm:mb-8">
+        <div className="mb-2 flex items-start gap-2 sm:items-center sm:gap-3">
+          <Link href="/dashboard/gafan" className="shrink-0">
             <Button variant="ghost" size="icon" className="hover:bg-primary/10">
               <ArrowRight className="h-5 w-5" />
             </Button>
           </Link>
-          <h1 className="text-3xl font-bold text-foreground">תוכנית גפ"ן חדשה</h1>
+          <h1 className="min-w-0 text-2xl font-bold break-words text-foreground sm:text-3xl">תוכנית גפ"ן חדשה</h1>
         </div>
-        <p className="text-muted-foreground mr-14">הוסף תוכנית גפ"ן חדשה למערכת הרובוטיקה</p>
+        <p className="text-right text-muted-foreground sm:mr-14">הוסף תוכנית גפ"ן חדשה למערכת הרובוטיקה</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <Card className="border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100/50">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="bg-blue-500 text-white p-3 rounded-lg">
+          <CardContent className="space-y-4 p-4 sm:p-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+              <div className="rounded-lg bg-blue-500 p-3 text-white">
                 <Rocket className="h-6 w-6" />
               </div>
-              <div className="flex-1">
+              <div className="min-w-0 flex-1">
                 <Label htmlFor="status" className="text-base font-semibold">
                   סטטוס התוכנית
                 </Label>
                 <p className="text-sm text-muted-foreground">בחר את סטטוס תוכנית גפ"ן הנוכחי</p>
               </div>
               <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
-                <SelectTrigger id="status" className="w-[200px] bg-white">
+                <SelectTrigger id="status" className="w-full bg-white sm:w-[200px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -138,15 +138,15 @@ export default function NewGafanProgramPage() {
             </div>
             
             {/* Provider Type Field */}
-            <div className="flex items-center gap-4 mt-4 pt-4 border-t border-blue-200">
-              <div className="flex-1">
+            <div className="mt-4 flex flex-col gap-4 border-t border-blue-200 pt-4 sm:flex-row sm:items-center">
+              <div className="min-w-0 flex-1">
                 <Label htmlFor="providerType" className="text-base font-semibold">
                   סוג ספק
                 </Label>
                 <p className="text-sm text-muted-foreground">האם התוכנית מופעלת על ידי החברה או ספק חיצוני</p>
               </div>
               <Select value={formData.providerType} onValueChange={(value) => setFormData({ ...formData, providerType: value })}>
-                <SelectTrigger id="providerType" className="w-[200px] bg-white">
+                <SelectTrigger id="providerType" className="w-full bg-white sm:w-[200px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -159,7 +159,7 @@ export default function NewGafanProgramPage() {
         </Card>
 
         <Card className="border-2 border-green-200 bg-gradient-to-br from-green-50 to-green-100/50">
-          <CardContent className="p-6">
+          <CardContent className="p-4 sm:p-6">
             <div className="flex items-center gap-3 mb-6">
               <div className="bg-green-500 text-white p-2.5 rounded-lg">
                 <Rocket className="h-5 w-5" />
@@ -217,7 +217,7 @@ export default function NewGafanProgramPage() {
         </Card>
 
         <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-purple-100/50">
-          <CardContent className="p-6">
+          <CardContent className="p-4 sm:p-6">
             <div className="flex items-center gap-3 mb-6">
               <div className="bg-purple-500 text-white p-2.5 rounded-lg">
                 <Building2 className="h-5 w-5" />
@@ -274,7 +274,7 @@ export default function NewGafanProgramPage() {
         </Card>
 
         <Card className="border-2 border-cyan-200 bg-gradient-to-br from-cyan-50 to-cyan-100/50">
-          <CardContent className="p-6">
+          <CardContent className="p-4 sm:p-6">
             <div className="flex items-center gap-3 mb-6">
               <div className="bg-cyan-500 text-white p-2.5 rounded-lg">
                 <Landmark className="h-5 w-5" />
@@ -346,7 +346,7 @@ export default function NewGafanProgramPage() {
         </Card>
 
         <Card className="border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-amber-100/50">
-          <CardContent className="p-6">
+          <CardContent className="p-4 sm:p-6">
             <div className="flex items-center gap-3 mb-6">
               <div className="bg-amber-500 text-white p-2.5 rounded-lg">
                 <User className="h-5 w-5" />
@@ -373,7 +373,7 @@ export default function NewGafanProgramPage() {
         </Card>
 
         <Card className="border-2 border-orange-200 bg-gradient-to-br from-orange-50 to-orange-100/50">
-          <CardContent className="p-6">
+          <CardContent className="p-4 sm:p-6">
             <div className="flex items-center gap-3 mb-6">
               <div className="bg-orange-500 text-white p-2.5 rounded-lg">
                 <DollarSign className="h-5 w-5" />
@@ -420,7 +420,7 @@ export default function NewGafanProgramPage() {
         </Card>
 
         <Card className="border-2 border-pink-200 bg-gradient-to-br from-pink-50 to-pink-100/50">
-          <CardContent className="p-6">
+          <CardContent className="p-4 sm:p-6">
             <div className="space-y-2">
               <Label htmlFor="notes" className="text-base">
                 הערות
@@ -437,13 +437,13 @@ export default function NewGafanProgramPage() {
           </CardContent>
         </Card>
 
-        <div className="flex gap-3 pt-2">
-          <Button type="submit" size="lg" className="gap-2 h-12 px-8" disabled={isSubmitting}>
+        <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
+          <Button type="submit" size="lg" className="h-12 w-full gap-2 px-8 sm:w-auto" disabled={isSubmitting}>
             {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
             הוסף תוכנית גפ"ן
           </Button>
-          <Link href="/dashboard/gafan">
-            <Button type="button" variant="outline" size="lg" className="h-12 px-8 bg-transparent">
+          <Link href="/dashboard/gafan" className="w-full sm:w-auto">
+            <Button type="button" variant="outline" size="lg" className="h-12 w-full bg-transparent px-8 sm:w-auto">
               ביטול
             </Button>
           </Link>

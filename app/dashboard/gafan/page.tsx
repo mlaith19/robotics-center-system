@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import Link from "next/link"
-import { Plus, Mail, Phone, LayoutGrid, List, MapPin, Eye, Edit, Users, Trash2, Loader2 } from "lucide-react"
+import { Plus, LayoutGrid, List, MapPin, Eye, Edit, Users, Trash2, Loader2 } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import useSWR, { mutate } from "swr"
 import { arrayFetcher } from "@/lib/swr-fetcher"
@@ -61,7 +61,7 @@ export default function GafanProgramsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]" dir="rtl">
+      <div className="flex min-h-[400px] items-center justify-center p-3" dir="rtl">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
@@ -69,18 +69,20 @@ export default function GafanProgramsPage() {
 
   if (error) {
     return (
-      <div className="text-center py-12" dir="rtl">
+      <div className="px-3 py-12 text-center" dir="rtl">
         <p className="text-destructive">שגיאה בטעינת הנתונים</p>
       </div>
     )
   }
 
   return (
-    <div className="space-y-8" dir="rtl">
-      <div className="flex items-center justify-between">
-        <PageHeader title="תוכניות גפ&quot;ן" description="נהל את כל תוכניות גפ&quot;ן המשתפות פעולה" />
-        <div className="flex items-center gap-2">
-          <div className="flex items-center border rounded-lg p-1">
+    <div className="container mx-auto max-w-7xl space-y-4 p-3 sm:space-y-8 sm:p-6" dir="rtl">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <PageHeader title="תוכניות גפ&quot;ן" description="נהל את כל תוכניות גפ&quot;ן המשתפות פעולה" />
+        </div>
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+          <div className="flex items-center rounded-lg border p-1">
             <Button
               variant={viewMode === "grid" ? "default" : "ghost"}
               size="sm"
@@ -98,9 +100,9 @@ export default function GafanProgramsPage() {
               <List className="h-4 w-4" />
             </Button>
           </div>
-          <Button asChild className="gap-2">
-            <Link href="/dashboard/gafan/new">
-              <Plus className="h-4 w-4" />
+          <Button asChild className="min-w-0 flex-1 gap-2 sm:flex-none">
+            <Link href="/dashboard/gafan/new" className="flex w-full items-center justify-center gap-2 sm:w-auto">
+              <Plus className="h-4 w-4 shrink-0" />
               תוכנית גפ"ן חדשה
             </Link>
           </Button>
@@ -108,27 +110,27 @@ export default function GafanProgramsPage() {
       </div>
 
       {programs.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-muted-foreground mb-4">אין תוכניות גפ"ן במערכת</p>
-          <Button asChild>
-            <Link href="/dashboard/gafan/new">
-              <Plus className="h-4 w-4 ml-2" />
+        <div className="py-12 text-center">
+          <p className="mb-4 text-muted-foreground">אין תוכניות גפ"ן במערכת</p>
+          <Button asChild className="w-full sm:w-auto">
+            <Link href="/dashboard/gafan/new" className="gap-2">
+              <Plus className="h-4 w-4 shrink-0" />
               הוסף תוכנית גפ"ן ראשונה
             </Link>
           </Button>
         </div>
       ) : viewMode === "grid" ? (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3">
           {programs.map((program) => (
-            <Card key={program.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-              <div className="p-6 space-y-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-lg text-foreground mb-1">{program.name}</h3>
+            <Card key={program.id} className="overflow-hidden transition-shadow hover:shadow-lg">
+              <div className="space-y-4 p-4 sm:p-6">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="mb-1 break-words text-lg font-semibold text-foreground">{program.name}</h3>
                     <p className="text-sm text-muted-foreground">מס׳ תוכנית: {program.programNumber}</p>
                   </div>
                   <span
-                    className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap mr-2 ${
+                    className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium ${
                       program.status === "פעיל"
                         ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                         : program.status === "מתעניין"
@@ -143,7 +145,7 @@ export default function GafanProgramsPage() {
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <MapPin className="h-4 w-4 flex-shrink-0" />
-                    <span className="truncate">{program.companyAddress || "לא צוינה כתובת"}</span>
+                    <span className="min-w-0 truncate">{program.companyAddress || "לא צוינה כתובת"}</span>
                   </div>
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Users className="h-4 w-4" />
@@ -164,16 +166,16 @@ export default function GafanProgramsPage() {
                   </div>
                 </div>
 
-                <div className="flex gap-2 pt-2">
-                  <Link href={`/dashboard/gafan/${program.id}`} className="flex-1">
+                <div className="flex flex-wrap gap-2 pt-2">
+                  <Link href={`/dashboard/gafan/${program.id}`} className="min-w-0 flex-1">
                     <Button variant="outline" size="sm" className="w-full gap-2 bg-transparent">
-                      <Eye className="h-4 w-4" />
+                      <Eye className="h-4 w-4 shrink-0" />
                       צפה
                     </Button>
                   </Link>
-                  <Link href={`/dashboard/gafan/${program.id}/edit`} className="flex-1">
+                  <Link href={`/dashboard/gafan/${program.id}/edit`} className="min-w-0 flex-1">
                     <Button variant="outline" size="sm" className="w-full gap-2 bg-transparent">
-                      <Edit className="h-4 w-4" />
+                      <Edit className="h-4 w-4 shrink-0" />
                       ערוך
                     </Button>
                   </Link>
@@ -181,10 +183,10 @@ export default function GafanProgramsPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="gap-2 bg-transparent text-destructive hover:text-destructive"
+                      className="w-full gap-2 bg-transparent text-destructive hover:text-destructive sm:w-auto"
                       onClick={() => handleDelete(program)}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-4 w-4 shrink-0" />
                       מחק
                     </Button>
                   )}
@@ -194,59 +196,65 @@ export default function GafanProgramsPage() {
           ))}
         </div>
       ) : (
-        <div className="border rounded-lg overflow-hidden">
+        <div className="overflow-hidden rounded-lg border">
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[720px]">
               <thead className="bg-muted">
                 <tr>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  <th className="px-3 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground sm:px-6">
                     שם התוכנית
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  <th className="whitespace-nowrap px-3 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground sm:px-6">
                     מס׳ תוכנית
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  <th className="whitespace-nowrap px-3 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground sm:px-6">
                     חברה
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  <th className="whitespace-nowrap px-3 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground sm:px-6">
                     מפעיל
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  <th className="whitespace-nowrap px-3 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground sm:px-6">
                     מחיר
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  <th className="whitespace-nowrap px-3 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground sm:px-6">
                     תוקף
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  <th className="whitespace-nowrap px-3 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground sm:px-6">
                     סטטוס
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  <th className="whitespace-nowrap px-3 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground sm:px-6">
                     פעולות
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-card divide-y divide-border">
+              <tbody className="divide-y divide-border bg-card">
                 {programs.map((program) => (
-                  <tr key={program.id} className="hover:bg-muted/50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-foreground">{program.name}</div>
+                  <tr key={program.id} className="transition-colors hover:bg-muted/50">
+                    <td className="px-3 py-4 align-top sm:px-6">
+                      <div className="max-w-[200px] break-words text-sm font-medium text-foreground sm:max-w-none">
+                        {program.name}
+                      </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="whitespace-nowrap px-3 py-4 sm:px-6">
                       <div className="text-sm text-muted-foreground">{program.programNumber}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-muted-foreground">{program.companyName}</div>
+                    <td className="px-3 py-4 align-top sm:px-6">
+                      <div className="max-w-[160px] break-words text-sm text-muted-foreground sm:max-w-none">
+                        {program.companyName}
+                      </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-muted-foreground">{program.operatorName}</div>
+                    <td className="px-3 py-4 align-top sm:px-6">
+                      <div className="max-w-[140px] break-words text-sm text-muted-foreground sm:max-w-none">
+                        {program.operatorName}
+                      </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-center font-semibold text-primary">₪{program.priceMin || 0}</div>
+                    <td className="whitespace-nowrap px-3 py-4 text-center sm:px-6">
+                      <div className="text-sm font-semibold text-primary">₪{program.priceMin || 0}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="whitespace-nowrap px-3 py-4 sm:px-6">
                       <div className="text-sm text-muted-foreground">{program.validYear || "-"}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="whitespace-nowrap px-3 py-4 sm:px-6">
                       <span
                         className={`px-3 py-1 rounded-full text-xs font-medium ${
                           program.status === "פעיל"
@@ -259,17 +267,17 @@ export default function GafanProgramsPage() {
                         {program.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex gap-2">
+                    <td className="px-3 py-4 sm:px-6">
+                      <div className="flex flex-wrap gap-1">
                         <Link href={`/dashboard/gafan/${program.id}`}>
-                          <Button variant="ghost" size="sm" className="gap-2">
-                            <Eye className="h-4 w-4" />
+                          <Button variant="ghost" size="sm" className="gap-1">
+                            <Eye className="h-4 w-4 shrink-0" />
                             צפה
                           </Button>
                         </Link>
                         <Link href={`/dashboard/gafan/${program.id}/edit`}>
-                          <Button variant="ghost" size="sm" className="gap-2">
-                            <Edit className="h-4 w-4" />
+                          <Button variant="ghost" size="sm" className="gap-1">
+                            <Edit className="h-4 w-4 shrink-0" />
                             ערוך
                           </Button>
                         </Link>
@@ -277,10 +285,10 @@ export default function GafanProgramsPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="gap-2 text-destructive hover:text-destructive"
+                            className="gap-1 text-destructive hover:text-destructive"
                             onClick={() => handleDelete(program)}
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-4 w-4 shrink-0" />
                             מחק
                           </Button>
                         )}

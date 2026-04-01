@@ -115,14 +115,16 @@ export default function SchoolsPage() {
   }
 
   return (
-    <div dir="rtl" className="container mx-auto max-w-6xl p-6 space-y-6">
+    <div dir="rtl" className="container mx-auto max-w-7xl space-y-4 p-3 sm:space-y-6 sm:p-6">
       {/* Header */}
-      <div className="flex items-center justify-between gap-3">
-        <PageHeader title="בתי ספר" description="נהל את כל בתי הספר המשתפים פעולה" />
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <PageHeader title="בתי ספר" description="נהל את כל בתי הספר המשתפים פעולה" />
+        </div>
 
-        <div className="flex gap-2 items-center">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           {/* View Toggle */}
-          <div className="flex border rounded-lg overflow-hidden">
+          <div className="flex overflow-hidden rounded-lg border">
             <Button
               variant={viewMode === "list" ? "secondary" : "ghost"}
               size="sm"
@@ -141,9 +143,9 @@ export default function SchoolsPage() {
             </Button>
           </div>
 
-          <Link href="/dashboard/schools/new">
-            <Button className="gap-2">
-              <Plus className="h-4 w-4" />
+          <Link href="/dashboard/schools/new" className="min-w-0 flex-1 sm:flex-none">
+            <Button className="w-full gap-2 sm:w-auto">
+              <Plus className="h-4 w-4 shrink-0" />
               בית ספר חדש
             </Button>
           </Link>
@@ -151,14 +153,14 @@ export default function SchoolsPage() {
       </div>
 
       {/* Search */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
         <Input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="חפש לפי שם בית ספר..."
-          className="max-w-md"
+          className="w-full sm:max-w-md"
         />
-        <div className="text-sm text-muted-foreground">סה״כ: {filtered.length}</div>
+        <div className="shrink-0 text-sm text-muted-foreground">סה״כ: {filtered.length}</div>
       </div>
 
       {loading ? (
@@ -179,22 +181,22 @@ export default function SchoolsPage() {
           <p>אין בתי ספר</p>
         </Card>
       ) : (
-        <div className={viewMode === "grid" ? "grid md:grid-cols-2 gap-4" : "space-y-4"}>
+        <div className={viewMode === "grid" ? "grid gap-4 md:grid-cols-2" : "space-y-4"}>
           {filtered.map((s) => (
-            <Card key={s.id} className="p-5 space-y-4">
+            <Card key={s.id} className="space-y-4 p-4 sm:p-5">
               {/* Header with name and status */}
               <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="font-bold text-lg">{s.name}</h3>
+                <div className="min-w-0 flex-1">
+                  <h3 className="break-words text-lg font-bold">{s.name}</h3>
                   {s.schoolType && (
                     <p className="text-sm text-muted-foreground">
                       {schoolTypeLabels[s.schoolType] || s.schoolType}
                     </p>
                   )}
                 </div>
-                <Badge 
-                  variant="outline" 
-                  className={statusColors[s.status || "active"]}
+                <Badge
+                  variant="outline"
+                  className={`shrink-0 ${statusColors[s.status || "active"]}`}
                 >
                   {statusLabels[s.status || "active"] || s.status}
                 </Badge>
@@ -205,7 +207,7 @@ export default function SchoolsPage() {
                 {getFullAddress(s) && (
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <MapPin className="h-4 w-4 shrink-0" />
-                    <span>{getFullAddress(s)}</span>
+                    <span className="min-w-0 break-words">{getFullAddress(s)}</span>
                   </div>
                 )}
                 {s.phone && (
@@ -241,7 +243,7 @@ export default function SchoolsPage() {
               </div>
 
               {/* Actions */}
-              <div className="flex gap-2 justify-start pt-2 border-t">
+              <div className="flex flex-wrap gap-2 border-t pt-2">
                 <Link href={`/dashboard/schools/${s.id}`} className="flex-1">
                   <Button variant="outline" className="gap-2 w-full bg-transparent">
                     <Eye className="h-4 w-4" />

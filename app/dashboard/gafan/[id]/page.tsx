@@ -58,27 +58,29 @@ export default function GafanProgramViewPage() {
 
   return (
     <div dir="rtl" className="min-h-screen">
-      <div className="container mx-auto max-w-4xl p-6">
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <Link href="/dashboard/gafan">
-              <Button variant="ghost" size="icon">
-                <ArrowRight className="h-5 w-5" />
-              </Button>
-            </Link>
-            <div className="flex-1">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                <Link href="/dashboard/gafan" className="hover:text-foreground transition-colors">
-                  תוכניות גפ"ן
-                </Link>
-                <span>/</span>
-                <span className="text-foreground">{program.name}</span>
+      <div className="container mx-auto max-w-7xl p-3 sm:p-6">
+        <div className="mb-6 sm:mb-8">
+          <div className="mb-2 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex min-w-0 flex-1 items-start gap-2 sm:gap-3">
+              <Link href="/dashboard/gafan" className="shrink-0">
+                <Button variant="ghost" size="icon">
+                  <ArrowRight className="h-5 w-5" />
+                </Button>
+              </Link>
+              <div className="min-w-0 flex-1">
+                <div className="mb-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                  <Link href="/dashboard/gafan" className="transition-colors hover:text-foreground">
+                    תוכניות גפ"ן
+                  </Link>
+                  <span>/</span>
+                  <span className="break-words text-foreground">{program.name}</span>
+                </div>
+                <h1 className="text-2xl font-bold text-foreground break-words sm:text-3xl">פרטי תוכנית</h1>
               </div>
-              <h1 className="text-3xl font-bold text-foreground">פרטי תוכנית</h1>
             </div>
-            <Link href={`/dashboard/gafan/${program.id}/edit`}>
-              <Button className="gap-2">
-                <Edit className="h-4 w-4" />
+            <Link href={`/dashboard/gafan/${program.id}/edit`} className="w-full shrink-0 sm:w-auto">
+              <Button className="w-full gap-2 sm:w-auto">
+                <Edit className="h-4 w-4 shrink-0" />
                 ערוך תוכנית
               </Button>
             </Link>
@@ -88,48 +90,48 @@ export default function GafanProgramViewPage() {
         <Card>
           <CardContent className="p-0">
             <Tabs defaultValue="general" className="w-full" dir="rtl">
-              <div className="border-b">
-                <TabsList className="w-full justify-start h-auto p-0 bg-transparent rounded-none">
+              <div className="border-b overflow-x-auto">
+                <TabsList className="flex h-auto w-full min-w-0 flex-wrap justify-start gap-0 rounded-none bg-transparent p-0 sm:flex-nowrap">
                   <TabsTrigger
                     value="general"
-                    className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-6 py-4"
+                    className="rounded-none px-3 py-3 text-xs data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent sm:px-6 sm:py-4 sm:text-sm"
                   >
                     כללי
                   </TabsTrigger>
                   <TabsTrigger
                     value="courses"
-                    className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-6 py-4"
+                    className="rounded-none px-3 py-3 text-xs data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent sm:px-6 sm:py-4 sm:text-sm"
                   >
                     קורסים
                   </TabsTrigger>
                   <TabsTrigger
                     value="students"
-                    className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-6 py-4"
+                    className="rounded-none px-3 py-3 text-xs data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent sm:px-6 sm:py-4 sm:text-sm"
                   >
                     תלמידים
                   </TabsTrigger>
                   <TabsTrigger
                     value="activity"
-                    className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-6 py-4"
+                    className="rounded-none px-3 py-3 text-xs data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent sm:px-6 sm:py-4 sm:text-sm"
                   >
                     פעילות
                   </TabsTrigger>
                 </TabsList>
               </div>
 
-              <TabsContent value="general" className="p-6 space-y-6">
+              <TabsContent value="general" className="space-y-4 p-3 sm:space-y-6 sm:p-6">
                 <Card className="border-2 border-primary/20 bg-primary/5">
-                  <CardContent className="p-6">
-                    <div className="flex items-center gap-4">
-                      <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
+                  <CardContent className="p-4 sm:p-6">
+                    <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-center">
+                      <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-primary/10">
                         <Rocket className="h-8 w-8 text-primary" />
                       </div>
-                      <div className="flex-1">
-                        <h2 className="text-2xl font-bold text-foreground mb-1">{program.name}</h2>
+                      <div className="min-w-0 flex-1">
+                        <h2 className="mb-1 break-words text-xl font-bold text-foreground sm:text-2xl">{program.name}</h2>
                         <p className="text-muted-foreground">מס׳ תוכנית: {program.programNumber}</p>
                       </div>
                       <span
-                        className={`px-4 py-2 rounded-full text-sm font-medium ${
+                        className={`shrink-0 self-start rounded-full px-4 py-2 text-sm font-medium sm:self-center ${
                           program.status === "פעיל"
                             ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                             : program.status === "מתעניין"
@@ -152,8 +154,8 @@ export default function GafanProgramViewPage() {
                       <h3 className="text-lg font-semibold">מידע על התוכנית</h3>
                     </div>
                   </CardHeader>
-                  <CardContent className="p-6 space-y-4">
-                    <div className="grid grid-cols-2 gap-6">
+                  <CardContent className="space-y-4 p-4 sm:p-6">
+                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                       <div>
                         <p className="text-sm text-muted-foreground mb-1">תוקף לשנה</p>
                         <p className="font-medium">{program.validYear}</p>
@@ -177,8 +179,8 @@ export default function GafanProgramViewPage() {
                       <h3 className="text-lg font-semibold">פרטי חברה</h3>
                     </div>
                   </CardHeader>
-                  <CardContent className="p-6 space-y-6">
-                    <div className="grid grid-cols-2 gap-6">
+                  <CardContent className="space-y-6 p-4 sm:p-6">
+                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                       <div>
                         <p className="text-sm text-muted-foreground mb-1">שם חברה</p>
                         <p className="font-medium">{program.companyName}</p>
@@ -187,16 +189,16 @@ export default function GafanProgramViewPage() {
                         <p className="text-sm text-muted-foreground mb-1">ח"פ חברה</p>
                         <p className="font-medium">{program.companyId}</p>
                       </div>
-                      <div className="col-span-2">
-                        <p className="text-sm text-muted-foreground mb-1">כתובת</p>
-                        <p className="font-medium">{program.companyAddress}</p>
+                      <div className="sm:col-span-2">
+                        <p className="mb-1 text-sm text-muted-foreground">כתובת</p>
+                        <p className="break-words font-medium">{program.companyAddress}</p>
                       </div>
                     </div>
 
                     {program.bankName && (
                       <div className="pt-6 border-t space-y-4">
                         <h4 className="font-semibold text-sm text-muted-foreground">פרטי חשבון בנק</h4>
-                        <div className="grid grid-cols-2 gap-6">
+                        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                           <div>
                             <p className="text-sm text-muted-foreground mb-1">בנק</p>
                             <p className="font-medium">{program.bankName}</p>
@@ -228,8 +230,8 @@ export default function GafanProgramViewPage() {
                       <h3 className="text-lg font-semibold">מפעיל התוכנית</h3>
                     </div>
                   </CardHeader>
-                  <CardContent className="p-6">
-                    <p className="font-medium">{program.operatorName}</p>
+                  <CardContent className="p-4 sm:p-6">
+                    <p className="break-words font-medium">{program.operatorName}</p>
                   </CardContent>
                 </Card>
 
@@ -242,8 +244,8 @@ export default function GafanProgramViewPage() {
                       <h3 className="text-lg font-semibold">תמחור</h3>
                     </div>
                   </CardHeader>
-                  <CardContent className="p-6">
-                    <div className="flex items-center gap-2">
+                  <CardContent className="p-4 sm:p-6">
+                    <div className="flex flex-wrap items-center gap-2">
                       <p className="text-2xl font-bold text-primary">₪{program.priceMin || 0}</p>
                       {program.priceMax && (
                         <>
@@ -260,14 +262,14 @@ export default function GafanProgramViewPage() {
                     <CardHeader className="border-b">
                       <h3 className="text-lg font-semibold">הערות</h3>
                     </CardHeader>
-                    <CardContent className="p-6">
-                      <p className="text-muted-foreground whitespace-pre-wrap">{program.notes}</p>
+                    <CardContent className="p-4 sm:p-6">
+                      <p className="whitespace-pre-wrap break-words text-muted-foreground">{program.notes}</p>
                     </CardContent>
                   </Card>
                 )}
               </TabsContent>
 
-              <TabsContent value="courses" className="p-6">
+              <TabsContent value="courses" className="p-3 sm:p-6">
                 <div className="text-center py-12">
                   <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                   <h3 className="text-lg font-semibold mb-2">קורסים משויכים</h3>
@@ -275,7 +277,7 @@ export default function GafanProgramViewPage() {
                 </div>
               </TabsContent>
 
-              <TabsContent value="students" className="p-6">
+              <TabsContent value="students" className="p-3 sm:p-6">
                 <div className="text-center py-12">
                   <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                   <h3 className="text-lg font-semibold mb-2">תלמידים משויכים</h3>
@@ -283,7 +285,7 @@ export default function GafanProgramViewPage() {
                 </div>
               </TabsContent>
 
-              <TabsContent value="activity" className="p-6">
+              <TabsContent value="activity" className="p-3 sm:p-6">
                 <div className="text-center py-12">
                   <TrendingUp className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                   <h3 className="text-lg font-semibold mb-2">פעילות התוכנית</h3>

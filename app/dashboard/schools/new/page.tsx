@@ -81,16 +81,16 @@ export default function NewSchoolPage() {
   }
 
   return (
-    <div dir="rtl" className="container mx-auto max-w-4xl p-6 space-y-6">
-      <div className="flex items-center gap-3">
+    <div dir="rtl" className="container mx-auto max-w-7xl space-y-6 p-3 sm:p-6">
+      <div className="flex items-start gap-2 sm:items-center sm:gap-3">
         <Link href="/dashboard/schools">
           <Button variant="ghost" size="icon">
             <ArrowRight className="h-5 w-5" />
           </Button>
         </Link>
-        <div>
-          <h1 className="text-3xl font-bold">בית ספר חדש</h1>
-          <p className="text-muted-foreground mt-1">הוסף בית ספר חדש למערכת</p>
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold break-words sm:text-3xl">בית ספר חדש</h1>
+          <p className="mt-1 text-muted-foreground">הוסף בית ספר חדש למערכת</p>
         </div>
       </div>
 
@@ -98,7 +98,7 @@ export default function NewSchoolPage() {
 
       {/* סטטוס בית הספר */}
       <Card className="border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-white">
-        <CardHeader className="text-right">
+        <CardHeader className="px-3 text-right sm:px-6">
           <div className="flex flex-row-reverse items-center justify-end gap-3">
             <div className="p-2 bg-blue-500 rounded-lg">
               <ClipboardList className="h-5 w-5 text-white" />
@@ -109,7 +109,7 @@ export default function NewSchoolPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-3 sm:px-6">
           <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
             <SelectTrigger className="text-right">
               <SelectValue placeholder="בחר סטטוס" />
@@ -126,7 +126,7 @@ export default function NewSchoolPage() {
 
       {/* מידע כללי */}
       <Card className="border-2 border-green-200 bg-gradient-to-br from-green-50 to-white">
-        <CardHeader className="text-right">
+        <CardHeader className="px-3 text-right sm:px-6">
           <div className="flex flex-row-reverse items-center justify-end gap-3">
             <div className="p-2 bg-green-500 rounded-lg">
               <Building2 className="h-5 w-5 text-white" />
@@ -137,7 +137,7 @@ export default function NewSchoolPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 px-3 sm:px-6">
           <div className="space-y-2">
             <Label className="text-right block">שם בית הספר *</Label>
             <Input 
@@ -148,7 +148,7 @@ export default function NewSchoolPage() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label className="text-right block">קוד מוסד</Label>
               <Input 
@@ -179,7 +179,7 @@ export default function NewSchoolPage() {
 
       {/* מיקום */}
       <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-white">
-        <CardHeader className="text-right">
+        <CardHeader className="px-3 text-right sm:px-6">
           <div className="flex flex-row-reverse items-center justify-end gap-3">
             <div className="p-2 bg-purple-500 rounded-lg">
               <MapPin className="h-5 w-5 text-white" />
@@ -190,8 +190,8 @@ export default function NewSchoolPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+        <CardContent className="space-y-4 px-3 sm:px-6">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label className="text-right block">עיר *</Label>
               <Select value={form.city} onValueChange={(v) => setForm({ ...form, city: v })}>
@@ -231,7 +231,7 @@ export default function NewSchoolPage() {
 
       {/* פרטי קשר */}
       <Card className="border-2 border-cyan-200 bg-gradient-to-br from-cyan-50 to-white">
-        <CardHeader className="text-right">
+        <CardHeader className="px-3 text-right sm:px-6">
           <div className="flex flex-row-reverse items-center justify-end gap-3">
             <div className="p-2 bg-cyan-500 rounded-lg">
               <Phone className="h-5 w-5 text-white" />
@@ -242,7 +242,7 @@ export default function NewSchoolPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 px-3 sm:px-6">
           <div className="space-y-2">
             <Label className="text-right block">איש קשר *</Label>
             <Input 
@@ -253,7 +253,7 @@ export default function NewSchoolPage() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label className="text-right block flex items-center gap-1 justify-end">
                 <Phone className="h-4 w-4" />
@@ -285,7 +285,7 @@ export default function NewSchoolPage() {
 
       {/* פרטי חשבון בנק */}
       <Card className="border-2 border-orange-200 bg-gradient-to-br from-orange-50 to-white">
-        <CardHeader className="text-right">
+        <CardHeader className="px-3 text-right sm:px-6">
           <div className="flex flex-row-reverse items-center justify-end gap-3">
             <div className="p-2 bg-orange-500 rounded-lg">
               <CreditCard className="h-5 w-5 text-white" />
@@ -296,7 +296,7 @@ export default function NewSchoolPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 px-3 sm:px-6">
           <div className="space-y-2">
             <Label className="text-right block">בנק</Label>
             <Select value={form.bankName} onValueChange={handleBankChange}>
@@ -311,7 +311,7 @@ export default function NewSchoolPage() {
             </Select>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="space-y-2">
               <Label className="text-right block">קוד בנק</Label>
               <Input 
@@ -345,7 +345,7 @@ export default function NewSchoolPage() {
 
       {/* מידע נוסף */}
       <Card className="border-2 border-pink-200 bg-gradient-to-br from-pink-50 to-white">
-        <CardHeader className="text-right">
+        <CardHeader className="px-3 text-right sm:px-6">
           <div className="flex flex-row-reverse items-center justify-end gap-3">
             <div className="p-2 bg-pink-500 rounded-lg">
               <FileText className="h-5 w-5 text-white" />
@@ -356,7 +356,7 @@ export default function NewSchoolPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-3 sm:px-6">
           <div className="space-y-2">
             <Label className="text-right block">הערות</Label>
             <Textarea 
@@ -371,8 +371,8 @@ export default function NewSchoolPage() {
       </Card>
 
       {/* כפתורי פעולה */}
-      <div className="flex gap-3 justify-start">
-        <Button onClick={save} disabled={!form.name.trim() || saving} className="gap-2">
+      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-start">
+        <Button onClick={save} disabled={!form.name.trim() || saving} className="w-full gap-2 sm:w-auto">
           {saving ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -385,7 +385,7 @@ export default function NewSchoolPage() {
             </>
           )}
         </Button>
-        <Button variant="outline" onClick={() => router.back()}>
+        <Button variant="outline" className="w-full sm:w-auto" onClick={() => router.back()}>
           ביטול
         </Button>
       </div>
