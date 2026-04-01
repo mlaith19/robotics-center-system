@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { normalizeStudentTierRates, resolveTeacherHourlyRate } from "@/lib/teacher-pricing"
 
 type Teacher = {
   id: string
@@ -29,6 +30,11 @@ type Teacher = {
   centerHourlyRate?: number | null
   travelRate?: number | null
   externalCourseRate?: number | null
+  pricingMethod?: "standard" | "per_student_tier" | null
+  studentTierRates?: { upToStudents: number; hourlyRate: number }[] | null
+  bonusEnabled?: boolean | null
+  bonusMinStudents?: number | null
+  bonusPerHour?: number | null
   createdAt?: string
   updatedAt?: string
   profileImage?: string | null
@@ -120,6 +126,7 @@ export default function TeacherViewPage() {
   const [selectedAttendanceCourse, setSelectedAttendanceCourse] = useState<string>("all")
   const [payments, setPayments] = useState<any[]>([]) // Declare payments variable
   const [isTeacherUser, setIsTeacherUser] = useState(false)
+  const [enrollmentCountByCourse, setEnrollmentCountByCourse] = useState<Record<string, number>>({})
 
   // Redirect to new page if id is "create" or "new"
   useEffect(() => {
@@ -290,6 +297,21 @@ export default function TeacherViewPage() {
     }, 500)
   }, [id, loading, teacher])
 
+  useEffect(() => {
+    fetch("/api/enrollments", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows) => {
+        const map: Record<string, number> = {}
+        ;(Array.isArray(rows) ? rows : []).forEach((x: any) => {
+          const cid = String(x?.courseId || x?.courseIdRef || "")
+          if (!cid) return
+          map[cid] = (map[cid] || 0) + 1
+        })
+        setEnrollmentCountByCourse(map)
+      })
+      .catch(() => setEnrollmentCountByCourse({}))
+  }, [])
+
   // Teacher payments are expenses for the center (paying the teacher for their work)
   const handleAddPayment = async () => {
     if (!paymentAmount || Number(paymentAmount) <= 0) return
@@ -419,8 +441,7 @@ export default function TeacherViewPage() {
   
   // Calculate total owed to teacher based on hours worked - filtered by period
   const owedToTeacher = useMemo(() => {
-    const centerRate = teacher?.centerHourlyRate || 0
-    const externalRate = teacher?.externalCourseRate || 0
+    const tiers = normalizeStudentTierRates(teacher?.studentTierRates || [])
     
     return filteredAttendanceForPayments.reduce((sum, a: any) => {
       const status = a.status?.toLowerCase()
@@ -429,14 +450,21 @@ export default function TeacherViewPage() {
       
       const hours = calcAttendanceHours(a)
       
-      // Determine rate based on course location
-      const location = a.courseLocation?.toLowerCase() || ""
-      const isCenter = location.includes("מרכז") || location === "center" || location === ""
-      const rate = isCenter ? centerRate : externalRate
+      const rate = resolveTeacherHourlyRate({
+        pricingMethod: (teacher?.pricingMethod as any) || "standard",
+        centerHourlyRate: teacher?.centerHourlyRate || 0,
+        externalCourseRate: teacher?.externalCourseRate || 0,
+        studentTierRates: tiers,
+        bonusEnabled: teacher?.bonusEnabled === true,
+        bonusMinStudents: teacher?.bonusMinStudents ?? null,
+        bonusPerHour: teacher?.bonusPerHour ?? 0,
+        location: a.courseLocation || null,
+        enrollmentCount: a.courseId ? enrollmentCountByCourse[String(a.courseId)] ?? 0 : 0,
+      })
       
       return sum + (hours * rate)
     }, 0)
-  }, [filteredAttendanceForPayments, teacher?.centerHourlyRate, teacher?.externalCourseRate])
+  }, [filteredAttendanceForPayments, teacher, enrollmentCountByCourse])
   
   // Pending/debt = total owed minus manual expense payments only.
   const pendingSum = useMemo(() => {

@@ -12,6 +12,7 @@ import { CityCombobox } from "@/components/ui/combobox-city"
 import { ArrowRight, User, Mail, Phone, GraduationCap, FileText, Banknote, Calendar, Award as IdCard, MapPin, KeyRound, X } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { fileToProfileImageDataUrl } from "@/lib/profile-image-client"
+import { normalizeStudentTierRates } from "@/lib/teacher-pricing"
 
 export default function NewTeacherPage() {
   const router = useRouter()
@@ -32,6 +33,11 @@ export default function NewTeacherPage() {
     centerHourlyRate: 50,
     travelRate: 30,
     externalCourseRate: 80,
+    pricingMethod: "standard" as "standard" | "per_student_tier",
+    tierRates: Array.from({ length: 10 }, (_, i) => (i === 0 ? 32 : 0)),
+    bonusEnabled: false,
+    bonusMinStudents: 0,
+    bonusPerHour: 0,
     profileImage: "",
   })
 
@@ -71,6 +77,13 @@ export default function NewTeacherPage() {
           centerHourlyRate: newTeacher.centerHourlyRate || null,
           travelRate: newTeacher.travelRate || null,
           externalCourseRate: newTeacher.externalCourseRate || null,
+          pricingMethod: newTeacher.pricingMethod,
+          studentTierRates: normalizeStudentTierRates(
+            newTeacher.tierRates.map((hourlyRate, idx) => ({ upToStudents: idx + 1, hourlyRate }))
+          ),
+          bonusEnabled: newTeacher.bonusEnabled,
+          bonusMinStudents: newTeacher.bonusEnabled ? Number(newTeacher.bonusMinStudents || 0) : null,
+          bonusPerHour: newTeacher.bonusEnabled ? Number(newTeacher.bonusPerHour || 0) : 0,
           profileImage: newTeacher.profileImage.trim() || null,
           // User account data
           createUserAccount,
@@ -412,6 +425,69 @@ export default function NewTeacherPage() {
                 placeholder="80"
               />
             </div>
+            <div className="grid gap-2 border-t pt-4">
+              <Label>שיטת חישוב שכר מורה</Label>
+              <Select
+                value={newTeacher.pricingMethod}
+                onValueChange={(v: "standard" | "per_student_tier") => setNewTeacher({ ...newTeacher, pricingMethod: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="standard">שיטה רגילה: מרכז / חיצוני / נסיעות</SelectItem>
+                  <SelectItem value="per_student_tier">שיטה לפי כמות תלמידים (במרכז)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {newTeacher.pricingMethod === "per_student_tier" && (
+              <div className="space-y-3 rounded-md border p-3">
+                <Label>מחיר לשעה לפי כמות תלמידים (עד 10)</Label>
+                <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+                  {newTeacher.tierRates.map((rate, idx) => (
+                    <div key={idx} className="space-y-1">
+                      <Label className="text-xs">עד תלמיד {idx + 1}</Label>
+                      <Input
+                        type="number"
+                        value={rate}
+                        onChange={(e) => {
+                          const next = [...newTeacher.tierRates]
+                          next[idx] = Number(e.target.value || 0)
+                          setNewTeacher({ ...newTeacher, tierRates: next })
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={newTeacher.bonusEnabled}
+                    onCheckedChange={(checked) => setNewTeacher({ ...newTeacher, bonusEnabled: checked === true })}
+                  />
+                  הפעל בונוס לשעה מעל סף תלמידים
+                </label>
+                {newTeacher.bonusEnabled && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label>מינימום תלמידים לבונוס</Label>
+                      <Input
+                        type="number"
+                        value={newTeacher.bonusMinStudents}
+                        onChange={(e) => setNewTeacher({ ...newTeacher, bonusMinStudents: Number(e.target.value || 0) })}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>בונוס לשעה (₪)</Label>
+                      <Input
+                        type="number"
+                        value={newTeacher.bonusPerHour}
+                        onChange={(e) => setNewTeacher({ ...newTeacher, bonusPerHour: Number(e.target.value || 0) })}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 

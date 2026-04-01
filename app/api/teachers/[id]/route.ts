@@ -5,6 +5,7 @@ import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
 import { hasFullAccessRole, hasPermission } from "@/lib/permissions"
 import { ensureProfileImageColumns, resolveProfileImageWithFallback } from "@/lib/profile-image"
+import { ensureTeacherPricingColumns, normalizeStudentTierRates } from "@/lib/teacher-pricing"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -30,6 +31,7 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
   if (tenantErr) return tenantErr
   const db = tenant.db
   try {
+    await ensureTeacherPricingColumns(db)
     const result = await db`SELECT * FROM "Teacher" WHERE id = ${id}`
     if (result.length === 0) return Response.json({ error: "Teacher not found" }, { status: 404 })
     const row = result[0] as { userId?: string | null }
@@ -96,6 +98,7 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
 
   try {
     await ensureProfileImageColumns(db as unknown as (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown[]>)
+    await ensureTeacherPricingColumns(db)
     const name = String(body.name ?? "").trim()
     const email = body.email ? String(body.email).trim() : null
     const phone = body.phone ? String(body.phone).trim() : null
@@ -108,6 +111,11 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
     const centerHourlyRate = body.centerHourlyRate ?? null
     const travelRate = body.travelRate ?? null
     const externalCourseRate = body.externalCourseRate ?? null
+    const pricingMethod = body.pricingMethod === "per_student_tier" ? "per_student_tier" : "standard"
+    const studentTierRates = normalizeStudentTierRates(body.studentTierRates)
+    const bonusEnabled = body.bonusEnabled === true
+    const bonusMinStudents = body.bonusMinStudents != null && body.bonusMinStudents !== "" ? Number(body.bonusMinStudents) : null
+    const bonusPerHour = body.bonusPerHour != null && body.bonusPerHour !== "" ? Number(body.bonusPerHour) : 0
     const profileImage = resolveProfileImageWithFallback(body.profileImage)
     const now = new Date().toISOString()
 
@@ -137,7 +145,10 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
         "idNumber" = ${idNumber}, "birthDate" = ${birthDate}, city = ${city},
         specialty = ${specialty}, status = ${status}, bio = ${bio},
         "centerHourlyRate" = ${centerHourlyRate}, "travelRate" = ${travelRate},
-        "externalCourseRate" = ${externalCourseRate}, "profileImage" = ${profileImage},
+        "externalCourseRate" = ${externalCourseRate}, "pricingMethod" = ${pricingMethod},
+        "studentTierRates" = ${JSON.stringify(studentTierRates)}::jsonb,
+        "bonusEnabled" = ${bonusEnabled}, "bonusMinStudents" = ${bonusMinStudents}, "bonusPerHour" = ${bonusPerHour},
+        "profileImage" = ${profileImage},
         "userId" = COALESCE(${userId}, "userId"),
         "updatedAt" = ${now}
       WHERE id = ${id}
