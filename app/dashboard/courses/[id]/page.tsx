@@ -47,6 +47,8 @@ interface Enrollment {
   createdByUserName?: string | null
   siblingDiscountPackageName?: string | null
   siblingDiscountPackageSource?: "course" | "student" | null
+  siblingRank?: number | null
+  siblingRankLabel?: string | null
 }
 
 interface CourseSessionFeedback {
@@ -118,6 +120,7 @@ export default function CourseViewPage() {
     student: locale === "ar" ? "الطالب" : locale === "en" ? "Student" : "תלמיד",
     enrollmentDate: locale === "ar" ? "تاريخ التسجيل" : locale === "en" ? "Enrollment Date" : "תאריך רישום",
     siblingPackage: locale === "ar" ? "حزمة خصم إخوة" : locale === "en" ? "Sibling Discount Package" : "חבילת הנחת אחים",
+    siblingRank: locale === "ar" ? "ترتيب الأخ" : locale === "en" ? "Sibling Order" : "סדר אחאות",
     packageSource: locale === "ar" ? "מקור חבילה" : locale === "en" ? "Package Source" : "מקור חבילה",
     sourceCourse: locale === "ar" ? "من الدورة" : locale === "en" ? "From Course" : "מהקורס",
     sourceStudent: locale === "ar" ? "من الطالب" : locale === "en" ? "From Student" : "מהתלמיד",
@@ -366,6 +369,7 @@ export default function CourseViewPage() {
   const courseTeachers = teachers.filter(t => 
     course.teacherIds && course.teacherIds.includes(t.id)
   )
+  const expectedTotalByEnrollments = enrollments.reduce((sum, e) => sum + Number((e as any).coursePrice || 0), 0)
 
   const daysOfWeek = Array.isArray(course.daysOfWeek) ? course.daysOfWeek : []
   const isTotalPriceMode =
@@ -511,6 +515,10 @@ export default function CourseViewPage() {
                   <span className="text-muted-foreground">{tr.totalStudents}:</span>
                   <span className="font-bold text-2xl text-blue-600">{enrollments.length}</span>
                 </div>
+                <div className="mt-3 flex flex-row-reverse justify-between items-center">
+                  <span className="text-muted-foreground">עלות משוערת אחרי הנחות אחים:</span>
+                  <span className="font-bold text-xl text-emerald-600">₪{expectedTotalByEnrollments.toLocaleString()}</span>
+                </div>
               </CardContent>
             </Card>
 
@@ -631,6 +639,7 @@ export default function CourseViewPage() {
                         <TableHead className="text-right">{tr.status}</TableHead>
                         <TableHead className="text-right">{tr.enrollmentDate}</TableHead>
                         <TableHead className="text-right">{tr.siblingPackage}</TableHead>
+                        <TableHead className="text-right">{tr.siblingRank}</TableHead>
                         <TableHead className="text-right">{tr.packageSource}</TableHead>
                         <TableHead className="text-right">{tr.performedBy}</TableHead>
                       </TableRow>
@@ -648,6 +657,7 @@ export default function CourseViewPage() {
                             {enrollment.enrollmentDate ? new Date(enrollment.enrollmentDate).toLocaleDateString(localeTag) : "-"}
                           </TableCell>
                           <TableCell className="text-right text-muted-foreground">{enrollment.siblingDiscountPackageName || "—"}</TableCell>
+                          <TableCell className="text-right text-muted-foreground">{enrollment.siblingRankLabel || "—"}</TableCell>
                           <TableCell className="text-right text-muted-foreground">
                             {enrollment.siblingDiscountPackageSource === "course"
                               ? tr.sourceCourse

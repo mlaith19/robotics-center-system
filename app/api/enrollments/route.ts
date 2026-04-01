@@ -138,14 +138,31 @@ export const GET = withTenantAuth(async (req, _session) => {
     const rows = result as Record<string, unknown>[]
     const studentIds = [...new Set(rows.map((r) => String(r.studentId || "")).filter(Boolean))]
     const packageByStudent = new Map<string, string>()
+    const groupByStudent = new Map<string, string>()
+    const groupPackage = new Map<string, string>()
     if (studentIds.length) {
-      const students = await db<{ id: string; siblingDiscountPackageId: string | null }[]>`
-        SELECT id, "siblingDiscountPackageId"
+      const students = await db<{ id: string; siblingDiscountPackageId: string | null; siblingGroupId: string | null }[]>`
+        SELECT id, "siblingDiscountPackageId", "siblingGroupId"
         FROM "Student"
         WHERE id = ANY(${studentIds}::text[])
       `
       for (const s of students) {
         if (s.siblingDiscountPackageId) packageByStudent.set(s.id, s.siblingDiscountPackageId)
+        if (s.siblingGroupId) groupByStudent.set(s.id, s.siblingGroupId)
+      }
+      for (const s of students) {
+        if (!s.siblingGroupId) continue
+        if (!s.siblingDiscountPackageId) continue
+        if (!groupPackage.has(s.siblingGroupId)) {
+          groupPackage.set(s.siblingGroupId, s.siblingDiscountPackageId)
+        }
+      }
+      for (const s of students) {
+        if (packageByStudent.has(s.id)) continue
+        const gid = s.siblingGroupId
+        if (!gid) continue
+        const inherited = groupPackage.get(gid)
+        if (inherited) packageByStudent.set(s.id, inherited)
       }
     }
 
@@ -179,6 +196,8 @@ export const GET = withTenantAuth(async (req, _session) => {
       let effectivePrice = Number(r.coursePrice || 0)
       let siblingDiscountPackageName: string | null = null
       let siblingDiscountPackageSource: "course" | "student" | null = null
+      let siblingRank: number | null = null
+      let siblingRankLabel: string | null = null
       if (pkg && studentIdVal) {
         siblingDiscountPackageName = String(pkg.name || "")
         siblingDiscountPackageSource = coursePackageId ? "course" : studentPackageId ? "student" : null
@@ -187,6 +206,8 @@ export const GET = withTenantAuth(async (req, _session) => {
           rank = await getSiblingRank(db, studentIdVal)
           rankCache.set(studentIdVal, rank)
         }
+        siblingRank = rank && rank > 0 ? rank : null
+        siblingRankLabel = siblingRank ? `אח ${siblingRank}` : null
         const resolvedRank = rank && rank > 0 ? rank : 1
         const amountForRank = resolveSiblingAmountByRank(pkg, resolvedRank)
         if (amountForRank != null) {
@@ -202,6 +223,8 @@ export const GET = withTenantAuth(async (req, _session) => {
         coursePrice: effectivePrice,
         siblingDiscountPackageName,
         siblingDiscountPackageSource,
+        siblingRank,
+        siblingRankLabel,
       })
     }
     return Response.json(finalRows)
