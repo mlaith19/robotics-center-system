@@ -56,7 +56,8 @@ export const POST = withTenantAuth(async (req, session) => {
     return Response.json(result[0], { status: 201 })
   } catch (err) {
     console.error("POST /api/sibling-discount-packages error:", err)
-    return Response.json({ error: "Failed to create sibling package" }, { status: 500 })
+    const message = err instanceof Error ? err.message : String(err)
+    return Response.json({ error: "Failed to create sibling package", message }, { status: 500 })
   }
 })
 

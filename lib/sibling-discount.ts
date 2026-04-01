@@ -41,6 +41,13 @@ export async function ensureSiblingDiscountTables(sql: Sql) {
       )
     `
   )
+  await safeExec(
+    "add sibling package pricing mode column",
+    sql`
+      ALTER TABLE "SiblingDiscountPackage"
+      ADD COLUMN IF NOT EXISTS "pricingMode" TEXT NOT NULL DEFAULT 'perCourse'
+    `
+  )
 
   await safeExec(
     "add student sibling group column",
