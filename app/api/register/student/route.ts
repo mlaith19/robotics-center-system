@@ -116,12 +116,6 @@ export async function POST(req: Request) {
     if (existingByUsername.length > 0) {
       return Response.json({ error: "שם המשתמש כבר קיים במערכת" }, { status: 409 })
     }
-    if (email) {
-      const existingByEmail = await db`SELECT id FROM "User" WHERE email IS NOT NULL AND LOWER(email) = LOWER(${email}) LIMIT 1`
-      if (existingByEmail.length > 0) {
-        return Response.json({ error: "כתובת המייל כבר קיימת במערכת" }, { status: 409 })
-      }
-    }
 
     const userId = crypto.randomUUID()
     const studentId = crypto.randomUUID()

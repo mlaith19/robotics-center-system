@@ -339,15 +339,15 @@ function RegisterStudentContent() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email">אימייל</Label>
+              <Label htmlFor="email">אימייל (לא חובה)</Label>
               <div className="relative">
                 <Mail className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="email"
-                  type="email"
+                  type="text"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="הכנס אימייל"
+                  placeholder="הכנס אימייל (לא חובה)"
                   className="pr-10"
                   disabled={isSubmitting}
                 />

@@ -810,24 +810,46 @@ export default function CourseViewPage() {
         )}
 
         {canTabAttendanceStudents && (
-        <TabsContent value="attendance-students" className="space-y-6">
+        <TabsContent value="attendance-students" className="space-y-6" dir={isRtl ? "rtl" : "ltr"}>
           <Card>
-            <CardHeader className="flex flex-row-reverse items-center justify-start gap-2 pb-4">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <CalendarCheck className="h-5 w-5 text-purple-600" />
+            <CardHeader className="pb-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-purple-100 rounded-lg">
+                    <CalendarCheck className="h-5 w-5 text-purple-600" />
+                  </div>
+                  <CardTitle className="text-lg">{tr.studentAttendanceTitle}</CardTitle>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">{tr.date}:</span>
+                  <input
+                    type="date"
+                    value={attendanceDate}
+                    onChange={(e) => setAttendanceDate(e.target.value)}
+                    className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
+                  />
+                </div>
               </div>
-              <CardTitle className="text-lg">{tr.studentAttendanceTitle}</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-                <span className="text-sm text-muted-foreground">{tr.date}:</span>
-                <input
-                  type="date"
-                  value={attendanceDate}
-                  onChange={(e) => setAttendanceDate(e.target.value)}
-                  className="flex h-10 w-full max-w-full rounded-md border border-input bg-background px-3 py-2 text-sm sm:w-auto"
-                />
-              </div>
+              {(() => {
+                const vals = Object.values(attendanceByStudent)
+                const total = enrollments.length
+                const present = vals.filter((s) => s === "present" || s === "PRESENT").length
+                const absent = vals.filter((s) => s === "absent" || s === "ABSENT").length
+                const sick = vals.filter((s) => s === "sick" || s === "SICK").length
+                const vacation = vals.filter((s) => s === "vacation" || s === "VACATION").length
+                const unmarked = total - present - absent - sick - vacation
+                return total > 0 ? (
+                  <div className="mb-4 flex flex-wrap gap-3 text-sm">
+                    <span className="rounded-md bg-green-100 text-green-800 px-3 py-1 font-medium">{tr.present}: {present}</span>
+                    <span className="rounded-md bg-red-100 text-red-800 px-3 py-1 font-medium">{tr.absent}: {absent}</span>
+                    <span className="rounded-md bg-orange-100 text-orange-800 px-3 py-1 font-medium">{tr.sick}: {sick}</span>
+                    <span className="rounded-md bg-blue-100 text-blue-800 px-3 py-1 font-medium">{tr.vacation}: {vacation}</span>
+                    {unmarked > 0 && <span className="rounded-md bg-gray-100 text-gray-600 px-3 py-1 font-medium">טרם סומן: {unmarked}</span>}
+                  </div>
+                ) : null
+              })()}
               <div className="mb-6 overflow-x-auto rounded-md border">
                 <Table className="min-w-0">
                   <TableHeader>
@@ -901,13 +923,15 @@ export default function CourseViewPage() {
         )}
 
         {canTabAttendanceTeachers && (
-        <TabsContent value="attendance-teachers" className="space-y-6">
+        <TabsContent value="attendance-teachers" className="space-y-6" dir={isRtl ? "rtl" : "ltr"}>
           <Card>
-            <CardHeader className="flex flex-row-reverse items-center justify-start gap-2 pb-4">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <CalendarCheck className="h-5 w-5 text-purple-600" />
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <CalendarCheck className="h-5 w-5 text-purple-600" />
+                </div>
+                <CardTitle className="text-lg">{tr.teacherAttendanceTitle}</CardTitle>
               </div>
-              <CardTitle className="text-lg">{tr.teacherAttendanceTitle}</CardTitle>
             </CardHeader>
             <CardContent>
               {(() => {

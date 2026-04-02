@@ -42,12 +42,13 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
   try {
     await ensureCampTables(db)
     const crs = await db`
-      SELECT id, "courseType", "startDate", "endDate", "daysOfWeek", "startTime", "endTime"
+      SELECT id, name, "courseType", "startDate", "endDate", "daysOfWeek", "startTime", "endTime"
       FROM "Course"
       WHERE id = ${courseId}
     `
     if (crs.length === 0) return Response.json({ error: "Course not found" }, { status: 404 })
     const courseRow = crs[0] as {
+      name?: string
       courseType?: string
       startDate?: string | null
       endDate?: string | null
@@ -82,7 +83,9 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
       }
     }
 
-    const settings = (await db`SELECT camp_classrooms_count, camp_classrooms FROM center_settings WHERE id = 1`) || []
+    const settings = (await db`SELECT center_name, logo, camp_classrooms_count, camp_classrooms FROM center_settings WHERE id = 1`) || []
+    const centerName = String((settings[0] as { center_name?: string } | undefined)?.center_name || "")
+    const centerLogo = String((settings[0] as { logo?: string } | undefined)?.logo || "")
     const classroomsCount = Math.max(1, Math.min(12, Number((settings[0] as { camp_classrooms_count?: number } | undefined)?.camp_classrooms_count || 6)))
     const classroomsRaw = (settings[0] as { camp_classrooms?: unknown } | undefined)?.camp_classrooms
     const classroomsConfigured = Array.isArray(classroomsRaw) ? classroomsRaw as Array<{ number?: number; name?: string; notes?: string }> : []
@@ -187,6 +190,9 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
 
     return Response.json({
       courseId,
+      courseName: String(courseRow.name || ""),
+      centerName,
+      centerLogo,
       classroomsCount,
       classrooms,
       teachers,
