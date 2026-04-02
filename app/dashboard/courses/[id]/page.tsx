@@ -538,7 +538,7 @@ export default function CourseViewPage() {
   ].filter(Boolean).length
 
   return (
-    <div dir={isRtl ? "rtl" : "ltr"} className="container mx-auto max-w-4xl space-y-4 p-3 sm:space-y-6 sm:p-6">
+    <div dir={isRtl ? "rtl" : "ltr"} className="container mx-auto max-w-[1400px] space-y-4 p-3 sm:space-y-6 sm:p-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
@@ -1267,6 +1267,7 @@ tr:nth-child(even) td{background:#f9fafb}
                           <TableHead className="text-center">סה&quot;כ שעות</TableHead>
                           <TableHead className="text-right">{tr.status}</TableHead>
                           <TableHead className="text-right">{tr.note}</TableHead>
+                          <TableHead className="text-right">{tr.performedBy}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1288,6 +1289,7 @@ tr:nth-child(even) td{background:#f9fafb}
                                 <TableCell className="text-center font-medium">{totalH > 0 ? totalH.toFixed(1) : "—"}</TableCell>
                                 <TableCell className="text-right">{statusLabel}</TableCell>
                                 <TableCell className="text-right text-muted-foreground">{a.notes ?? "—"}</TableCell>
+                                <TableCell className="text-right text-muted-foreground">{a.createdByUserName || "—"}</TableCell>
                               </TableRow>
                             )
                           })
