@@ -2,11 +2,18 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Loader2, Plus, Trash2, CalendarRange } from "lucide-react"
+import { Loader2, Plus, Trash2, CalendarRange, ChevronDown } from "lucide-react"
 
 type TeacherOpt = { id: string; name: string }
 type ClassroomDef = { number: number; name: string; notes?: string }
@@ -37,7 +44,6 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
   const { courseId, canEdit } = props
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [genLoading, setGenLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [teachers, setTeachers] = useState<TeacherOpt[]>([])
   const [groupLetters, setGroupLetters] = useState<string[]>([])
@@ -107,25 +113,6 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
     }
   }
 
-  async function handleGenerateDays() {
-    if (!canEdit) return
-    setGenLoading(true)
-    setErr(null)
-    try {
-      const res = await fetch(`/api/courses/${courseId}/camp/generate-days`, { method: "POST" })
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}))
-        setErr(String(j.error || "יצירת ימים נכשלה"))
-        return
-      }
-      await load()
-    } catch {
-      setErr("שגיאת רשת")
-    } finally {
-      setGenLoading(false)
-    }
-  }
-
   function cellFor(slot: CampMeetingSlot, classroomNo: number): CampMeetingCell {
     return slot.cells.find((c) => c.classroomNo === classroomNo)
       || { id: newId(), classroomNo, lessonTitle: "", groupLabels: [], teacherIds: [] }
@@ -165,9 +152,8 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
           <CardTitle className="text-lg">מבנה קייטנה</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="text-sm text-muted-foreground">עמודות הטבלה הן כיתה 1..{classroomsCount} לפי הגדרת מרכז. משבצות זמן מוגדרות לכל מפגש בנפרד.</div>
+          <div className="text-sm text-muted-foreground">המפגשים והכיתות נוצרים אוטומטית מנתוני הקורס וההגדרות המתקדמות. כאן רק עורכים שעות, קבוצות ומורים.</div>
           <div className="flex gap-2">
-            {canEdit && <Button type="button" variant="secondary" onClick={handleGenerateDays} disabled={genLoading}>{genLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}צור ימים מתאריכי הקורס</Button>}
             {canEdit && <Button type="button" onClick={handleSave} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}שמור מבנה</Button>}
           </div>
         </CardContent>
@@ -209,8 +195,8 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
                     </div>
                   )}
                 </CardHeader>
-                <CardContent className="overflow-x-auto">
-                  <table className="w-full min-w-[900px] border-collapse text-sm">
+                <CardContent className="hidden md:block">
+                  <table className="w-full table-fixed border-collapse text-sm">
                     <thead><tr><th className="border p-2 bg-muted/40 text-right">שעה</th>{classrooms.map((c) => <th key={c.number} className="border p-2 bg-muted/40 text-right">{c.name}</th>)}</tr></thead>
                     <tbody>
                       {sortedSlots.map((slot) => (
@@ -250,34 +236,60 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
                                 <td key={classroom.number} className="border p-2 align-top">
                                   <div className="space-y-2">
                                     <Input placeholder="שם שיעור" value={a.lessonTitle} disabled={!canEdit} onChange={(e) => patchCell(meeting.id, slot.id, classNo, { lessonTitle: e.target.value })} />
-                                    <div className="grid grid-cols-6 gap-1">
-                                      {groupLetters.map((g) => (
-                                        <label key={g} className="flex items-center gap-1 text-xs">
-                                          <Checkbox
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <Button type="button" variant="outline" size="sm" className="w-full justify-between" disabled={!canEdit}>
+                                          קבוצות ({a.groupLabels.length})
+                                          <ChevronDown className="h-4 w-4" />
+                                        </Button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent className="max-h-64 w-44">
+                                        {groupLetters.map((g) => (
+                                          <DropdownMenuCheckboxItem
+                                            key={g}
                                             checked={a.groupLabels.includes(g)}
-                                            disabled={!canEdit}
                                             onCheckedChange={(v) => {
                                               const next = v ? [...new Set([...a.groupLabels, g])] : a.groupLabels.filter((x) => x !== g)
                                               patchCell(meeting.id, slot.id, classNo, { groupLabels: next })
                                             }}
-                                          />
-                                          {g}
-                                        </label>
+                                          >
+                                            {g}
+                                          </DropdownMenuCheckboxItem>
+                                        ))}
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                    <div className="flex flex-wrap gap-1">
+                                      {a.groupLabels.map((g) => (
+                                        <Badge key={g} variant="secondary">{g}</Badge>
                                       ))}
                                     </div>
-                                    <div className="space-y-1">
-                                      {teachers.map((t) => (
-                                        <label key={t.id} className="flex items-center gap-1 text-xs">
-                                          <Checkbox
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <Button type="button" variant="outline" size="sm" className="w-full justify-between" disabled={!canEdit}>
+                                          מורים ({a.teacherIds.length})
+                                          <ChevronDown className="h-4 w-4" />
+                                        </Button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent className="max-h-64 w-56">
+                                        {teachers.map((t) => (
+                                          <DropdownMenuCheckboxItem
+                                            key={t.id}
                                             checked={a.teacherIds.includes(t.id)}
-                                            disabled={!canEdit}
                                             onCheckedChange={(v) => {
                                               const next = v ? [...new Set([...a.teacherIds, t.id])] : a.teacherIds.filter((x) => x !== t.id)
                                               patchCell(meeting.id, slot.id, classNo, { teacherIds: next })
                                             }}
-                                          />
-                                          {t.name}
-                                        </label>
+                                          >
+                                            {t.name}
+                                          </DropdownMenuCheckboxItem>
+                                        ))}
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                    <div className="flex flex-wrap gap-1">
+                                      {a.teacherIds.map((teacherId) => (
+                                        <Badge key={teacherId} variant="outline">
+                                          {teachers.find((t) => t.id === teacherId)?.name || "מורה"}
+                                        </Badge>
                                       ))}
                                     </div>
                                   </div>
@@ -289,6 +301,73 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
                       ))}
                     </tbody>
                   </table>
+                </CardContent>
+                <CardContent className="space-y-3 md:hidden">
+                  {sortedSlots.map((slot) => (
+                    <div key={slot.id} className="rounded-md border p-3 space-y-3">
+                      <div className="text-sm font-medium">{slot.startTime} - {slot.endTime}</div>
+                      {slot.isBreak ? (
+                        <div className="rounded-md bg-amber-100 p-2 text-amber-900 font-medium">{slot.breakTitle?.trim() || "הפסקה"}</div>
+                      ) : (
+                        classrooms.map((classroom) => {
+                          const classNo = classroom.number
+                          const a = cellFor(slot, classNo)
+                          return (
+                            <div key={classroom.number} className="rounded-md border p-2 space-y-2">
+                              <div className="text-xs text-muted-foreground">{classroom.name}</div>
+                              <Input placeholder="שם שיעור" value={a.lessonTitle} disabled={!canEdit} onChange={(e) => patchCell(meeting.id, slot.id, classNo, { lessonTitle: e.target.value })} />
+                              <div className="grid grid-cols-2 gap-2">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button type="button" variant="outline" size="sm" className="justify-between" disabled={!canEdit}>
+                                      קבוצות ({a.groupLabels.length})
+                                      <ChevronDown className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent className="max-h-64 w-44">
+                                    {groupLetters.map((g) => (
+                                      <DropdownMenuCheckboxItem
+                                        key={g}
+                                        checked={a.groupLabels.includes(g)}
+                                        onCheckedChange={(v) => {
+                                          const next = v ? [...new Set([...a.groupLabels, g])] : a.groupLabels.filter((x) => x !== g)
+                                          patchCell(meeting.id, slot.id, classNo, { groupLabels: next })
+                                        }}
+                                      >
+                                        {g}
+                                      </DropdownMenuCheckboxItem>
+                                    ))}
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button type="button" variant="outline" size="sm" className="justify-between" disabled={!canEdit}>
+                                      מורים ({a.teacherIds.length})
+                                      <ChevronDown className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent className="max-h-64 w-56">
+                                    {teachers.map((t) => (
+                                      <DropdownMenuCheckboxItem
+                                        key={t.id}
+                                        checked={a.teacherIds.includes(t.id)}
+                                        onCheckedChange={(v) => {
+                                          const next = v ? [...new Set([...a.teacherIds, t.id])] : a.teacherIds.filter((x) => x !== t.id)
+                                          patchCell(meeting.id, slot.id, classNo, { teacherIds: next })
+                                        }}
+                                      >
+                                        {t.name}
+                                      </DropdownMenuCheckboxItem>
+                                    ))}
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                  ))}
                 </CardContent>
               </Card>
             </TabsContent>

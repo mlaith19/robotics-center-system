@@ -4,7 +4,7 @@ import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
 import { requirePerm } from "@/lib/require-perm"
 import { hasFullAccessRole, hasPermission } from "@/lib/permissions"
-import { ensureCampTables, HEBREW_GROUP_LETTERS, isCampCourseType } from "@/lib/camp-kaytana"
+import { ensureCampTables, HEBREW_GROUP_LETTERS, isCampCourseType, listCampSessionDates } from "@/lib/camp-kaytana"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -41,11 +41,45 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
 
   try {
     await ensureCampTables(db)
-    const crs = await db`SELECT id, "courseType" FROM "Course" WHERE id = ${courseId}`
+    const crs = await db`
+      SELECT id, "courseType", "startDate", "endDate", "daysOfWeek", "startTime", "endTime"
+      FROM "Course"
+      WHERE id = ${courseId}
+    `
     if (crs.length === 0) return Response.json({ error: "Course not found" }, { status: 404 })
-    const courseType = String((crs[0] as { courseType?: string }).courseType || "")
+    const courseRow = crs[0] as {
+      courseType?: string
+      startDate?: string | null
+      endDate?: string | null
+      daysOfWeek?: string[] | unknown
+      startTime?: string | null
+      endTime?: string | null
+    }
+    const courseType = String(courseRow.courseType || "")
     if (!isCampCourseType(courseType)) {
       return Response.json({ error: "Not a camp course", code: "not_camp" }, { status: 400 })
+    }
+    const daysOfWeek = Array.isArray(courseRow.daysOfWeek) ? (courseRow.daysOfWeek as string[]) : []
+    const sessionDates = listCampSessionDates(courseRow.startDate ?? undefined, courseRow.endDate ?? undefined, daysOfWeek)
+    const defaultStartTime = String(courseRow.startTime || "08:30").slice(0, 5)
+    const defaultEndTime = String(courseRow.endTime || "09:15").slice(0, 5)
+
+    for (let i = 0; i < sessionDates.length; i += 1) {
+      const date = sessionDates[i]
+      await db`
+        INSERT INTO "CampMeeting" (id, "courseId", "sessionDate", "sortOrder")
+        VALUES (${randomUUID()}, ${courseId}, ${date}, ${i + 1})
+        ON CONFLICT ("courseId","sessionDate")
+        DO UPDATE SET "sortOrder" = EXCLUDED."sortOrder"
+      `
+    }
+    const existingMeetingsForCourse =
+      (await db`SELECT id, "sessionDate" FROM "CampMeeting" WHERE "courseId" = ${courseId}`) || []
+    const allowedDates = new Set(sessionDates)
+    for (const row of existingMeetingsForCourse as { id: string; sessionDate: string }[]) {
+      if (!allowedDates.has(String(row.sessionDate))) {
+        await db`DELETE FROM "CampMeeting" WHERE id = ${row.id}`
+      }
     }
 
     const settings = (await db`SELECT camp_classrooms_count, camp_classrooms FROM center_settings WHERE id = 1`) || []
@@ -99,8 +133,21 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
           WHERE "meetingId" = ${m.id}
           ORDER BY "sortOrder", "startTime"
         `) || []
+      if (!slotRows.length) {
+        await db`
+          INSERT INTO "CampMeetingSlot" (id, "meetingId", "sortOrder", "startTime", "endTime", "isBreak", "breakTitle")
+          VALUES (${randomUUID()}, ${m.id}, ${1}, ${defaultStartTime}, ${defaultEndTime}, ${false}, ${""})
+        `
+      }
       const slots = []
-      for (const s of slotRows as { id: string; sortOrder: number; startTime: string; endTime: string; isBreak: boolean; breakTitle: string }[]) {
+      const effectiveSlotRows =
+        (await db`
+          SELECT id, "sortOrder", "startTime", "endTime", "isBreak", "breakTitle"
+          FROM "CampMeetingSlot"
+          WHERE "meetingId" = ${m.id}
+          ORDER BY "sortOrder", "startTime"
+        `) || []
+      for (const s of effectiveSlotRows as { id: string; sortOrder: number; startTime: string; endTime: string; isBreak: boolean; breakTitle: string }[]) {
         const cellRows =
           (await db`
             SELECT id, "classroomNo", "lessonTitle"
