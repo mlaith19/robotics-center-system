@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { ArrowRight, Pencil, Loader2, BookOpen, Calendar, Users, BarChart3, CalendarCheck, Check, X, Thermometer, Plane, CalendarRange } from "lucide-react"
+import { ArrowRight, Pencil, Loader2, BookOpen, Calendar, Users, BarChart3, CalendarCheck, Check, X, Thermometer, Plane, CalendarRange, Printer } from "lucide-react"
 import { courseTimeToDisplayValue } from "@/lib/course-db-fields"
 import { useLanguage } from "@/lib/i18n/context"
 
@@ -181,6 +181,8 @@ export default function CourseViewPage() {
   const canTabSessionsFeedback = isAdmin || hasPermission(userPerms, "courses.tab.feedback") || hasPermission(userPerms, "courses.tab.attendance.students")
   const isCampCourse = !!(course && isCampCourseType(course.courseType))
   const canTabCamp = isCampCourse && (isAdmin || hasPermission(userPerms, "courses.tab.camp"))
+  const [centerName, setCenterName] = useState("")
+  const [centerLogo, setCenterLogo] = useState("")
   const [attendanceList, setAttendanceList] = useState<{ id: string; studentId: string | null; teacherId: string | null; date: string; status: string; notes?: string | null; createdByUserName?: string | null }[]>([])
   const [attendanceDate, setAttendanceDate] = useState(() => new Date().toISOString().split("T")[0])
   const [attendanceByStudent, setAttendanceByStudent] = useState<Record<string, string>>({})
@@ -204,10 +206,11 @@ export default function CourseViewPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [courseRes, teachersRes, enrollmentsRes] = await Promise.all([
+        const [courseRes, teachersRes, enrollmentsRes, settingsRes] = await Promise.all([
           fetch(`/api/courses/${id}`),
           fetch("/api/teachers"),
-          fetch(`/api/enrollments?courseId=${id}`)
+          fetch(`/api/enrollments?courseId=${id}`),
+          fetch("/api/settings"),
         ])
         if (courseRes.ok) {
           const data = await courseRes.json()
@@ -220,6 +223,11 @@ export default function CourseViewPage() {
         if (enrollmentsRes.ok) {
           const data = await enrollmentsRes.json()
           setEnrollments(Array.isArray(data) ? data : [])
+        }
+        if (settingsRes.ok) {
+          const s = await settingsRes.json()
+          setCenterName(String(s.center_name || ""))
+          setCenterLogo(String(s.logo || ""))
         }
       } catch (err) {
         console.error("Failed to fetch data:", err)
@@ -802,8 +810,68 @@ export default function CourseViewPage() {
         {!isStudentUser && canTabPayments && (
         <TabsContent value="payments">
           <Card>
-            <CardContent className="p-6 text-center text-muted-foreground">
-              {tr.paymentInfoPlaceholder}
+            <CardContent className="p-6 space-y-4">
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="gap-1 bg-purple-600 hover:bg-purple-700 text-white"
+                  onClick={() => {
+                    const w = window.open("", "_blank")
+                    if (!w) return
+                    const logoHtml = centerLogo ? `<img src="${centerLogo}" style="max-height:60px;max-width:160px;object-fit:contain" />` : ""
+                    w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>עלות ותשלומים - ${course?.name || ""}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;padding:32px 40px;color:#1f2937;max-width:980px;margin:0 auto}.header{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:20px;padding-bottom:12px;border-bottom:2px solid #3b82f6}.header h1{font-size:22px;color:#1e40af;margin-top:6px}.header h2{font-size:15px;color:#4b5563;font-weight:400;margin-top:2px}.summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0 16px}.box{border:1px solid #dbeafe;background:#eff6ff;border-radius:8px;padding:10px 12px}.label{font-size:12px;color:#1e40af}.val{font-size:18px;font-weight:700;color:#1f2937;margin-top:2px}table{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px}th{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:8px 10px;text-align:center;font-weight:600}td{border:1px solid #d1d5db;padding:8px 10px;text-align:center;vertical-align:middle}tr:nth-child(even) td{background:#f9fafb}@media print{body{padding:20px 28px;max-width:100%}@page{margin:20mm 15mm}}</style></head><body>`)
+                    w.document.write(`<div class="header">${logoHtml}<h1>${centerName || "מרכז"}</h1>${course?.name ? `<h2 style="font-size:17px;color:#1f2937;font-weight:600;margin-top:4px">${course.name}</h2>` : ""}<h2>דוח עלות ותשלומים</h2></div>`)
+                    w.document.write(`<div class="summary"><div class="box"><div class="label">מספר תלמידים משויכים</div><div class="val">${enrollments.length}</div></div><div class="box"><div class="label">מחיר קורס לתלמיד</div><div class="val">₪${Number(course?.price || 0).toLocaleString()}</div></div></div>`)
+                    w.document.write(`<table><thead><tr><th>#</th><th>תלמיד</th><th>סטטוס הרשמה</th><th>תאריך הרשמה</th><th>קבוצה</th><th>חבילת אחים</th></tr></thead><tbody>`)
+                    enrollments.forEach((e, idx) => {
+                      const d = e.enrollmentDate ? new Date(e.enrollmentDate).toLocaleDateString(localeTag) : "—"
+                      const groupLabel = e.campGroupLabel ? `קבוצה ${e.campGroupLabel}` : "—"
+                      w.document.write(`<tr><td>${idx + 1}</td><td>${e.studentName || "—"}</td><td>${e.status || "—"}</td><td>${d}</td><td>${groupLabel}</td><td>${e.siblingDiscountPackageName || "—"}</td></tr>`)
+                    })
+                    w.document.write(`</tbody></table></body></html>`)
+                    w.document.close()
+                    setTimeout(() => w.print(), 300)
+                  }}
+                >
+                  <Printer className="h-4 w-4" />
+                  הדפסת עלות ותשלומים
+                </Button>
+              </div>
+              <div className="text-center text-muted-foreground">
+                {tr.paymentInfoPlaceholder}
+              </div>
+              <div className="overflow-x-auto rounded-md border">
+                <Table className="min-w-[760px]">
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="text-right">{tr.student}</TableHead>
+                      <TableHead className="text-right">{tr.status}</TableHead>
+                      <TableHead className="text-right">{tr.enrollmentDate}</TableHead>
+                      <TableHead className="text-right">{locale === "ar" ? "المجموعة" : locale === "en" ? "Group" : "קבוצה"}</TableHead>
+                      <TableHead className="text-right">{tr.siblingPackage}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {enrollments.length > 0 ? enrollments.map((e) => (
+                      <TableRow key={e.id}>
+                        <TableCell className="text-right">{e.studentName || "—"}</TableCell>
+                        <TableCell className="text-right">{e.status || "—"}</TableCell>
+                        <TableCell className="text-right">{e.enrollmentDate ? new Date(e.enrollmentDate).toLocaleDateString(localeTag) : "—"}</TableCell>
+                        <TableCell className="text-right">{e.campGroupLabel ? `קבוצה ${e.campGroupLabel}` : "—"}</TableCell>
+                        <TableCell className="text-right">{e.siblingDiscountPackageName || "—"}</TableCell>
+                      </TableRow>
+                    )) : (
+                      <TableRow>
+                        <TableCell className="text-center text-muted-foreground" colSpan={5}>
+                          {tr.noneStudents}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -828,6 +896,48 @@ export default function CourseViewPage() {
                     onChange={(e) => setAttendanceDate(e.target.value)}
                     className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
                   />
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="gap-1 bg-purple-600 hover:bg-purple-700 text-white"
+                    onClick={() => {
+                      const w = window.open("", "_blank")
+                      if (!w) return
+                      const logoHtml = centerLogo ? `<img src="${centerLogo}" style="max-height:60px;max-width:160px;object-fit:contain" />` : ""
+                      const dateStr = new Date(attendanceDate).toLocaleDateString(localeTag)
+                      w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>רשימת נוכחות - ${course?.name || ""}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;padding:32px 40px;color:#1f2937;max-width:900px;margin:0 auto}
+.header{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:20px;padding-bottom:12px;border-bottom:2px solid #3b82f6}
+.header h1{font-size:22px;color:#1e40af;margin-top:6px}
+.header h2{font-size:15px;color:#4b5563;font-weight:400;margin-top:2px}
+table{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px}
+th{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:8px 10px;text-align:center;font-weight:600}
+td{border:1px solid #d1d5db;padding:8px 10px;text-align:center;vertical-align:middle}
+tr:nth-child(even) td{background:#f9fafb}
+.status-present{color:#166534;font-weight:600}
+.status-absent{color:#991b1b;font-weight:600}
+.status-sick{color:#9a3412;font-weight:600}
+.status-vacation{color:#1e40af;font-weight:600}
+@media print{body{padding:20px 28px;max-width:100%}@page{margin:20mm 15mm}}
+</style></head><body>`)
+                      w.document.write(`<div class="header">${logoHtml}<h1>${centerName || "מרכז"}</h1>${course?.name ? `<h2 style="font-size:17px;color:#1f2937;font-weight:600;margin-top:4px">${course.name}</h2>` : ""}<h2>רשימת נוכחות - ${dateStr}</h2></div>`)
+                      w.document.write(`<table><thead><tr><th>#</th><th>שם תלמיד</th><th>קבוצה</th><th>סטטוס</th><th>חתימה</th></tr></thead><tbody>`)
+                      enrollments.forEach((e, idx) => {
+                        const st = attendanceByStudent[e.studentId] || ""
+                        const statusText = st === "present" || st === "PRESENT" ? tr.present : st === "absent" || st === "ABSENT" ? tr.absent : st === "sick" || st === "SICK" ? tr.sick : st === "vacation" || st === "VACATION" ? tr.vacation : "—"
+                        const statusClass = st === "present" || st === "PRESENT" ? "status-present" : st === "absent" || st === "ABSENT" ? "status-absent" : st === "sick" || st === "SICK" ? "status-sick" : st === "vacation" || st === "VACATION" ? "status-vacation" : ""
+                        w.document.write(`<tr><td>${idx + 1}</td><td>${e.studentName || "—"}</td><td>${e.campGroupLabel ? "קבוצה " + e.campGroupLabel : "—"}</td><td class="${statusClass}">${statusText}</td><td style="min-width:80px"></td></tr>`)
+                      })
+                      w.document.write(`</tbody></table></body></html>`)
+                      w.document.close()
+                      setTimeout(() => w.print(), 300)
+                    }}
+                  >
+                    <Printer className="h-4 w-4" />
+                    הדפסה
+                  </Button>
                 </div>
               </div>
             </CardHeader>
@@ -926,11 +1036,44 @@ export default function CourseViewPage() {
         <TabsContent value="attendance-teachers" className="space-y-6" dir={isRtl ? "rtl" : "ltr"}>
           <Card>
             <CardHeader className="pb-4">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <CalendarCheck className="h-5 w-5 text-purple-600" />
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-purple-100 rounded-lg">
+                    <CalendarCheck className="h-5 w-5 text-purple-600" />
+                  </div>
+                  <CardTitle className="text-lg">{tr.teacherAttendanceTitle}</CardTitle>
                 </div>
-                <CardTitle className="text-lg">{tr.teacherAttendanceTitle}</CardTitle>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="gap-1 bg-purple-600 hover:bg-purple-700 text-white"
+                  onClick={() => {
+                    const teacherAtt = attendanceList.filter((a) => a.teacherId != null)
+                    const w = window.open("", "_blank")
+                    if (!w) return
+                    const logoHtml = centerLogo ? `<img src="${centerLogo}" style="max-height:60px;max-width:160px;object-fit:contain" />` : ""
+                    const startDisp = courseTimeToDisplayValue(course?.startTime) || "—"
+                    const endDisp = courseTimeToDisplayValue(course?.endTime) || "—"
+                    const parseHM = (t: string) => { const m = /^(\d{2}):(\d{2})$/.exec(t); return m ? Number(m[1]) + Number(m[2]) / 60 : 0 }
+                    const totalH = startDisp !== "—" && endDisp !== "—" ? Math.max(0, parseHM(endDisp) - parseHM(startDisp)) : 0
+                    w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>נוכחות מורים - ${course?.name || ""}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;padding:32px 40px;color:#1f2937;max-width:900px;margin:0 auto}.header{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:20px;padding-bottom:12px;border-bottom:2px solid #3b82f6}.header h1{font-size:22px;color:#1e40af;margin-top:6px}.header h2{font-size:15px;color:#4b5563;font-weight:400;margin-top:2px}table{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px}th{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:8px 10px;text-align:center;font-weight:600}td{border:1px solid #d1d5db;padding:8px 10px;text-align:center;vertical-align:middle}tr:nth-child(even) td{background:#f9fafb}.status-present{color:#166534;font-weight:600}.status-absent{color:#991b1b;font-weight:600}@media print{body{padding:20px 28px;max-width:100%}@page{margin:20mm 15mm}}</style></head><body>`)
+                    w.document.write(`<div class="header">${logoHtml}<h1>${centerName || "מרכז"}</h1>${course?.name ? `<h2 style="font-size:17px;color:#1f2937;font-weight:600;margin-top:4px">${course.name}</h2>` : ""}<h2>נוכחות מורים</h2></div>`)
+                    w.document.write(`<table><thead><tr><th>#</th><th>תאריך</th><th>מורה</th><th>משעה</th><th>עד שעה</th><th>סה"כ שעות</th><th>סטטוס</th><th>הערה</th></tr></thead><tbody>`)
+                    teacherAtt.forEach((a, idx) => {
+                      const teacher = teachers.find((t) => t.id === a.teacherId)
+                      const statusLabel = a.status === "present" || a.status === "PRESENT" ? "נוכח" : a.status === "absent" || a.status === "ABSENT" ? "חיסור" : a.status
+                      const cls = a.status === "present" || a.status === "PRESENT" ? "status-present" : "status-absent"
+                      w.document.write(`<tr><td>${idx + 1}</td><td>${new Date(a.date).toLocaleDateString("he-IL")}</td><td>${teacher?.name || "—"}</td><td>${startDisp}</td><td>${endDisp}</td><td>${totalH > 0 ? totalH.toFixed(1) : "—"}</td><td class="${cls}">${statusLabel}</td><td>${a.notes || "—"}</td></tr>`)
+                    })
+                    w.document.write(`</tbody></table></body></html>`)
+                    w.document.close()
+                    setTimeout(() => w.print(), 300)
+                  }}
+                >
+                  <Printer className="h-4 w-4" />
+                  הדפסה
+                </Button>
               </div>
             </CardHeader>
             <CardContent>
@@ -938,31 +1081,41 @@ export default function CourseViewPage() {
                 const teacherAttendance = attendanceList.filter((a) => a.teacherId != null)
                 return teacherAttendance.length > 0 ? (
                   <div className="overflow-x-auto rounded-md border">
-                    <Table className="min-w-[560px]">
+                    <Table className="min-w-[660px]">
                       <TableHeader>
                         <TableRow className="bg-muted/50">
                           <TableHead className="text-right">{tr.date}</TableHead>
                           <TableHead className="text-right">{tr.teachers}</TableHead>
+                          <TableHead className="text-center">משעה</TableHead>
+                          <TableHead className="text-center">עד שעה</TableHead>
+                          <TableHead className="text-center">סה&quot;כ שעות</TableHead>
                           <TableHead className="text-right">{tr.status}</TableHead>
                           <TableHead className="text-right">{tr.note}</TableHead>
-                          <TableHead className="text-right">{tr.performedBy}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {teacherAttendance.map((a) => {
-                          const teacher = teachers.find((t) => t.id === a.teacherId)
-                          const teacherName = teacher?.name ?? "—"
-                          const statusLabel = a.status === "present" || a.status === "PRESENT" ? tr.present : a.status === "absent" || a.status === "ABSENT" ? tr.absent : a.status
-                          return (
-                            <TableRow key={a.id}>
-                              <TableCell className="text-right">{new Date(a.date).toLocaleDateString(localeTag)}</TableCell>
-                              <TableCell className="text-right">{teacherName}</TableCell>
-                              <TableCell className="text-right">{statusLabel}</TableCell>
-                              <TableCell className="text-right text-muted-foreground">{a.notes ?? "—"}</TableCell>
-                              <TableCell className="text-right text-muted-foreground">{a.createdByUserName || "—"}</TableCell>
-                            </TableRow>
-                          )
-                        })}
+                        {(() => {
+                          const startDisp = courseTimeToDisplayValue(course?.startTime) || "—"
+                          const endDisp = courseTimeToDisplayValue(course?.endTime) || "—"
+                          const parseHM = (t: string) => { const m = /^(\d{2}):(\d{2})$/.exec(t); return m ? Number(m[1]) + Number(m[2]) / 60 : 0 }
+                          const totalH = startDisp !== "—" && endDisp !== "—" ? Math.max(0, parseHM(endDisp) - parseHM(startDisp)) : 0
+                          return teacherAttendance.map((a) => {
+                            const teacher = teachers.find((t) => t.id === a.teacherId)
+                            const teacherName = teacher?.name ?? "—"
+                            const statusLabel = a.status === "present" || a.status === "PRESENT" ? tr.present : a.status === "absent" || a.status === "ABSENT" ? tr.absent : a.status
+                            return (
+                              <TableRow key={a.id}>
+                                <TableCell className="text-right">{new Date(a.date).toLocaleDateString(localeTag)}</TableCell>
+                                <TableCell className="text-right">{teacherName}</TableCell>
+                                <TableCell className="text-center">{startDisp}</TableCell>
+                                <TableCell className="text-center">{endDisp}</TableCell>
+                                <TableCell className="text-center font-medium">{totalH > 0 ? totalH.toFixed(1) : "—"}</TableCell>
+                                <TableCell className="text-right">{statusLabel}</TableCell>
+                                <TableCell className="text-right text-muted-foreground">{a.notes ?? "—"}</TableCell>
+                              </TableRow>
+                            )
+                          })
+                        })()}
                       </TableBody>
                     </Table>
                   </div>

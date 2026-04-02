@@ -139,9 +139,9 @@ export default function TeachersPage() {
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           {t.profileImage ? (
-            <img src={t.profileImage} alt={t.name} className="h-12 w-12 rounded-full border bg-white object-contain p-1" />
+            <img src={t.profileImage} alt={t.name} className="h-12 w-12 rounded-full border bg-white object-cover" />
           ) : (
-            <img src="/api/og-logo" alt="Center logo" className="h-12 w-12 rounded-full border bg-white object-contain p-1" />
+            <img src="/api/og-logo" alt="Center logo" className="h-12 w-12 rounded-full border bg-white object-contain p-1.5" />
           )}
           <div className="min-w-0 text-right">
             <h3 className="text-lg font-bold">{t.name}</h3>
@@ -327,9 +327,9 @@ export default function TeachersPage() {
                       <td className="px-2 py-3 sm:px-4">
                         <div className="flex items-center gap-2">
                           {t.profileImage ? (
-                            <img src={t.profileImage} alt="" className="h-9 w-9 rounded-full border bg-white object-contain p-0.5" />
+                            <img src={t.profileImage} alt="" className="h-9 w-9 rounded-full border bg-white object-cover" />
                           ) : (
-                            <img src="/api/og-logo" alt="" className="h-9 w-9 rounded-full border bg-white object-contain p-0.5" />
+                            <img src="/api/og-logo" alt="" className="h-9 w-9 rounded-full border bg-white object-contain p-1" />
                           )}
                           <div className="min-w-0">
                             <div className="font-semibold">{t.name}</div>

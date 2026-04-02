@@ -6,7 +6,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ArrowRight, Mail, Phone, Edit, BookOpen, CalendarCheck, Plus, Loader2 } from "lucide-react"
+import { ArrowRight, Mail, Phone, Edit, BookOpen, CalendarCheck, Plus, Loader2, Printer } from "lucide-react"
 import { useCurrentUser } from "@/lib/auth-context"
 import { hasPermission, hasFullAccessRole } from "@/lib/permissions"
 import { courseTimeToDisplayValue } from "@/lib/course-db-fields"
@@ -125,6 +125,8 @@ export default function TeacherViewPage() {
   const [error, setError] = useState<string | null>(null)
   const [teacherExpenses, setTeacherExpenses] = useState<any[]>([])
   const [teacherAttendance, setTeacherAttendance] = useState<any[]>([])
+  const [centerName, setCenterName] = useState("")
+  const [centerLogo, setCenterLogo] = useState("")
   const [selectedAttendanceCourse, setSelectedAttendanceCourse] = useState<string>("all")
   const [payments, setPayments] = useState<any[]>([]) // Declare payments variable
   const [isTeacherUser, setIsTeacherUser] = useState(false)
@@ -265,6 +267,9 @@ export default function TeacherViewPage() {
           setTeacher(data)
           setPayments(data?.payments ?? [])
         }
+        fetch("/api/settings").then((r) => r.ok ? r.json() : {}).then((s) => {
+          if (!cancelled) { setCenterName(String(s.center_name || "")); setCenterLogo(String(s.logo || "")) }
+        }).catch(() => {})
       } catch (e: any) {
         if (!cancelled) {
           setError(e?.message ?? "שגיאה בטעינת מורה")
@@ -556,9 +561,9 @@ export default function TeacherViewPage() {
             <ArrowRight className="h-5 w-5" />
           </Button>
           {teacher.profileImage ? (
-            <img src={teacher.profileImage} alt={teacher.name} className="h-12 w-12 rounded-full border bg-white object-contain p-1 shadow-lg" />
+            <img src={teacher.profileImage} alt={teacher.name} className="h-12 w-12 rounded-full border bg-white object-cover shadow-lg" />
           ) : (
-            <img src="/api/og-logo" alt="Center logo" className="h-12 w-12 rounded-full border bg-white object-contain p-1 shadow-lg" />
+            <img src="/api/og-logo" alt="Center logo" className="h-12 w-12 rounded-full border bg-white object-contain p-1.5 shadow-lg" />
           )}
           <div className="min-w-0 flex-1">
             <div className="text-lg font-bold text-foreground sm:text-xl">{teacher.name}</div>
@@ -863,6 +868,37 @@ export default function TeacherViewPage() {
 
           {canTabAttendance && (
           <TabsContent value="attendance" className="mt-6 space-y-4">
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                size="sm"
+                className="gap-1 bg-purple-600 hover:bg-purple-700 text-white"
+                onClick={() => {
+                  const w = window.open("", "_blank")
+                  if (!w) return
+                  const logoHtml = centerLogo ? `<img src="${centerLogo}" style="max-height:60px;max-width:160px;object-fit:contain" />` : ""
+                  w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>נוכחות מורה - ${teacher?.name || ""}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;padding:32px 40px;color:#1f2937;max-width:900px;margin:0 auto}.header{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:20px;padding-bottom:12px;border-bottom:2px solid #3b82f6}.header h1{font-size:22px;color:#1e40af;margin-top:6px}.header h2{font-size:15px;color:#4b5563;font-weight:400;margin-top:2px}table{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px}th{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:8px 10px;text-align:center;font-weight:600}td{border:1px solid #d1d5db;padding:8px 10px;text-align:center;vertical-align:middle}tr:nth-child(even) td{background:#f9fafb}.status-present{color:#166534;font-weight:600}.status-absent{color:#991b1b;font-weight:600}@media print{body{padding:20px 28px;max-width:100%}@page{margin:20mm 15mm}}</style></head><body>`)
+                  w.document.write(`<div class="header">${logoHtml}<h1>${centerName || "מרכז"}</h1><h2 style="font-size:17px;color:#1f2937;font-weight:600;margin-top:4px">${teacher?.name || "מורה"}</h2><h2>דוח נוכחות</h2></div>`)
+                  w.document.write(`<table><thead><tr><th>#</th><th>תאריך</th><th>קורס</th><th>משעה</th><th>עד שעה</th><th>סה"כ שעות</th><th>סטטוס</th><th>הערה</th></tr></thead><tbody>`)
+                  filteredAttendance.forEach((a: any, idx: number) => {
+                    const statusLabel = getStatusLabel(a.status)
+                    const isPresent = statusLabel === "נוכח"
+                    const startDisplay = courseTimeToDisplayValue(a.courseStartTime) || "—"
+                    const endDisplay = courseTimeToDisplayValue(a.courseEndTime) || "—"
+                    const hours = calcAttendanceHours(a)
+                    const cls = isPresent ? "status-present" : "status-absent"
+                    w.document.write(`<tr><td>${idx + 1}</td><td>${fmtDate(a.date)}</td><td>${a.courseName || "—"}</td><td>${startDisplay}</td><td>${endDisplay}</td><td>${hours > 0 ? hours.toFixed(1) : "—"}</td><td class="${cls}">${statusLabel}</td><td>${a.notes || "—"}</td></tr>`)
+                  })
+                  w.document.write(`</tbody></table></body></html>`)
+                  w.document.close()
+                  setTimeout(() => w.print(), 300)
+                }}
+              >
+                <Printer className="h-4 w-4" />
+                הדפסת נוכחות מורה
+              </Button>
+            </div>
             {/* Stats Cards with Colors */}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
               <Card className="border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/20">
@@ -890,64 +926,101 @@ export default function TeacherViewPage() {
               </Card>
             </div>
 
-            {/* Course Filter Dropdown */}
-            {attendanceCourses.length > 0 && (
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-                <span className="shrink-0 text-sm text-muted-foreground">סנן לפי קורס:</span>
-                <Select value={selectedAttendanceCourse} onValueChange={setSelectedAttendanceCourse}>
-                  <SelectTrigger className="w-full sm:w-48">
-                    <SelectValue placeholder="כל הקורסים" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">כל הקורסים</SelectItem>
-                    {attendanceCourses.map((course) => (
-                      <SelectItem key={course.id} value={course.id}>
-                        {course.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              {attendanceCourses.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="shrink-0 text-sm text-muted-foreground">סנן לפי קורס:</span>
+                  <Select value={selectedAttendanceCourse} onValueChange={setSelectedAttendanceCourse}>
+                    <SelectTrigger className="w-full sm:w-48">
+                      <SelectValue placeholder="כל הקורסים" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">כל הקורסים</SelectItem>
+                      {attendanceCourses.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <Button
+                type="button"
+                size="sm"
+                className="gap-1 bg-purple-600 hover:bg-purple-700 text-white"
+                onClick={() => {
+                  const w = window.open("", "_blank")
+                  if (!w) return
+                  const logoHtml = centerLogo ? `<img src="${centerLogo}" style="max-height:60px;max-width:160px;object-fit:contain" />` : ""
+                  w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>נוכחות מורה - ${teacher?.name || ""}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;padding:32px 40px;color:#1f2937;max-width:900px;margin:0 auto}.header{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:20px;padding-bottom:12px;border-bottom:2px solid #3b82f6}.header h1{font-size:22px;color:#1e40af;margin-top:6px}.header h2{font-size:15px;color:#4b5563;font-weight:400;margin-top:2px}table{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px}th{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:8px 10px;text-align:center;font-weight:600}td{border:1px solid #d1d5db;padding:8px 10px;text-align:center;vertical-align:middle}tr:nth-child(even) td{background:#f9fafb}.status-present{color:#166534;font-weight:600}.status-absent{color:#991b1b;font-weight:600}@media print{body{padding:20px 28px;max-width:100%}@page{margin:20mm 15mm}}</style></head><body>`)
+                  w.document.write(`<div class="header">${logoHtml}<h1>${centerName || "מרכז"}</h1><h2 style="font-size:17px;color:#1f2937;font-weight:600;margin-top:4px">${teacher?.name || "מורה"}</h2><h2>דוח נוכחות</h2></div>`)
+                  w.document.write(`<table><thead><tr><th>#</th><th>תאריך</th><th>קורס</th><th>משעה</th><th>עד שעה</th><th>סה"כ שעות</th><th>סטטוס</th><th>הערה</th></tr></thead><tbody>`)
+                  filteredAttendance.forEach((a: any, idx: number) => {
+                    const statusLabel = getStatusLabel(a.status)
+                    const isPresent = statusLabel === "נוכח"
+                    const startDisplay = courseTimeToDisplayValue(a.courseStartTime) || "—"
+                    const endDisplay = courseTimeToDisplayValue(a.courseEndTime) || "—"
+                    const hours = calcAttendanceHours(a)
+                    const cls = isPresent ? "status-present" : "status-absent"
+                    w.document.write(`<tr><td>${idx + 1}</td><td>${fmtDate(a.date)}</td><td>${a.courseName || "—"}</td><td>${startDisplay}</td><td>${endDisplay}</td><td>${hours > 0 ? hours.toFixed(1) : "—"}</td><td class="${cls}">${statusLabel}</td><td>${a.notes || "—"}</td></tr>`)
+                  })
+                  w.document.write(`</tbody></table></body></html>`)
+                  w.document.close()
+                  setTimeout(() => w.print(), 300)
+                }}
+              >
+                <Printer className="h-4 w-4" />
+                הדפסה
+              </Button>
+            </div>
 
             {/* Attendance Records */}
             {filteredAttendance.length ? (
               <div className="space-y-2">
-                {filteredAttendance.map((a: any) => {
-                  const statusLabel = getStatusLabel(a.status)
-                  const isPresent = statusLabel === "נוכח"
-                  const isAbsent = statusLabel === "חיסור"
-                  
-                  return (
-                    <Card key={a.id} dir="rtl" className={`p-3 border-r-4 ${
-                      isPresent ? "border-r-green-500 bg-green-50/50 dark:bg-green-950/10" :
-                      isAbsent ? "border-r-red-500 bg-red-50/50 dark:bg-red-950/10" :
-                      "border-r-orange-500 bg-orange-50/50 dark:bg-orange-950/10"
-                    }`}>
-                      <div className="flex items-center justify-between gap-4 flex-row-reverse">
-                        {/* Right side - Date and Course */}
-                        <div className="flex items-center gap-2 text-right">
-                          <span className="font-medium">{fmtDate(a.date)}</span>
-                          <span className="text-muted-foreground">|</span>
-                          <span className="text-sm text-muted-foreground">{a.courseName ?? "-"}</span>
-                          {a.hours && (
-                            <>
-                              <span className="text-muted-foreground">|</span>
-                              <span className="text-sm text-muted-foreground">{a.hours} שעות</span>
-                            </>
-                          )}
-                        </div>
-                        {/* Left side - Status badge */}
-                        <span className={`text-xs px-3 py-1 rounded-full font-medium whitespace-nowrap ${
-                          isPresent ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
-                          isAbsent ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" :
-                          "bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400"
-                        }`}>{statusLabel}</span>
-                      </div>
-                      {a.notes && <div className="text-sm text-muted-foreground mt-2 pt-2 border-t text-right">{a.notes}</div>}
-                    </Card>
-                  )
-                })}
+                <div className="overflow-x-auto rounded-md border">
+                  <table className="w-full text-sm border-collapse" dir="rtl">
+                    <thead>
+                      <tr className="bg-muted/50">
+                        <th className="border p-2 text-right font-medium">תאריך</th>
+                        <th className="border p-2 text-right font-medium">קורס</th>
+                        <th className="border p-2 text-center font-medium">משעה</th>
+                        <th className="border p-2 text-center font-medium">עד שעה</th>
+                        <th className="border p-2 text-center font-medium">סה&quot;כ שעות</th>
+                        <th className="border p-2 text-center font-medium">סטטוס</th>
+                        <th className="border p-2 text-right font-medium">הערה</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredAttendance.map((a: any) => {
+                        const statusLabel = getStatusLabel(a.status)
+                        const isPresent = statusLabel === "נוכח"
+                        const isAbsent = statusLabel === "חיסור"
+                        const startDisplay = courseTimeToDisplayValue(a.courseStartTime) || "—"
+                        const endDisplay = courseTimeToDisplayValue(a.courseEndTime) || "—"
+                        const hours = calcAttendanceHours(a)
+                        return (
+                          <tr key={a.id} className={isPresent ? "bg-green-50/50" : isAbsent ? "bg-red-50/50" : "bg-orange-50/50"}>
+                            <td className="border p-2 text-right font-medium">{fmtDate(a.date)}</td>
+                            <td className="border p-2 text-right text-muted-foreground">{a.courseName ?? "—"}</td>
+                            <td className="border p-2 text-center">{startDisplay}</td>
+                            <td className="border p-2 text-center">{endDisplay}</td>
+                            <td className="border p-2 text-center font-medium">{hours > 0 ? hours.toFixed(1) : "—"}</td>
+                            <td className="border p-2 text-center">
+                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                isPresent ? "bg-green-100 text-green-700" :
+                                isAbsent ? "bg-red-100 text-red-700" :
+                                "bg-orange-100 text-orange-700"
+                              }`}>{statusLabel}</span>
+                            </td>
+                            <td className="border p-2 text-right text-muted-foreground">{a.notes || "—"}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             ) : (
               <Card className="p-8 text-center bg-gray-50 dark:bg-gray-900/20">

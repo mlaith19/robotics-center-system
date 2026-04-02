@@ -279,7 +279,7 @@ export default function EditTeacherPage() {
               <Label htmlFor="profileImageUpload">תמונת פרופיל</Label>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 {form.profileImage ? (
-                  <img src={form.profileImage} alt="profile preview" className="h-16 w-16 shrink-0 rounded-full border bg-white object-contain p-1" />
+                  <img src={form.profileImage} alt="profile preview" className="h-16 w-16 shrink-0 rounded-full border bg-white object-cover" />
                 ) : (
                   <div className="h-16 w-16 shrink-0 rounded-full border-2 border-dashed bg-muted" />
                 )}

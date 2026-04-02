@@ -165,7 +165,7 @@ export default function RegisterTeacherPage() {
               <Label htmlFor="profileImageUpload">תמונת פרופיל</Label>
               <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
                 {profileImage ? (
-                  <img src={profileImage} alt="profile preview" className="mx-auto h-16 w-16 rounded-full border bg-white object-contain p-1 sm:mx-0" />
+                  <img src={profileImage} alt="profile preview" className="mx-auto h-16 w-16 rounded-full border bg-white object-cover sm:mx-0" />
                 ) : (
                   <div className="mx-auto h-16 w-16 rounded-full border-2 border-dashed bg-muted sm:mx-0" />
                 )}

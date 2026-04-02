@@ -206,9 +206,9 @@ export default function StudentsPage() {
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex items-center gap-3">
                       {student.profileImage ? (
-                        <img src={student.profileImage} alt={student.name} className="h-12 w-12 rounded-full border bg-white object-contain p-1" />
+                        <img src={student.profileImage} alt={student.name} className="h-12 w-12 rounded-full border bg-white object-cover" />
                       ) : (
-                        <img src="/api/og-logo" alt="Center logo" className="h-12 w-12 rounded-full border bg-white object-contain p-1" />
+                        <img src="/api/og-logo" alt="Center logo" className="h-12 w-12 rounded-full border bg-white object-contain p-1.5" />
                       )}
                       <div className="min-w-0">
                         <div className="font-semibold">{student.name}</div>
@@ -295,9 +295,9 @@ export default function StudentsPage() {
                       <td className="px-2 py-3 sm:px-4">
                         <div className="flex items-center gap-3">
                           {student.profileImage ? (
-                            <img src={student.profileImage} alt={student.name} className="h-10 w-10 rounded-full border bg-white object-contain p-1" />
+                            <img src={student.profileImage} alt={student.name} className="h-10 w-10 rounded-full border bg-white object-cover" />
                           ) : (
-                            <img src="/api/og-logo" alt="Center logo" className="h-10 w-10 rounded-full border bg-white object-contain p-1" />
+                            <img src="/api/og-logo" alt="Center logo" className="h-10 w-10 rounded-full border bg-white object-contain p-1.5" />
                           )}
                           <div>
                             <div className="font-semibold">{student.name}</div>
@@ -372,9 +372,9 @@ export default function StudentsPage() {
                 <div className="flex items-start justify-between mb-4 flex-row-reverse">
                   <div className="flex items-center gap-3">
                     {student.profileImage ? (
-                      <img src={student.profileImage} alt={student.name} className="w-12 h-12 rounded-full object-contain bg-white p-1 border" />
+                      <img src={student.profileImage} alt={student.name} className="w-12 h-12 rounded-full object-cover bg-white border" />
                     ) : (
-                      <img src="/api/og-logo" alt="Center logo" className="w-12 h-12 rounded-full object-contain bg-white p-1 border" />
+                      <img src="/api/og-logo" alt="Center logo" className="w-12 h-12 rounded-full object-contain bg-white p-1.5 border" />
                     )}
                     <div className="text-right">
                       <h3 className="font-semibold text-lg">{student.name}</h3>

@@ -209,7 +209,7 @@ export default function NewTeacherPage() {
               <Label htmlFor="profileImageUpload">תמונת פרופיל</Label>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 {newTeacher.profileImage ? (
-                  <img src={newTeacher.profileImage} alt="profile preview" className="h-16 w-16 shrink-0 rounded-full border bg-white object-contain p-1" />
+                  <img src={newTeacher.profileImage} alt="profile preview" className="h-16 w-16 shrink-0 rounded-full border bg-white object-cover" />
                 ) : (
                   <div className="h-16 w-16 shrink-0 rounded-full border-2 border-dashed bg-muted" />
                 )}

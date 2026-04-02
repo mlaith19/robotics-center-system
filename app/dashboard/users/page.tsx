@@ -40,6 +40,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { PERMISSION_CATEGORIES, type PermissionCategory, ROLE_PRESETS, type RoleType, getRoleById } from "@/lib/permissions"
@@ -416,7 +417,27 @@ export default function UsersPage() {
     }
   }
 
-  const filteredCount = useMemo(() => users.length, [users])
+  const [roleTab, setRoleTab] = useState("__all__")
+
+  const roleTabDefs = useMemo(() => {
+    const tabs = [
+      { id: "__all__", label: "הכל", roles: null as string[] | null },
+      { id: "student", label: "תלמידים", roles: ["student"] },
+      { id: "teacher", label: "מורים", roles: ["teacher"] },
+      { id: "management", label: "הנהלה", roles: ["admin", "secretary", "coordinator"] },
+      { id: "other", label: "אחר", roles: ["other"] },
+    ]
+    return tabs
+  }, [])
+
+  const filteredByRole = useMemo(() => {
+    if (roleTab === "__all__") return users
+    const def = roleTabDefs.find((t) => t.id === roleTab)
+    if (!def || !def.roles) return users
+    return users.filter((u) => def.roles!.includes(u.role || "other"))
+  }, [users, roleTab, roleTabDefs])
+
+  const filteredCount = useMemo(() => filteredByRole.length, [filteredByRole])
 
   if (noPermission) {
     return (
@@ -488,14 +509,26 @@ export default function UsersPage() {
         </Card>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="pb-2">
             <CardTitle>רשימת משתמשים</CardTitle>
             <CardDescription>עריכה: טלפון + הרשאות | פעולה: השבת/הפעל/מחק. לכניסה למערכת: הזן את &quot;שם משתמש&quot; או אימייל + סיסמה.</CardDescription>
           </CardHeader>
           <CardContent className="p-2 sm:p-6">
+            <Tabs dir="rtl" value={roleTab} onValueChange={setRoleTab} className="w-full">
+              <TabsList className="mb-4 h-auto w-full flex-wrap justify-start gap-0.5 p-1">
+                {roleTabDefs.map((tab) => {
+                  const count = tab.roles ? users.filter((u) => tab.roles!.includes(u.role || "other")).length : users.length
+                  return (
+                    <TabsTrigger key={tab.id} value={tab.id} className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">
+                      {tab.label} ({count})
+                    </TabsTrigger>
+                  )
+                })}
+              </TabsList>
+            </Tabs>
             {loading ? (
               <div className="py-10 text-center text-gray-500">טוען...</div>
-            ) : users.length === 0 ? (
+            ) : filteredByRole.length === 0 ? (
               <div className="py-10 text-center text-gray-500">אין משתמשים</div>
             ) : (
               <div className="-mx-2 overflow-x-auto sm:mx-0">
@@ -508,14 +541,14 @@ export default function UsersPage() {
                     </TableHead>
                     <TableHead className="text-right">אימייל</TableHead>
                     <TableHead className="whitespace-nowrap text-right">טלפון</TableHead>
-                    <TableHead className="whitespace-nowrap text-right">הרשאות</TableHead>
+                    <TableHead className="whitespace-nowrap text-right">תפקיד</TableHead>
                     <TableHead className="whitespace-nowrap text-right">סטטוס</TableHead>
                     <TableHead className="whitespace-nowrap text-right">נוצר</TableHead>
                     <TableHead className="whitespace-nowrap text-right">פעולות</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {users.map((u) => (
+                  {filteredByRole.map((u) => (
                     <TableRow key={u.id}>
                       <TableCell className="max-w-[140px] align-top font-medium sm:max-w-none">
                         <div className="flex items-center gap-2">
@@ -531,7 +564,7 @@ export default function UsersPage() {
                         {u.phone || "—"}
                       </TableCell>
                       <TableCell className="align-top">
-                        <Badge variant="outline">{u.permissions?.length || 0} הרשאות</Badge>
+                        <Badge variant="outline">{getRoleById(u.role || "other")?.name || u.role || "אחר"}</Badge>
                       </TableCell>
                       <TableCell className="align-top">
                         <Badge
