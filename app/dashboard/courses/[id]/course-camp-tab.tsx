@@ -160,11 +160,12 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
       </Card>
 
       {sortedMeetings.length > 0 && (
-        <Tabs value={activeMeetingId} onValueChange={setActiveMeetingId} className="w-full">
-          <TabsList className="h-auto w-full flex-wrap justify-start gap-1">
+        <Tabs dir="rtl" value={activeMeetingId} onValueChange={setActiveMeetingId} className="w-full">
+          <TabsList className="h-auto w-full flex-row-reverse flex-wrap justify-end gap-1">
             {sortedMeetings.map((meeting, i) => (
-              <TabsTrigger key={meeting.id} value={meeting.id}>
-                מפגש {i + 1} - {hebrewWeekday(meeting.sessionDate)}
+              <TabsTrigger key={meeting.id} value={meeting.id} className="h-auto min-w-[96px] py-1.5 leading-tight whitespace-normal text-center">
+                <span className="block">מפגש {i + 1}</span>
+                <span className="block text-xs text-muted-foreground">{hebrewWeekday(meeting.sessionDate)}</span>
               </TabsTrigger>
             ))}
           </TabsList>
