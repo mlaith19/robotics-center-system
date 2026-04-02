@@ -70,6 +70,17 @@ interface CourseSessionItem {
   feedback: CourseSessionFeedback[]
 }
 
+interface CoursePaymentRow {
+  id: string
+  studentId: string | null
+  studentName: string
+  paymentDate: string
+  paymentType: string | null
+  amount: number
+  description: string | null
+  siblingDiscountPackageName: string | null
+}
+
 const levelLabels: Record<string, Record<"he" | "en" | "ar", string>> = {
   beginner: { he: "מתחילים", en: "Beginner", ar: "مبتدئ" },
   intermediate: { he: "מתקדמים", en: "Intermediate", ar: "متوسط" },
@@ -203,6 +214,7 @@ export default function CourseViewPage() {
   const [payDescription, setPayDescription] = useState("")
   const [isAddingPayment, setIsAddingPayment] = useState(false)
   const [paidStudentIds, setPaidStudentIds] = useState<string[]>([])
+  const [paymentsForCourse, setPaymentsForCourse] = useState<CoursePaymentRow[]>([])
   const campGroups = HEBREW_GROUP_LETTERS
 
   useEffect(() => {
@@ -270,33 +282,50 @@ export default function CourseViewPage() {
       .catch(() => setAttendanceByStudent({}))
   }, [id, attendanceDate, canTabAttendanceStudents])
 
-  useEffect(() => {
+  async function loadCoursePayments() {
     if (!canTabPayments) return
     if (!enrollments.length) {
       setPaidStudentIds([])
+      setPaymentsForCourse([])
       return
     }
-    const loadPaidStudents = async () => {
-      try {
-        const res = await fetch("/api/payments")
-        if (!res.ok) {
-          setPaidStudentIds([])
-          return
-        }
-        const rows = await res.json()
-        const enrolledSet = new Set(enrollments.map((e) => e.studentId))
-        const paidSet = new Set<string>()
-        for (const row of Array.isArray(rows) ? rows : []) {
-          if (row?.studentId && enrolledSet.has(String(row.studentId))) {
-            paidSet.add(String(row.studentId))
-          }
-        }
-        setPaidStudentIds(Array.from(paidSet))
-      } catch {
+    try {
+      const res = await fetch("/api/payments")
+      if (!res.ok) {
         setPaidStudentIds([])
+        setPaymentsForCourse([])
+        return
       }
+      const rows = await res.json()
+      const enrolledByStudentId = new Map(enrollments.map((e) => [e.studentId, e]))
+      const paymentRows: CoursePaymentRow[] = []
+      const paidSet = new Set<string>()
+      for (const row of Array.isArray(rows) ? rows : []) {
+        const sid = row?.studentId ? String(row.studentId) : ""
+        const enr = sid ? enrolledByStudentId.get(sid) : undefined
+        if (!sid || !enr) continue
+        paidSet.add(sid)
+        paymentRows.push({
+          id: String(row.id || crypto.randomUUID()),
+          studentId: sid,
+          studentName: String(row.studentName || enr.studentName || "—"),
+          paymentDate: String(row.paymentDate || ""),
+          paymentType: row.paymentType ? String(row.paymentType) : null,
+          amount: Number(row.amount || 0),
+          description: row.description ? String(row.description) : null,
+          siblingDiscountPackageName: enr.siblingDiscountPackageName || null,
+        })
+      }
+      setPaidStudentIds(Array.from(paidSet))
+      setPaymentsForCourse(paymentRows)
+    } catch {
+      setPaidStudentIds([])
+      setPaymentsForCourse([])
     }
-    loadPaidStudents()
+  }
+
+  useEffect(() => {
+    loadCoursePayments()
   }, [canTabPayments, enrollments])
 
   useEffect(() => {
@@ -417,7 +446,7 @@ export default function CourseViewPage() {
         }),
       })
       if (!res.ok) throw new Error("Failed to create payment")
-      setPaidStudentIds((prev) => (prev.includes(payStudentId) ? prev : [...prev, payStudentId]))
+      await loadCoursePayments()
       setIsAddPaymentOpen(false)
       setPayStudentId("")
       setPayAmount("")
@@ -471,6 +500,14 @@ export default function CourseViewPage() {
   }
 
   const enrollmentsWithPayments = enrollments.filter((e) => paidStudentIds.includes(e.studentId))
+  const paymentTypeLabel = (type: string | null | undefined) => {
+    if (type === "cash") return "מזומן"
+    if (type === "credit") return "אשראי"
+    if (type === "transfer") return "העברה בנקאית"
+    if (type === "check") return "שיק"
+    if (type === "bit") return "ביט"
+    return "—"
+  }
 
   const courseTeachers = teachers.filter(t => 
     course.teacherIds && course.teacherIds.includes(t.id)
@@ -904,11 +941,10 @@ export default function CourseViewPage() {
 <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;padding:32px 40px;color:#1f2937;max-width:980px;margin:0 auto}.header{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:20px;padding-bottom:12px;border-bottom:2px solid #3b82f6}.header h1{font-size:22px;color:#1e40af;margin-top:6px}.header h2{font-size:15px;color:#4b5563;font-weight:400;margin-top:2px}.summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0 16px}.box{border:1px solid #dbeafe;background:#eff6ff;border-radius:8px;padding:10px 12px}.label{font-size:12px;color:#1e40af}.val{font-size:18px;font-weight:700;color:#1f2937;margin-top:2px}table{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px}th{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:8px 10px;text-align:center;font-weight:600}td{border:1px solid #d1d5db;padding:8px 10px;text-align:center;vertical-align:middle}tr:nth-child(even) td{background:#f9fafb}@media print{body{padding:20px 28px;max-width:100%}@page{margin:20mm 15mm}}</style></head><body>`)
                     w.document.write(`<div class="header">${logoHtml}<h1>${centerName || "מרכז"}</h1>${course?.name ? `<h2 style="font-size:17px;color:#1f2937;font-weight:600;margin-top:4px">${course.name}</h2>` : ""}<h2>דוח עלות ותשלומים</h2></div>`)
                     w.document.write(`<div class="summary"><div class="box"><div class="label">מספר תלמידים משויכים</div><div class="val">${enrollments.length}</div></div><div class="box"><div class="label">מחיר קורס לתלמיד</div><div class="val">₪${Number(course?.price || 0).toLocaleString()}</div></div></div>`)
-                    w.document.write(`<table><thead><tr><th>#</th><th>תלמיד</th><th>סטטוס הרשמה</th><th>תאריך הרשמה</th><th>קבוצה</th><th>חבילת אחים</th></tr></thead><tbody>`)
-                    enrollmentsWithPayments.forEach((e, idx) => {
-                      const d = e.enrollmentDate ? new Date(e.enrollmentDate).toLocaleDateString(localeTag) : "—"
-                      const groupLabel = e.campGroupLabel ? `קבוצה ${e.campGroupLabel}` : "—"
-                      w.document.write(`<tr><td>${idx + 1}</td><td>${e.studentName || "—"}</td><td>${e.status || "—"}</td><td>${d}</td><td>${groupLabel}</td><td>${e.siblingDiscountPackageName || "—"}</td></tr>`)
+                    w.document.write(`<table><thead><tr><th>#</th><th>שם תלמיד</th><th>תאריך תשלום</th><th>שיטת תשלום</th><th>סכום תשלום</th><th>הערות</th><th>חבילת הנחות</th></tr></thead><tbody>`)
+                    paymentsForCourse.forEach((p, idx) => {
+                      const d = p.paymentDate ? new Date(p.paymentDate).toLocaleDateString(localeTag) : "—"
+                      w.document.write(`<tr><td>${idx + 1}</td><td>${p.studentName || "—"}</td><td>${d}</td><td>${paymentTypeLabel(p.paymentType)}</td><td>₪${Number(p.amount || 0).toLocaleString()}</td><td>${p.description || "—"}</td><td>${p.siblingDiscountPackageName || "—"}</td></tr>`)
                     })
                     w.document.write(`</tbody></table></body></html>`)
                     w.document.close()
@@ -924,28 +960,30 @@ export default function CourseViewPage() {
                 {tr.paymentInfoPlaceholder}
               </div>
               <div className="overflow-x-auto rounded-md border">
-                <Table className="min-w-[760px]">
+                <Table className="min-w-[980px]">
                   <TableHeader>
                     <TableRow className="bg-muted/50">
-                      <TableHead className="text-right">{tr.student}</TableHead>
-                      <TableHead className="text-right">{tr.status}</TableHead>
-                      <TableHead className="text-right">{tr.enrollmentDate}</TableHead>
-                      <TableHead className="text-right">{locale === "ar" ? "المجموعة" : locale === "en" ? "Group" : "קבוצה"}</TableHead>
-                      <TableHead className="text-right">{tr.siblingPackage}</TableHead>
+                      <TableHead className="text-right">שם תלמיד</TableHead>
+                      <TableHead className="text-right">תאריך תשלום</TableHead>
+                      <TableHead className="text-right">שיטת תשלום</TableHead>
+                      <TableHead className="text-right">סכום תשלום</TableHead>
+                      <TableHead className="text-right">הערות</TableHead>
+                      <TableHead className="text-right">חבילת הנחות</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {enrollmentsWithPayments.length > 0 ? enrollmentsWithPayments.map((e) => (
-                      <TableRow key={e.id}>
-                        <TableCell className="text-right">{e.studentName || "—"}</TableCell>
-                        <TableCell className="text-right">{e.status || "—"}</TableCell>
-                        <TableCell className="text-right">{e.enrollmentDate ? new Date(e.enrollmentDate).toLocaleDateString(localeTag) : "—"}</TableCell>
-                        <TableCell className="text-right">{e.campGroupLabel ? `קבוצה ${e.campGroupLabel}` : "—"}</TableCell>
-                        <TableCell className="text-right">{e.siblingDiscountPackageName || "—"}</TableCell>
+                    {paymentsForCourse.length > 0 ? paymentsForCourse.map((p) => (
+                      <TableRow key={p.id}>
+                        <TableCell className="text-right">{p.studentName || "—"}</TableCell>
+                        <TableCell className="text-right">{p.paymentDate ? new Date(p.paymentDate).toLocaleDateString(localeTag) : "—"}</TableCell>
+                        <TableCell className="text-right">{paymentTypeLabel(p.paymentType)}</TableCell>
+                        <TableCell className="text-right">₪{Number(p.amount || 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-right">{p.description || "—"}</TableCell>
+                        <TableCell className="text-right">{p.siblingDiscountPackageName || "—"}</TableCell>
                       </TableRow>
                     )) : (
                       <TableRow>
-                        <TableCell className="text-center text-muted-foreground" colSpan={5}>
+                        <TableCell className="text-center text-muted-foreground" colSpan={6}>
                           אין תלמידים עם תשלומים בקורס זה
                         </TableCell>
                       </TableRow>
