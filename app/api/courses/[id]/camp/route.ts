@@ -48,8 +48,15 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
       return Response.json({ error: "Not a camp course", code: "not_camp" }, { status: 400 })
     }
 
-    const settings = (await db`SELECT camp_classrooms_count FROM center_settings WHERE id = 1`) || []
+    const settings = (await db`SELECT camp_classrooms_count, camp_classrooms FROM center_settings WHERE id = 1`) || []
     const classroomsCount = Math.max(1, Math.min(12, Number((settings[0] as { camp_classrooms_count?: number } | undefined)?.camp_classrooms_count || 6)))
+    const classroomsRaw = (settings[0] as { camp_classrooms?: unknown } | undefined)?.camp_classrooms
+    const classroomsConfigured = Array.isArray(classroomsRaw) ? classroomsRaw as Array<{ number?: number; name?: string; notes?: string }> : []
+    const classrooms = Array.from({ length: classroomsCount }, (_, i) => {
+      const n = i + 1
+      const row = classroomsConfigured.find((x) => Number(x.number) === n)
+      return { number: n, name: String(row?.name || `כיתה ${n}`), notes: String(row?.notes || "") }
+    })
     const teachers =
       (await db`
         SELECT id, name FROM "Teacher"
@@ -123,6 +130,7 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
     return Response.json({
       courseId,
       classroomsCount,
+      classrooms,
       teachers,
       groupLetters: HEBREW_GROUP_LETTERS,
       slots: (slots as { id: string; sortOrder: number; startTime: string; endTime: string; isBreak?: boolean; breakTitle?: string }[]).map((s) => ({

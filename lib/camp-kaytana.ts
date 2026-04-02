@@ -223,4 +223,8 @@ export async function ensureCampTables(sql: Sql) {
     "center_settings campClassroomsCount",
     sql`ALTER TABLE "center_settings" ADD COLUMN IF NOT EXISTS "camp_classrooms_count" INTEGER NOT NULL DEFAULT 6`,
   )
+  await safe(
+    "center_settings campClassrooms",
+    sql`ALTER TABLE "center_settings" ADD COLUMN IF NOT EXISTS "camp_classrooms" JSONB NOT NULL DEFAULT '[]'::jsonb`,
+  )
 }

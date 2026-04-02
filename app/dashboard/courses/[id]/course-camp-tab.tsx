@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Loader2, Plus, Trash2, CalendarRange } from "lucide-react"
 
 type TeacherOpt = { id: string; name: string }
+type ClassroomDef = { number: number; name: string; notes?: string }
 type CampSlot = {
   id: string
   sortOrder: number
@@ -40,6 +41,7 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
   const [teachers, setTeachers] = useState<TeacherOpt[]>([])
   const [groupLetters, setGroupLetters] = useState<string[]>([])
   const [classroomsCount, setClassroomsCount] = useState(6)
+  const [classroomsDef, setClassroomsDef] = useState<ClassroomDef[]>([])
   const [slots, setSlots] = useState<CampSlot[]>([])
   const [days, setDays] = useState<CampDay[]>([])
   const [activeDayId, setActiveDayId] = useState("")
@@ -58,6 +60,7 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
       setTeachers(Array.isArray(data.teachers) ? data.teachers : [])
       setGroupLetters(Array.isArray(data.groupLetters) ? data.groupLetters : [])
       setClassroomsCount(Number(data.classroomsCount || 6))
+      setClassroomsDef(Array.isArray(data.classrooms) ? data.classrooms : [])
       setSlots(Array.isArray(data.slots) ? data.slots : [])
       setDays(Array.isArray(data.days) ? data.days : [])
     } catch {
@@ -78,7 +81,10 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
   }, [days, activeDayId])
 
   const sortedSlots = [...slots].sort((a, b) => a.sortOrder - b.sortOrder || a.startTime.localeCompare(b.startTime))
-  const classrooms = Array.from({ length: Math.max(1, classroomsCount) }, (_, i) => i + 1)
+  const classrooms = Array.from({ length: Math.max(1, classroomsCount) }, (_, i) => i + 1).map((n) => ({
+    number: n,
+    name: (classroomsDef.find((c) => Number(c.number) === n)?.name || `כיתה ${n}`),
+  }))
 
   async function handleSave() {
     if (!canEdit) return
@@ -202,7 +208,7 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
                 </CardHeader>
                 <CardContent className="overflow-x-auto">
                   <table className="w-full min-w-[900px] border-collapse text-sm">
-                    <thead><tr><th className="border p-2 bg-muted/40 text-right">שעה</th>{classrooms.map((c) => <th key={c} className="border p-2 bg-muted/40 text-right">כיתה {c}</th>)}</tr></thead>
+                    <thead><tr><th className="border p-2 bg-muted/40 text-right">שעה</th>{classrooms.map((c) => <th key={c.number} className="border p-2 bg-muted/40 text-right">{c.name}</th>)}</tr></thead>
                     <tbody>
                       {sortedSlots.map((slot) => (
                         slot.isBreak ? (
@@ -215,10 +221,11 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
                         ) : (
                           <tr key={slot.id}>
                             <td className="border p-2 align-top whitespace-nowrap">{slot.startTime} - {slot.endTime}</td>
-                            {classrooms.map((classNo) => {
+                            {classrooms.map((classroom) => {
+                              const classNo = classroom.number
                               const a = assignmentFor(day, slot.sortOrder, classNo)
                               return (
-                                <td key={classNo} className="border p-2 align-top">
+                                <td key={classroom.number} className="border p-2 align-top">
                                   <div className="space-y-2">
                                     <Input placeholder="שם שיעור" value={a.lessonTitle} disabled={!canEdit} onChange={(e) => patchAssignment(day.id, slot.sortOrder, classNo, { lessonTitle: e.target.value })} />
                                     <div className="grid grid-cols-6 gap-1">

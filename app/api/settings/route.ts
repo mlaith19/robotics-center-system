@@ -21,6 +21,7 @@ const DEFAULT_SETTINGS_JSON = {
   discount_siblings: 0,
   max_students_per_class: 0,
   camp_classrooms_count: 6,
+  camp_classrooms: [],
 }
 
 export const GET = withTenantAuth(async (req, _session) => {
@@ -50,6 +51,7 @@ export const PUT = withTenantAuth(async (req, _session) => {
   const db = tenant.db
   try {
     await db`ALTER TABLE center_settings ADD COLUMN IF NOT EXISTS camp_classrooms_count INTEGER NOT NULL DEFAULT 6`
+    await db`ALTER TABLE center_settings ADD COLUMN IF NOT EXISTS camp_classrooms JSONB NOT NULL DEFAULT '[]'::jsonb`
     const body = await req.json()
     const {
       center_name,
@@ -68,6 +70,7 @@ export const PUT = withTenantAuth(async (req, _session) => {
       discount_siblings,
       max_students_per_class,
       camp_classrooms_count,
+      camp_classrooms,
     } = body
 
     const existing = await db`SELECT id FROM center_settings WHERE id = 1`
@@ -80,14 +83,14 @@ export const PUT = withTenantAuth(async (req, _session) => {
               email, website, working_hours, notes, tax_id,
               lesson_price, monthly_price, registration_fee,
               discount_siblings, max_students_per_class
-              , camp_classrooms_count
+              , camp_classrooms_count, camp_classrooms
             )
             VALUES (
               1, ${center_name ?? ""}, ${logo ?? ""}, ${phone ?? ""}, ${whatsapp ?? ""}, ${address ?? ""},
               ${email || null}, ${website || null}, ${working_hours || null}, ${notes || null}, ${tax_id ?? ""},
               ${lesson_price ?? 0}, ${monthly_price ?? 0}, ${registration_fee ?? 0},
-              ${discount_siblings ?? 0}, ${max_students_per_class ?? 0}
-              , ${camp_classrooms_count ?? 6}
+              ${discount_siblings ?? 0}, ${max_students_per_class ?? 0},
+              ${camp_classrooms_count ?? 6}, ${JSON.stringify(Array.isArray(camp_classrooms) ? camp_classrooms : [])}::jsonb
             )
             RETURNING *
           `
@@ -98,14 +101,14 @@ export const PUT = withTenantAuth(async (req, _session) => {
             email, website, working_hours, notes,
             lesson_price, monthly_price, registration_fee,
             discount_siblings, max_students_per_class
-            , camp_classrooms_count
+            , camp_classrooms_count, camp_classrooms
           )
           VALUES (
             1, ${center_name ?? ""}, ${logo ?? ""}, ${phone ?? ""}, ${whatsapp ?? ""}, ${address ?? ""},
             ${email || null}, ${website || null}, ${working_hours || null}, ${notes || null},
             ${lesson_price ?? 0}, ${monthly_price ?? 0}, ${registration_fee ?? 0},
-            ${discount_siblings ?? 0}, ${max_students_per_class ?? 0}
-            , ${camp_classrooms_count ?? 6}
+            ${discount_siblings ?? 0}, ${max_students_per_class ?? 0},
+            ${camp_classrooms_count ?? 6}, ${JSON.stringify(Array.isArray(camp_classrooms) ? camp_classrooms : [])}::jsonb
           )
           RETURNING *
         `
@@ -121,6 +124,7 @@ export const PUT = withTenantAuth(async (req, _session) => {
               registration_fee = ${registration_fee ?? 0},
               discount_siblings = ${discount_siblings ?? 0}, max_students_per_class = ${max_students_per_class ?? 0},
               camp_classrooms_count = ${camp_classrooms_count ?? 6},
+              camp_classrooms = ${JSON.stringify(Array.isArray(camp_classrooms) ? camp_classrooms : [])}::jsonb,
               updated_at = NOW()
           WHERE id = 1
           RETURNING *
@@ -135,6 +139,7 @@ export const PUT = withTenantAuth(async (req, _session) => {
             registration_fee = ${registration_fee ?? 0},
             discount_siblings = ${discount_siblings ?? 0}, max_students_per_class = ${max_students_per_class ?? 0},
             camp_classrooms_count = ${camp_classrooms_count ?? 6},
+            camp_classrooms = ${JSON.stringify(Array.isArray(camp_classrooms) ? camp_classrooms : [])}::jsonb,
             updated_at = NOW()
         WHERE id = 1
         RETURNING *

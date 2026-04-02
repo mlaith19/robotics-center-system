@@ -41,6 +41,8 @@ interface CenterSettings {
   discount_siblings?: number
   max_students_per_class?: number
   camp_classrooms_count?: number
+  camp_classrooms?: { number: number; name: string; notes?: string }[]
+  camp_classrooms_count?: number
   email?: string
   website?: string
   working_hours?: string
@@ -117,6 +119,7 @@ export default function SettingsPage() {
     discount_siblings: 0,
     max_students_per_class: 0,
     camp_classrooms_count: 6,
+    camp_classrooms: [],
     email: "",
     website: "",
     working_hours: "",
@@ -179,6 +182,12 @@ export default function SettingsPage() {
   })
   const [tariffSaving, setTariffSaving] = useState(false)
   const { toast } = useToast()
+  const classroomsCount = Math.max(1, Math.min(12, Number(settings.camp_classrooms_count || 6)))
+  const classroomsRows = Array.from({ length: classroomsCount }, (_, i) => {
+    const n = i + 1
+    const row = (settings.camp_classrooms || []).find((c) => Number(c?.number) === n)
+    return { number: n, name: String(row?.name || `כיתה ${n}`), notes: String(row?.notes || "") }
+  })
 
   useEffect(() => {
     if (settingsData && !error) {
@@ -196,6 +205,13 @@ export default function SettingsPage() {
         discount_siblings: settingsData.discount_siblings || 0,
         max_students_per_class: settingsData.max_students_per_class || 0,
         camp_classrooms_count: Number(settingsData.camp_classrooms_count || 6),
+        camp_classrooms: Array.isArray((settingsData as any).camp_classrooms)
+          ? (settingsData as any).camp_classrooms.map((c: any) => ({
+              number: Number(c?.number || 0),
+              name: String(c?.name || ""),
+              notes: String(c?.notes || ""),
+            }))
+          : [],
         email: settingsData.email || "",
         website: settingsData.website || "",
         working_hours: settingsData.working_hours || "",
@@ -546,7 +562,7 @@ export default function SettingsPage() {
           </TabsTrigger>
           <TabsTrigger value="categories" className="flex shrink-0 flex-row-reverse items-center justify-center gap-2 rounded-md px-2 text-xs data-[state=active]:shadow-sm sm:text-sm lg:min-w-0">
             <FolderOpen className="h-4 w-4 shrink-0" />
-            <span>קטגוריות קורס</span>
+            <span>קטגוריות קורס (מתקדם)</span>
           </TabsTrigger>
           <TabsTrigger value="siblings" className="flex shrink-0 flex-row-reverse items-center justify-center gap-2 rounded-md px-2 text-xs data-[state=active]:shadow-sm sm:text-sm lg:min-w-0">
             <Hash className="h-4 w-4 shrink-0" />
@@ -700,26 +716,6 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 px-3 sm:px-6">
-              <div className="grid grid-cols-1 gap-3 rounded-lg border p-3 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="campClassroomsCount" className="text-right block">כמות כיתות לקייטנה</Label>
-                  <Input
-                    id="campClassroomsCount"
-                    type="number"
-                    min="1"
-                    max="12"
-                    value={settings.camp_classrooms_count || 6}
-                    onChange={(e) =>
-                      setSettings({ ...settings, camp_classrooms_count: Math.max(1, Math.min(12, Number(e.target.value) || 6)) })
-                    }
-                    className="text-right"
-                    dir="rtl"
-                  />
-                </div>
-                <div className="text-sm text-muted-foreground text-right self-end">
-                  ערך זה קובע כמה עמודות כיתה יופיעו בטאב קייטנה (כיתה 1..N).
-                </div>
-              </div>
               <div className="flex flex-row-reverse justify-stretch sm:justify-end">
                 <Button type="button" onClick={openAddSiblingPackage} className="w-full gap-2 sm:w-auto">
                   <Plus className="h-4 w-4" />
@@ -908,13 +904,81 @@ export default function SettingsPage() {
             <CardHeader className="px-3 text-right sm:px-6">
               <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
                 <FolderOpen className="h-5 w-5 text-primary" />
-                קטגוריות קורס
+                קטגוריות קורס (מתקדם)
               </CardTitle>
               <CardDescription className="text-right">
-                ניהול קטגוריות להצגה בבחירת קורס (קורס חדש / עריכת קורס). הוספה, עריכה ומחיקה.
+                ניהול קטגוריות + הגדרת כיתות קייטנה (מספר/שם/הערות).
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 px-3 sm:px-6">
+              <div className="space-y-3 rounded-lg border p-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="campClassroomsCount" className="text-right block">כמות כיתות לקייטנה</Label>
+                    <Input
+                      id="campClassroomsCount"
+                      type="number"
+                      min="1"
+                      max="12"
+                      value={settings.camp_classrooms_count || 6}
+                      onChange={(e) => {
+                        const nextCount = Math.max(1, Math.min(12, Number(e.target.value) || 6))
+                        const nextRows = Array.from({ length: nextCount }, (_, i) => {
+                          const n = i + 1
+                          const row = (settings.camp_classrooms || []).find((c) => Number(c?.number) === n)
+                          return { number: n, name: String(row?.name || `כיתה ${n}`), notes: String(row?.notes || "") }
+                        })
+                        setSettings({ ...settings, camp_classrooms_count: nextCount, camp_classrooms: nextRows })
+                      }}
+                      className="text-right"
+                      dir="rtl"
+                    />
+                  </div>
+                  <div className="text-sm text-muted-foreground text-right self-end">
+                    הגדרה זו משפיעה על עמודות הטבלה בטאב קייטנה.
+                  </div>
+                </div>
+                <div className="overflow-x-auto rounded-md border">
+                  <table className="w-full min-w-[520px] text-sm">
+                    <thead className="bg-muted/40">
+                      <tr>
+                        <th className="p-2 text-right">כיתה מס'</th>
+                        <th className="p-2 text-right">שם כיתה</th>
+                        <th className="p-2 text-right">הערות</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {classroomsRows.map((row) => (
+                        <tr key={row.number} className="border-t">
+                          <td className="p-2 text-right">{row.number}</td>
+                          <td className="p-2">
+                            <Input
+                              value={row.name}
+                              onChange={(e) => {
+                                const next = classroomsRows.map((r) => r.number === row.number ? { ...r, name: e.target.value } : r)
+                                setSettings({ ...settings, camp_classrooms: next })
+                              }}
+                              className="text-right"
+                              dir="rtl"
+                            />
+                          </td>
+                          <td className="p-2">
+                            <Input
+                              value={row.notes || ""}
+                              onChange={(e) => {
+                                const next = classroomsRows.map((r) => r.number === row.number ? { ...r, notes: e.target.value } : r)
+                                setSettings({ ...settings, camp_classrooms: next })
+                              }}
+                              className="text-right"
+                              dir="rtl"
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
               <div className="flex flex-row-reverse justify-stretch sm:justify-end">
                 <Button type="button" onClick={openAddCategory} className="w-full gap-2 sm:w-auto">
                   <Plus className="h-4 w-4" />
