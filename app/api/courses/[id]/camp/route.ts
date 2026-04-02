@@ -57,7 +57,7 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
       `) || []
     const slots =
       (await db`
-        SELECT id, "courseId", "sortOrder", "startTime", "endTime"
+        SELECT id, "courseId", "sortOrder", "startTime", "endTime", "isBreak", "breakTitle"
         FROM "CampSlot"
         WHERE "courseId" = ${courseId}
         ORDER BY "sortOrder", "startTime"
@@ -125,9 +125,11 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
       classroomsCount,
       teachers,
       groupLetters: HEBREW_GROUP_LETTERS,
-      slots: (slots as { id: string; sortOrder: number; startTime: string; endTime: string }[]).map((s) => ({
+      slots: (slots as { id: string; sortOrder: number; startTime: string; endTime: string; isBreak?: boolean; breakTitle?: string }[]).map((s) => ({
         ...s,
         sortOrder: Number(s.sortOrder),
+        isBreak: Boolean(s.isBreak),
+        breakTitle: String(s.breakTitle || ""),
       })),
       days,
       editable: canEditCampStructure(session),
@@ -181,6 +183,8 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
         const endTime = cleanStr((s as { endTime?: string }).endTime)
         if (!startTime || !endTime) continue
         const sortOrder = Number((s as { sortOrder?: number }).sortOrder) || 0
+        const isBreak = Boolean((s as { isBreak?: boolean }).isBreak)
+        const breakTitle = cleanStr((s as { breakTitle?: string }).breakTitle)
         let sid = cleanStr((s as { id?: string }).id)
         if (sid && isUuidLike(sid)) {
           const hit =
@@ -188,7 +192,7 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
           if (hit.length) {
             await sql`
               UPDATE "CampSlot"
-              SET "sortOrder" = ${sortOrder}, "startTime" = ${startTime}, "endTime" = ${endTime}
+              SET "sortOrder" = ${sortOrder}, "startTime" = ${startTime}, "endTime" = ${endTime}, "isBreak" = ${isBreak}, "breakTitle" = ${breakTitle}
               WHERE id = ${sid} AND "courseId" = ${courseId}
             `
             continue
@@ -196,8 +200,8 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
         }
         sid = randomUUID()
         await sql`
-          INSERT INTO "CampSlot" (id, "courseId", "sortOrder", "startTime", "endTime")
-          VALUES (${sid}, ${courseId}, ${sortOrder}, ${startTime}, ${endTime})
+          INSERT INTO "CampSlot" (id, "courseId", "sortOrder", "startTime", "endTime", "isBreak", "breakTitle")
+          VALUES (${sid}, ${courseId}, ${sortOrder}, ${startTime}, ${endTime}, ${isBreak}, ${breakTitle})
         `
       }
 

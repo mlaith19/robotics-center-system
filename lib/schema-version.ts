@@ -17,7 +17,7 @@
  *  002_add_locked_until.sql (applied inline via IF NOT EXISTS) → v2
  */
 
-export const APP_SCHEMA_VERSION = 7
+export const APP_SCHEMA_VERSION = 8
 
 export const SCHEMA_CHANGELOG: Record<number, string> = {
   1: "Initial schema: User, Role, Permission, Student, Course, Payment, Attendance, login_attempts",
@@ -27,4 +27,5 @@ export const SCHEMA_CHANGELOG: Record<number, string> = {
   5: "005_created_by_user_enrollment.sql — createdByUserId ב-Enrollment, Payment, Attendance, Expense",
   6: "006_camp_kaytana.sql — קבוצות/חדרים/משבצות/ימי קייטנה, שיבוצים ושם שיעור; Enrollment.campGroupId",
   7: "007_camp_classroom_model.sql — campGroupLabel (א-ת), שיבוץ רב-קבוצות ורב-מורים, camp_classrooms_count",
+  8: "008_camp_break_slots.sql — משבצות הפסקה בטבלת קייטנה (isBreak, breakTitle)",
 }

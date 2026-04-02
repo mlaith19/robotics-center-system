@@ -114,6 +114,8 @@ export async function ensureCampTables(sql: Sql) {
     `,
   )
   await safe("CampSlot idx", sql`CREATE INDEX IF NOT EXISTS "CampSlot_courseId_idx" ON "CampSlot"("courseId")`)
+  await safe("CampSlot isBreak", sql`ALTER TABLE "CampSlot" ADD COLUMN IF NOT EXISTS "isBreak" BOOLEAN NOT NULL DEFAULT false`)
+  await safe("CampSlot breakTitle", sql`ALTER TABLE "CampSlot" ADD COLUMN IF NOT EXISTS "breakTitle" TEXT NOT NULL DEFAULT ''`)
 
   await safe(
     "CampDay",
