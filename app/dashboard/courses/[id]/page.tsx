@@ -508,6 +508,15 @@ export default function CourseViewPage() {
     if (type === "bit") return "ביט"
     return "—"
   }
+  const paymentMethodOrder: Array<"cash" | "credit" | "transfer" | "check" | "bit"> = ["cash", "credit", "transfer", "check", "bit"]
+  const paymentTotalsByMethod = paymentMethodOrder.map((method) => ({
+    method,
+    label: paymentTypeLabel(method),
+    total: paymentsForCourse
+      .filter((p) => (p.paymentType || "").toLowerCase() === method)
+      .reduce((sum, p) => sum + Number(p.amount || 0), 0),
+  }))
+  const paymentGrandTotal = paymentsForCourse.reduce((sum, p) => sum + Number(p.amount || 0), 0)
 
   const courseTeachers = teachers.filter(t => 
     course.teacherIds && course.teacherIds.includes(t.id)
@@ -919,7 +928,17 @@ export default function CourseViewPage() {
         <TabsContent value="payments">
           <Card>
             <CardContent className="p-6 space-y-4">
-              <div className="flex justify-end">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  {paymentTotalsByMethod.map((item) => (
+                    <Badge key={item.method} variant="secondary" className="text-xs sm:text-sm">
+                      {item.label}: ₪{item.total.toLocaleString()}
+                    </Badge>
+                  ))}
+                  <Badge className="bg-emerald-600 text-white hover:bg-emerald-700 text-xs sm:text-sm">
+                    סה&quot;כ כללי: ₪{paymentGrandTotal.toLocaleString()}
+                  </Badge>
+                </div>
                 <div className="flex items-center gap-2">
                   <Button
                     type="button"
