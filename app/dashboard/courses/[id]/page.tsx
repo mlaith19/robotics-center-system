@@ -114,7 +114,8 @@ export default function CourseViewPage() {
     editCourse: locale === "ar" ? "تعديل الدورة" : locale === "en" ? "Edit Course" : "ערוך קורס",
     general: locale === "ar" ? "عام" : locale === "en" ? "General" : "כללי",
     linkedStudents: locale === "ar" ? "الطلاب المرتبطون" : locale === "en" ? "Linked Students" : "ילדים משויכים",
-    costPayments: locale === "ar" ? "التكلفة والمدفوعات" : locale === "en" ? "Cost & Payments" : "עלות ותשלומים",
+    costPayments: locale === "ar" ? "المدفوعات" : locale === "en" ? "Payments" : "תשלומים",
+    debtors: locale === "ar" ? "المدينون" : locale === "en" ? "Debtors" : "חייבים",
     studentAttendance: locale === "ar" ? "حضور الطلاب" : locale === "en" ? "Student Attendance" : "נוכחות תלמיד",
     teacherAttendance: locale === "ar" ? "حضور المعلمين" : locale === "en" ? "Teacher Attendance" : "נוכחות מורה",
     courseInfo: locale === "ar" ? "معلومات الدورة" : locale === "en" ? "Course Info" : "פרטי הקורס",
@@ -192,6 +193,7 @@ export default function CourseViewPage() {
   const canTabAttendanceStudents = isAdmin || hasPermission(userPerms, "courses.tab.attendance.students")
   const canTabAttendanceTeachers = isAdmin || hasPermission(userPerms, "courses.tab.attendance.teachers")
   const canTabSessionsFeedback = isAdmin || hasPermission(userPerms, "courses.tab.feedback") || hasPermission(userPerms, "courses.tab.attendance.students")
+  const canTabDebtors = canTabPayments
   const isCampCourse = !!(course && isCampCourseType(course.courseType))
   const canTabCamp = isCampCourse && (isAdmin || hasPermission(userPerms, "courses.tab.camp"))
   const [centerName, setCenterName] = useState("")
@@ -508,6 +510,14 @@ export default function CourseViewPage() {
     if (type === "bit") return "ביט"
     return "—"
   }
+  const paymentTypeBadgeClass = (type: string) => {
+    if (type === "cash") return "border-emerald-200 bg-emerald-50 text-emerald-700"
+    if (type === "credit") return "border-sky-200 bg-sky-50 text-sky-700"
+    if (type === "transfer") return "border-violet-200 bg-violet-50 text-violet-700"
+    if (type === "check") return "border-amber-200 bg-amber-50 text-amber-700"
+    if (type === "bit") return "border-pink-200 bg-pink-50 text-pink-700"
+    return "border-slate-200 bg-slate-50 text-slate-700"
+  }
   const paymentMethodOrder: Array<"cash" | "credit" | "transfer" | "check" | "bit"> = ["cash", "credit", "transfer", "check", "bit"]
   const paymentTotalsByMethod = paymentMethodOrder.map((method) => ({
     method,
@@ -517,6 +527,27 @@ export default function CourseViewPage() {
       .reduce((sum, p) => sum + Number(p.amount || 0), 0),
   }))
   const paymentGrandTotal = paymentsForCourse.reduce((sum, p) => sum + Number(p.amount || 0), 0)
+  const paidByStudent = new Map<string, number>()
+  for (const p of paymentsForCourse) {
+    if (!p.studentId) continue
+    paidByStudent.set(p.studentId, (paidByStudent.get(p.studentId) || 0) + Number(p.amount || 0))
+  }
+  const debtRows = enrollments
+    .map((e) => {
+      const totalDue = Number((e as any).coursePrice ?? course?.price ?? 0)
+      const paid = paidByStudent.get(e.studentId) || 0
+      const balance = Math.max(0, totalDue - paid)
+      return {
+        enrollmentId: e.id,
+        studentId: e.studentId,
+        studentName: e.studentName || "—",
+        totalDue,
+        paid,
+        balance,
+      }
+    })
+    .filter((r) => r.balance > 0.009)
+  const totalDebtAmount = debtRows.reduce((sum, r) => sum + r.balance, 0)
 
   const courseTeachers = teachers.filter(t => 
     course.teacherIds && course.teacherIds.includes(t.id)
@@ -542,6 +573,7 @@ export default function CourseViewPage() {
     !isStudentUser && canTabStudents,
     canTabCamp,
     !isStudentUser && canTabPayments,
+    !isStudentUser && canTabDebtors,
     canTabAttendanceStudents,
     canTabAttendanceTeachers,
   ].filter(Boolean).length
@@ -577,7 +609,7 @@ export default function CourseViewPage() {
       </div>
 
       {/* Tabs - לפי הרשאות טאב בכרטסת קורס */}
-      <Tabs defaultValue={canTabGeneral ? "general" : canTabSessionsFeedback ? "sessions-feedback" : !isStudentUser && canTabStudents ? "students" : canTabCamp ? "camp" : !isStudentUser && canTabPayments ? "payments" : canTabAttendanceStudents ? "attendance-students" : "attendance-teachers"} className="w-full" dir={isRtl ? "rtl" : "ltr"}>
+      <Tabs defaultValue={canTabGeneral ? "general" : canTabSessionsFeedback ? "sessions-feedback" : !isStudentUser && canTabStudents ? "students" : canTabCamp ? "camp" : !isStudentUser && canTabPayments ? "payments" : !isStudentUser && canTabDebtors ? "debtors" : canTabAttendanceStudents ? "attendance-students" : "attendance-teachers"} className="w-full" dir={isRtl ? "rtl" : "ltr"}>
         <div className="-mx-1 overflow-x-auto px-1 pb-1 sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0">
           <TabsList
             className="mb-4 flex h-auto min-h-10 w-max min-w-full max-w-none flex-nowrap justify-start gap-1 overflow-x-auto p-[3px] sm:mb-6 md:grid md:w-full md:max-w-full md:overflow-visible"
@@ -612,6 +644,11 @@ export default function CourseViewPage() {
             {!isStudentUser && canTabPayments && (
               <TabsTrigger value="payments" className="shrink-0 px-2 text-xs sm:text-sm md:min-w-0">
                 {tr.costPayments}
+              </TabsTrigger>
+            )}
+            {!isStudentUser && canTabDebtors && (
+              <TabsTrigger value="debtors" className="shrink-0 px-2 text-xs sm:text-sm md:min-w-0">
+                {tr.debtors}
               </TabsTrigger>
             )}
             {canTabAttendanceStudents && (
@@ -931,11 +968,15 @@ export default function CourseViewPage() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-2">
                   {paymentTotalsByMethod.map((item) => (
-                    <Badge key={item.method} variant="secondary" className="text-xs sm:text-sm">
+                    <Badge
+                      key={item.method}
+                      variant="outline"
+                      className={`text-xs sm:text-sm border font-semibold ${paymentTypeBadgeClass(item.method)}`}
+                    >
                       {item.label}: ₪{item.total.toLocaleString()}
                     </Badge>
                   ))}
-                  <Badge className="bg-emerald-600 text-white hover:bg-emerald-700 text-xs sm:text-sm">
+                  <Badge className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:from-indigo-700 hover:to-purple-700 text-xs sm:text-sm font-semibold shadow-sm">
                     סה&quot;כ כללי: ₪{paymentGrandTotal.toLocaleString()}
                   </Badge>
                 </div>
@@ -1069,6 +1110,87 @@ export default function CourseViewPage() {
               </div>
             </DialogContent>
           </Dialog>
+        </TabsContent>
+        )}
+
+        {!isStudentUser && canTabDebtors && (
+        <TabsContent value="debtors">
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="rounded-lg bg-rose-100 p-2">
+                    <BarChart3 className="h-5 w-5 text-rose-600" />
+                  </div>
+                  <CardTitle className="text-lg font-bold tracking-tight text-rose-700">
+                    {tr.debtors}
+                  </CardTitle>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className="bg-gradient-to-r from-rose-600 to-red-600 text-white hover:from-rose-700 hover:to-red-700 text-xs sm:text-sm font-semibold shadow-sm">
+                    סה&quot;כ חוב: ₪{totalDebtAmount.toLocaleString()}
+                  </Badge>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="gap-1 bg-purple-600 hover:bg-purple-700 text-white"
+                    onClick={() => {
+                      const w = window.open("", "_blank")
+                      if (!w) return
+                      const logoHtml = centerLogo ? `<img src="${centerLogo}" style="max-height:60px;max-width:160px;object-fit:contain" />` : ""
+                      w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>דוח חייבים - ${course?.name || ""}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;padding:32px 40px;color:#1f2937;max-width:980px;margin:0 auto}.header{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:20px;padding-bottom:12px;border-bottom:2px solid #3b82f6}.header h1{font-size:22px;color:#1e40af;margin-top:6px}.header h2{font-size:15px;color:#4b5563;font-weight:400;margin-top:2px}.totals{display:flex;justify-content:center;margin:12px 0 16px}.total-box{border:1px solid #fecaca;background:#fff1f2;border-radius:10px;padding:10px 14px;text-align:center}.total-label{font-size:12px;color:#9f1239}.total-val{font-size:22px;font-weight:700;color:#be123c;margin-top:4px}table{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px}th{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:8px 10px;text-align:center;font-weight:600}td{border:1px solid #d1d5db;padding:8px 10px;text-align:center;vertical-align:middle}tr:nth-child(even) td{background:#f9fafb}.paid{color:#166534;font-weight:600}.debt{color:#b91c1c;font-weight:700}@media print{body{padding:20px 28px;max-width:100%}@page{margin:20mm 15mm}}</style></head><body>`)
+                      w.document.write(`<div class="header">${logoHtml}<h1>${centerName || "מרכז"}</h1>${course?.name ? `<h2 style="font-size:17px;color:#1f2937;font-weight:600;margin-top:4px">${course.name}</h2>` : ""}<h2>דוח חייבים</h2></div>`)
+                      w.document.write(`<div class="totals"><div class="total-box"><div class="total-label">סה"כ חוב בקורס</div><div class="total-val">₪${totalDebtAmount.toLocaleString()}</div></div></div>`)
+                      w.document.write(`<table><thead><tr><th>#</th><th>שם תלמיד</th><th>סה"כ לתשלום</th><th>שולם</th><th>יתרה</th></tr></thead><tbody>`)
+                      debtRows.forEach((r, idx) => {
+                        w.document.write(`<tr><td>${idx + 1}</td><td>${r.studentName}</td><td>₪${r.totalDue.toLocaleString()}</td><td class="paid">₪${r.paid.toLocaleString()}</td><td class="debt">₪${r.balance.toLocaleString()}</td></tr>`)
+                      })
+                      w.document.write(`</tbody></table></body></html>`)
+                      w.document.close()
+                      setTimeout(() => w.print(), 300)
+                    }}
+                  >
+                    <Printer className="h-4 w-4" />
+                    הדפסה
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="text-sm text-muted-foreground">
+                מוצגים רק תלמידים עם יתרה לתשלום. תלמיד שסיים לשלם לא יופיע ברשימה.
+              </div>
+              <div className="overflow-x-auto rounded-md border">
+                <Table className="min-w-[760px]">
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="text-right">{tr.student}</TableHead>
+                      <TableHead className="text-right">סה&quot;כ לתשלום</TableHead>
+                      <TableHead className="text-right">שולם</TableHead>
+                      <TableHead className="text-right">יתרה</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {debtRows.length > 0 ? debtRows.map((r) => (
+                      <TableRow key={r.enrollmentId}>
+                        <TableCell className="text-right">{r.studentName}</TableCell>
+                        <TableCell className="text-right">₪{r.totalDue.toLocaleString()}</TableCell>
+                        <TableCell className="text-right text-emerald-700 font-medium">₪{r.paid.toLocaleString()}</TableCell>
+                        <TableCell className="text-right text-red-600 font-semibold">₪{r.balance.toLocaleString()}</TableCell>
+                      </TableRow>
+                    )) : (
+                      <TableRow>
+                        <TableCell className="text-center text-muted-foreground" colSpan={4}>
+                          אין תלמידים עם חוב בקורס זה
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
         )}
 
