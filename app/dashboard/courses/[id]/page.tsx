@@ -10,6 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { ArrowRight, Pencil, Loader2, BookOpen, Calendar, Users, BarChart3, CalendarCheck, Check, X, Thermometer, Plane, CalendarRange, Printer } from "lucide-react"
 import { courseTimeToDisplayValue } from "@/lib/course-db-fields"
 import { useLanguage } from "@/lib/i18n/context"
@@ -193,6 +195,14 @@ export default function CourseViewPage() {
   const [savingSession, setSavingSession] = useState(false)
   const [feedbackDrafts, setFeedbackDrafts] = useState<Record<string, Record<string, string>>>({})
   const [savingFeedbackBySession, setSavingFeedbackBySession] = useState<Record<string, boolean>>({})
+  const [isAddPaymentOpen, setIsAddPaymentOpen] = useState(false)
+  const [payStudentId, setPayStudentId] = useState("")
+  const [payAmount, setPayAmount] = useState("")
+  const [payMethod, setPayMethod] = useState<"cash" | "credit" | "transfer" | "check" | "bit">("cash")
+  const [payDate, setPayDate] = useState(() => new Date().toISOString().split("T")[0])
+  const [payDescription, setPayDescription] = useState("")
+  const [isAddingPayment, setIsAddingPayment] = useState(false)
+  const [paidStudentIds, setPaidStudentIds] = useState<string[]>([])
   const campGroups = HEBREW_GROUP_LETTERS
 
   useEffect(() => {
@@ -259,6 +269,35 @@ export default function CourseViewPage() {
       })
       .catch(() => setAttendanceByStudent({}))
   }, [id, attendanceDate, canTabAttendanceStudents])
+
+  useEffect(() => {
+    if (!canTabPayments) return
+    if (!enrollments.length) {
+      setPaidStudentIds([])
+      return
+    }
+    const loadPaidStudents = async () => {
+      try {
+        const res = await fetch("/api/payments")
+        if (!res.ok) {
+          setPaidStudentIds([])
+          return
+        }
+        const rows = await res.json()
+        const enrolledSet = new Set(enrollments.map((e) => e.studentId))
+        const paidSet = new Set<string>()
+        for (const row of Array.isArray(rows) ? rows : []) {
+          if (row?.studentId && enrolledSet.has(String(row.studentId))) {
+            paidSet.add(String(row.studentId))
+          }
+        }
+        setPaidStudentIds(Array.from(paidSet))
+      } catch {
+        setPaidStudentIds([])
+      }
+    }
+    loadPaidStudents()
+  }, [canTabPayments, enrollments])
 
   useEffect(() => {
     if (!id || !canTabSessionsFeedback) return
@@ -362,6 +401,36 @@ export default function CourseViewPage() {
     }
   }
 
+  async function addCoursePayment() {
+    if (!payStudentId || !payAmount || Number(payAmount) <= 0) return
+    setIsAddingPayment(true)
+    try {
+      const res = await fetch("/api/payments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: payStudentId,
+          amount: Number(payAmount),
+          date: payDate,
+          paymentMethod: payMethod,
+          description: payDescription.trim() || `תשלום לקורס: ${course?.name || ""}`,
+        }),
+      })
+      if (!res.ok) throw new Error("Failed to create payment")
+      setPaidStudentIds((prev) => (prev.includes(payStudentId) ? prev : [...prev, payStudentId]))
+      setIsAddPaymentOpen(false)
+      setPayStudentId("")
+      setPayAmount("")
+      setPayMethod("cash")
+      setPayDate(new Date().toISOString().split("T")[0])
+      setPayDescription("")
+    } catch {
+      // keep silent as existing page style
+    } finally {
+      setIsAddingPayment(false)
+    }
+  }
+
   function attendanceStatusButton(studentId: string, status: "present" | "absent" | "sick" | "vacation", label: string, Icon: any) {
     const isActive = attendanceByStudent[studentId] === status
     const isSaving = !!savingByStudent[studentId]
@@ -400,6 +469,8 @@ export default function CourseViewPage() {
   if (!course) {
     return <div className="p-3 text-center sm:p-6">{tr.notFound}</div>
   }
+
+  const enrollmentsWithPayments = enrollments.filter((e) => paidStudentIds.includes(e.studentId))
 
   const courseTeachers = teachers.filter(t => 
     course.teacherIds && course.teacherIds.includes(t.id)
@@ -812,11 +883,20 @@ export default function CourseViewPage() {
           <Card>
             <CardContent className="p-6 space-y-4">
               <div className="flex justify-end">
-                <Button
-                  type="button"
-                  size="sm"
-                  className="gap-1 bg-purple-600 hover:bg-purple-700 text-white"
-                  onClick={() => {
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    onClick={() => setIsAddPaymentOpen(true)}
+                  >
+                    + הוספת תשלום
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="gap-1 bg-purple-600 hover:bg-purple-700 text-white"
+                    onClick={() => {
                     const w = window.open("", "_blank")
                     if (!w) return
                     const logoHtml = centerLogo ? `<img src="${centerLogo}" style="max-height:60px;max-width:160px;object-fit:contain" />` : ""
@@ -825,7 +905,7 @@ export default function CourseViewPage() {
                     w.document.write(`<div class="header">${logoHtml}<h1>${centerName || "מרכז"}</h1>${course?.name ? `<h2 style="font-size:17px;color:#1f2937;font-weight:600;margin-top:4px">${course.name}</h2>` : ""}<h2>דוח עלות ותשלומים</h2></div>`)
                     w.document.write(`<div class="summary"><div class="box"><div class="label">מספר תלמידים משויכים</div><div class="val">${enrollments.length}</div></div><div class="box"><div class="label">מחיר קורס לתלמיד</div><div class="val">₪${Number(course?.price || 0).toLocaleString()}</div></div></div>`)
                     w.document.write(`<table><thead><tr><th>#</th><th>תלמיד</th><th>סטטוס הרשמה</th><th>תאריך הרשמה</th><th>קבוצה</th><th>חבילת אחים</th></tr></thead><tbody>`)
-                    enrollments.forEach((e, idx) => {
+                    enrollmentsWithPayments.forEach((e, idx) => {
                       const d = e.enrollmentDate ? new Date(e.enrollmentDate).toLocaleDateString(localeTag) : "—"
                       const groupLabel = e.campGroupLabel ? `קבוצה ${e.campGroupLabel}` : "—"
                       w.document.write(`<tr><td>${idx + 1}</td><td>${e.studentName || "—"}</td><td>${e.status || "—"}</td><td>${d}</td><td>${groupLabel}</td><td>${e.siblingDiscountPackageName || "—"}</td></tr>`)
@@ -833,11 +913,12 @@ export default function CourseViewPage() {
                     w.document.write(`</tbody></table></body></html>`)
                     w.document.close()
                     setTimeout(() => w.print(), 300)
-                  }}
-                >
-                  <Printer className="h-4 w-4" />
-                  הדפסת עלות ותשלומים
-                </Button>
+                    }}
+                  >
+                    <Printer className="h-4 w-4" />
+                    הדפסת עלות ותשלומים
+                  </Button>
+                </div>
               </div>
               <div className="text-center text-muted-foreground">
                 {tr.paymentInfoPlaceholder}
@@ -854,7 +935,7 @@ export default function CourseViewPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {enrollments.length > 0 ? enrollments.map((e) => (
+                    {enrollmentsWithPayments.length > 0 ? enrollmentsWithPayments.map((e) => (
                       <TableRow key={e.id}>
                         <TableCell className="text-right">{e.studentName || "—"}</TableCell>
                         <TableCell className="text-right">{e.status || "—"}</TableCell>
@@ -865,7 +946,7 @@ export default function CourseViewPage() {
                     )) : (
                       <TableRow>
                         <TableCell className="text-center text-muted-foreground" colSpan={5}>
-                          {tr.noneStudents}
+                          אין תלמידים עם תשלומים בקורס זה
                         </TableCell>
                       </TableRow>
                     )}
@@ -874,6 +955,63 @@ export default function CourseViewPage() {
               </div>
             </CardContent>
           </Card>
+          <Dialog open={isAddPaymentOpen} onOpenChange={setIsAddPaymentOpen}>
+            <DialogContent dir="rtl">
+              <DialogHeader>
+                <DialogTitle>הוספת תשלום לקורס</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div>
+                  <div className="mb-1 text-sm text-muted-foreground">תלמיד משויך</div>
+                  <Select value={payStudentId} onValueChange={setPayStudentId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="בחר תלמיד" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {enrollments.map((e) => (
+                        <SelectItem key={e.studentId} value={e.studentId}>
+                          {e.studentName || "—"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="mb-1 text-sm text-muted-foreground">שיטת תשלום</div>
+                    <Select value={payMethod} onValueChange={(v: any) => setPayMethod(v)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cash">מזומן</SelectItem>
+                        <SelectItem value="credit">אשראי</SelectItem>
+                        <SelectItem value="transfer">העברה בנקאית</SelectItem>
+                        <SelectItem value="check">שיק</SelectItem>
+                        <SelectItem value="bit">ביט</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <div className="mb-1 text-sm text-muted-foreground">סכום</div>
+                    <Input type="number" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} placeholder="0.00" />
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-1 text-sm text-muted-foreground">תאריך</div>
+                  <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+                </div>
+                <div>
+                  <div className="mb-1 text-sm text-muted-foreground">תיאור</div>
+                  <Input value={payDescription} onChange={(e) => setPayDescription(e.target.value)} placeholder={`תשלום לקורס: ${course?.name || ""}`} />
+                </div>
+                <Button className="w-full bg-emerald-600 hover:bg-emerald-700" onClick={addCoursePayment} disabled={isAddingPayment}>
+                  {isAddingPayment ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  שמירת תשלום
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
         )}
 
