@@ -3,7 +3,6 @@
 import { Card } from "@/components/ui/card"
 import { BookOpen, Users, Calendar, TrendingUp, GraduationCap, Building2, Banknote, Loader2 } from "lucide-react"
 import { useEffect, useState, useRef } from "react"
-import { PageHeader } from "@/components/page-header"
 import { useRouter } from "next/navigation"
 import { useUserType } from "@/lib/use-user-type"
 import { useLanguage } from "@/lib/i18n/context"
@@ -144,14 +143,6 @@ export default function DashboardPage() {
 
   return (
     <div className="container mx-auto max-w-7xl space-y-4 p-3 sm:space-y-8 sm:p-6" dir="rtl">
-      <PageHeader 
-        title="דף הבית" 
-        description="סקירה כללית של" 
-        showLogo={true}
-        useCenterNameInDescription={true}
-        centered={true}
-      />
-
       {/* Stats Row 1 */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
         <Card className="border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100/50 p-4 dark:border-blue-800 dark:from-blue-950/30 dark:to-blue-900/20 sm:p-5">

@@ -6,7 +6,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ArrowRight, Mail, Phone, Edit, BookOpen, CalendarCheck, Plus, Loader2, Printer } from "lucide-react"
+import { ArrowRight, Mail, Phone, Edit, BookOpen, CalendarCheck, Plus, Loader2, Printer, Trash2 } from "lucide-react"
 import { useCurrentUser } from "@/lib/auth-context"
 import { hasPermission, hasFullAccessRole } from "@/lib/permissions"
 import { courseTimeToDisplayValue } from "@/lib/course-db-fields"
@@ -128,6 +128,7 @@ export default function TeacherViewPage() {
   const [centerName, setCenterName] = useState("")
   const [centerLogo, setCenterLogo] = useState("")
   const [selectedAttendanceCourse, setSelectedAttendanceCourse] = useState<string>("all")
+  const [deletingAttendanceId, setDeletingAttendanceId] = useState<string | null>(null)
   const [payments, setPayments] = useState<any[]>([]) // Declare payments variable
   const [isTeacherUser, setIsTeacherUser] = useState(false)
 
@@ -520,6 +521,26 @@ export default function TeacherViewPage() {
     }
   }
 
+  async function handleDeleteAttendanceRecord(recordId: string) {
+    if (!isAdmin || !id || typeof id !== "string") return
+    if (!window.confirm("למחוק את רשומת הנוכחות?")) return
+    setDeletingAttendanceId(recordId)
+    try {
+      const res = await fetch(`/api/attendance?id=${encodeURIComponent(recordId)}`, {
+        method: "DELETE",
+        credentials: "include",
+      })
+      if (!res.ok) return
+      const refresh = await fetch(`/api/attendance?teacherId=${id}`, { cache: "no-store" })
+      const data = refresh.ok ? await refresh.json() : []
+      setTeacherAttendance(Array.isArray(data) ? data : [])
+    } catch {
+      // ignore
+    } finally {
+      setDeletingAttendanceId(null)
+    }
+  }
+
   // Note: if id is "create", the useEffect above handles redirect
   // We show a brief loading state while redirecting
   if (loading || isCreateRoute) return <div className="p-3 sm:p-6" dir="rtl">טוען...</div>
@@ -868,37 +889,6 @@ export default function TeacherViewPage() {
 
           {canTabAttendance && (
           <TabsContent value="attendance" className="mt-6 space-y-4">
-            <div className="flex justify-end">
-              <Button
-                type="button"
-                size="sm"
-                className="gap-1 bg-purple-600 hover:bg-purple-700 text-white"
-                onClick={() => {
-                  const w = window.open("", "_blank")
-                  if (!w) return
-                  const logoHtml = centerLogo ? `<img src="${centerLogo}" style="max-height:60px;max-width:160px;object-fit:contain" />` : ""
-                  w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>נוכחות מורה - ${teacher?.name || ""}</title>
-<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;padding:32px 40px;color:#1f2937;max-width:900px;margin:0 auto}.header{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:20px;padding-bottom:12px;border-bottom:2px solid #3b82f6}.header h1{font-size:22px;color:#1e40af;margin-top:6px}.header h2{font-size:15px;color:#4b5563;font-weight:400;margin-top:2px}table{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px}th{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:8px 10px;text-align:center;font-weight:600}td{border:1px solid #d1d5db;padding:8px 10px;text-align:center;vertical-align:middle}tr:nth-child(even) td{background:#f9fafb}.status-present{color:#166534;font-weight:600}.status-absent{color:#991b1b;font-weight:600}@media print{body{padding:20px 28px;max-width:100%}@page{margin:20mm 15mm}}</style></head><body>`)
-                  w.document.write(`<div class="header">${logoHtml}<h1>${centerName || "מרכז"}</h1><h2 style="font-size:17px;color:#1f2937;font-weight:600;margin-top:4px">${teacher?.name || "מורה"}</h2><h2>דוח נוכחות</h2></div>`)
-                  w.document.write(`<table><thead><tr><th>#</th><th>תאריך</th><th>קורס</th><th>משעה</th><th>עד שעה</th><th>סה"כ שעות</th><th>סטטוס</th><th>הערה</th></tr></thead><tbody>`)
-                  filteredAttendance.forEach((a: any, idx: number) => {
-                    const statusLabel = getStatusLabel(a.status)
-                    const isPresent = statusLabel === "נוכח"
-                    const startDisplay = courseTimeToDisplayValue(a.courseStartTime) || "—"
-                    const endDisplay = courseTimeToDisplayValue(a.courseEndTime) || "—"
-                    const hours = calcAttendanceHours(a)
-                    const cls = isPresent ? "status-present" : "status-absent"
-                    w.document.write(`<tr><td>${idx + 1}</td><td>${fmtDate(a.date)}</td><td>${a.courseName || "—"}</td><td>${startDisplay}</td><td>${endDisplay}</td><td>${hours > 0 ? hours.toFixed(1) : "—"}</td><td class="${cls}">${statusLabel}</td><td>${a.notes || "—"}</td></tr>`)
-                  })
-                  w.document.write(`</tbody></table></body></html>`)
-                  w.document.close()
-                  setTimeout(() => w.print(), 300)
-                }}
-              >
-                <Printer className="h-4 w-4" />
-                הדפסת נוכחות מורה
-              </Button>
-            </div>
             {/* Stats Cards with Colors */}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
               <Card className="border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/20">
@@ -972,7 +962,7 @@ export default function TeacherViewPage() {
                 }}
               >
                 <Printer className="h-4 w-4" />
-                הדפסה
+                הדפסת נוכחות מורה
               </Button>
             </div>
 
@@ -990,6 +980,7 @@ export default function TeacherViewPage() {
                         <th className="border p-2 text-center font-medium">סה&quot;כ שעות</th>
                         <th className="border p-2 text-center font-medium">סטטוס</th>
                         <th className="border p-2 text-right font-medium">הערה</th>
+                        {isAdmin ? <th className="border p-2 text-center font-medium w-14">מחיקה</th> : null}
                       </tr>
                     </thead>
                     <tbody>
@@ -1015,6 +1006,25 @@ export default function TeacherViewPage() {
                               }`}>{statusLabel}</span>
                             </td>
                             <td className="border p-2 text-right text-muted-foreground">{a.notes || "—"}</td>
+                            {isAdmin ? (
+                              <td className="border p-2 text-center">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                  disabled={deletingAttendanceId === a.id}
+                                  onClick={() => handleDeleteAttendanceRecord(String(a.id))}
+                                  aria-label="מחיקת רשומת נוכחות"
+                                >
+                                  {deletingAttendanceId === a.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              </td>
+                            ) : null}
                           </tr>
                         )
                       })}

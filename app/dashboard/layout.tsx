@@ -298,10 +298,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }`}
       >
         <div className="flex h-full flex-col">
-          <div className="border-b border-border px-4 py-2" />
-
           {/* Navigation */}
-          <nav className="flex-1 space-y-1 p-4 overflow-y-auto">
+          <nav className="flex-1 space-y-1 overflow-y-auto p-3 pt-4">
             {isLinkedToStudent && !isAdminRole ? (
               // סטודנט: פרופיל שלי או דף בית – לפי הרשאה (הדדי)
               <>

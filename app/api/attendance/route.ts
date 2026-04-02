@@ -352,6 +352,13 @@ export const DELETE = withTenantAuth(async (req, _session) => {
     const isAdmin = sessionRolesGrantFullAccess(_session.roleKey, _session.role)
 
     if (id) {
+      const existing = await db`SELECT "teacherId" FROM "Attendance" WHERE id = ${id} LIMIT 1`
+      if (existing.length === 0) {
+        return Response.json({ error: "Attendance not found" }, { status: 404 })
+      }
+      if (existing[0].teacherId && !isAdmin) {
+        return Response.json({ error: "Only admin can delete teacher attendance" }, { status: 403 })
+      }
       await db`DELETE FROM "Attendance" WHERE id = ${id}`
       return Response.json({ success: true })
     }
