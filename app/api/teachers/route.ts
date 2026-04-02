@@ -11,6 +11,8 @@ export const GET = withTenantAuth(async (req, session) => {
   const [tenant, tenantErr] = await requireTenant(req)
   if (tenantErr) return tenantErr
   const db = tenant.db
+  const { searchParams } = new URL(req.url)
+  const withAggregate = searchParams.get("aggregate") === "1"
   try {
     await ensureTeacherTariffTables(db)
     const [teachers, expenses, attendances, enrollments, tariffLinks] = await Promise.all([
@@ -52,6 +54,7 @@ export const GET = withTenantAuth(async (req, session) => {
     })
 
     const owedMap = new Map<string, number>()
+    let totalAttendanceHoursAll = 0
     ;(attendances as any[]).forEach((a) => {
       const teacherId = String(a.teacherId || "")
       if (!teacherId) return
@@ -70,6 +73,8 @@ export const GET = withTenantAuth(async (req, session) => {
         }
       }
       if (hours <= 0) return
+
+      totalAttendanceHoursAll += hours
 
       const teacher = teacherMap.get(teacherId)
       if (!teacher) return
@@ -95,6 +100,16 @@ export const GET = withTenantAuth(async (req, session) => {
         balance: totalPaid - totalOwed,
       }
     })
+    if (withAggregate) {
+      const totalSalaryExpenses = [...paidMap.values()].reduce((sum, v) => sum + Number(v || 0), 0)
+      return Response.json({
+        teachers: out,
+        aggregate: {
+          totalAttendanceHours: Math.round(totalAttendanceHoursAll * 10) / 10,
+          totalSalaryExpenses,
+        },
+      })
+    }
     return Response.json(out)
   } catch (err) {
     console.error("GET /api/teachers error:", err)

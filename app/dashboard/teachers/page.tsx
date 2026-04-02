@@ -17,6 +17,8 @@ import {
   Mail,
   Phone,
   MapPin,
+  Clock,
+  Wallet,
 } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { deleteWithUndo } from "@/lib/notify"
@@ -44,8 +46,14 @@ type Teacher = {
   createdAt?: string
 }
 
+type TeachersAggregate = {
+  totalAttendanceHours: number
+  totalSalaryExpenses: number
+}
+
 export default function TeachersPage() {
   const [teachers, setTeachers] = useState<Teacher[]>([])
+  const [aggregate, setAggregate] = useState<TeachersAggregate | null>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [q, setQ] = useState("")
@@ -69,14 +77,27 @@ export default function TeachersPage() {
     setLoading(true)
     setErr(null)
     try {
-      const res = await fetch("/api/teachers", { cache: "no-store" })
+      const res = await fetch("/api/teachers?aggregate=1", { cache: "no-store" })
       if (res.status === 404) {
         setTeachers([])
+        setAggregate(null)
         return
       }
       if (!res.ok) throw new Error(`Failed to load teachers (${res.status})`)
       const data = await res.json()
-      setTeachers(data ?? [])
+      if (data && Array.isArray(data.teachers) && data.aggregate) {
+        setTeachers(data.teachers ?? [])
+        setAggregate({
+          totalAttendanceHours: Number(data.aggregate.totalAttendanceHours ?? 0),
+          totalSalaryExpenses: Number(data.aggregate.totalSalaryExpenses ?? 0),
+        })
+      } else if (Array.isArray(data)) {
+        setTeachers(data)
+        setAggregate(null)
+      } else {
+        setTeachers([])
+        setAggregate(null)
+      }
     } catch (e: any) {
       setErr(e?.message ?? "Failed to load")
     } finally {
@@ -227,10 +248,37 @@ export default function TeachersPage() {
 
   return (
     <div dir="rtl" className="container mx-auto max-w-7xl space-y-4 p-3 sm:space-y-6 sm:p-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <PageHeader title="מורים" description="ניהול צוות ההוראה במרכז" />
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
+        <div className="shrink-0 text-right">
+          <PageHeader title="מורים" description="ניהול צוות ההוראה במרכז" />
+        </div>
 
-        <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end">
+        <div className="flex flex-1 flex-wrap items-center justify-center gap-2 sm:gap-3">
+          <div className="flex min-w-[140px] flex-1 items-center gap-2 rounded-xl border border-teal-200 bg-gradient-to-br from-teal-50 to-cyan-50 px-3 py-2.5 shadow-sm sm:min-w-[180px] sm:px-4 sm:py-3 dark:border-teal-800 dark:from-teal-950/40 dark:to-cyan-950/30">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-500/20 sm:h-10 sm:w-10">
+              <Clock className="h-4 w-4 text-teal-700 dark:text-teal-300 sm:h-5 sm:w-5" />
+            </div>
+            <div className="min-w-0 text-right">
+              <div className="text-[11px] font-medium text-teal-800/90 dark:text-teal-200/90 sm:text-xs">סה״כ שעות נוכחות (מורים)</div>
+              <div className="text-lg font-bold tabular-nums text-teal-900 dark:text-teal-100 sm:text-xl">
+                {loading ? "…" : aggregate != null ? aggregate.totalAttendanceHours.toLocaleString("he-IL") : "—"}
+              </div>
+            </div>
+          </div>
+          <div className="flex min-w-[140px] flex-1 items-center gap-2 rounded-xl border border-rose-200 bg-gradient-to-br from-rose-50 to-orange-50 px-3 py-2.5 shadow-sm sm:min-w-[180px] sm:px-4 sm:py-3 dark:border-rose-900 dark:from-rose-950/40 dark:to-orange-950/30">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-rose-500/20 sm:h-10 sm:w-10">
+              <Wallet className="h-4 w-4 text-rose-700 dark:text-rose-300 sm:h-5 sm:w-5" />
+            </div>
+            <div className="min-w-0 text-right">
+              <div className="text-[11px] font-medium text-rose-800/90 dark:text-rose-200/90 sm:text-xs">סה״כ ישולם משכורות (הוצאות)</div>
+              <div className="text-lg font-bold tabular-nums text-rose-900 dark:text-rose-100 sm:text-xl">
+                {loading ? "…" : aggregate != null ? `₪${Math.round(aggregate.totalSalaryExpenses).toLocaleString("he-IL")}` : "—"}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:shrink-0 lg:justify-end">
           <div className="flex overflow-hidden rounded-lg border">
             <Button
               variant={viewMode === "list" ? "default" : "ghost"}

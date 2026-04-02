@@ -17,7 +17,44 @@ export const GET = withTenantAuth(async (req, session) => {
         (SELECT COUNT(*) FROM "School") as "totalSchools",
         (SELECT COUNT(*) FROM "Enrollment") as "totalEnrollments",
         (SELECT COALESCE(SUM(amount), 0) FROM "Payment" WHERE "paymentDate" >= NOW() - INTERVAL '30 days' AND ("paymentType" IS NULL OR "paymentType" NOT IN ('discount', 'credit'))) as "monthlyIncome",
-        (SELECT COALESCE(SUM(amount), 0) FROM "Expense" WHERE date >= NOW() - INTERVAL '30 days') as "monthlyExpenses"
+        (SELECT COALESCE(SUM(amount), 0) FROM "Expense" WHERE date >= NOW() - INTERVAL '30 days') as "monthlyExpenses",
+        (
+          SELECT COALESCE(SUM(GREATEST(0, sub.due - COALESCE(sub.paid, 0))), 0)
+          FROM (
+            SELECT s."studentId", s.due, p.paid
+            FROM (
+              SELECT e."studentId", SUM(COALESCE(c.price::numeric, 0)) AS due
+              FROM "Enrollment" e
+              INNER JOIN "Course" c ON c.id = e."courseId"
+              GROUP BY e."studentId"
+            ) s
+            LEFT JOIN (
+              SELECT "studentId", COALESCE(SUM(amount::numeric), 0) AS paid
+              FROM "Payment"
+              WHERE "studentId" IS NOT NULL
+              GROUP BY "studentId"
+            ) p ON p."studentId" = s."studentId"
+          ) sub
+        ) AS "totalStudentDebt",
+        (
+          SELECT COUNT(*)::int
+          FROM (
+            SELECT s."studentId"
+            FROM (
+              SELECT e."studentId", SUM(COALESCE(c.price::numeric, 0)) AS due
+              FROM "Enrollment" e
+              INNER JOIN "Course" c ON c.id = e."courseId"
+              GROUP BY e."studentId"
+            ) s
+            LEFT JOIN (
+              SELECT "studentId", COALESCE(SUM(amount::numeric), 0) AS paid
+              FROM "Payment"
+              WHERE "studentId" IS NOT NULL
+              GROUP BY "studentId"
+            ) p ON p."studentId" = s."studentId"
+            WHERE GREATEST(0, s.due - COALESCE(p.paid, 0)) > 0
+          ) debtors
+        ) AS "debtorStudentsCount"
     `
     const recentStudents = await db`SELECT id, name, "createdAt" FROM "Student" ORDER BY "createdAt" DESC LIMIT 3`
     const recentCourses = await db`SELECT id, name, "createdAt" FROM "Course"  ORDER BY "createdAt" DESC LIMIT 3`
@@ -30,6 +67,8 @@ export const GET = withTenantAuth(async (req, session) => {
       totalEnrollments: Number(stats.totalEnrollments) || 0,
       monthlyIncome: Number(stats.monthlyIncome) || 0,
       monthlyExpenses: Number(stats.monthlyExpenses) || 0,
+      totalStudentDebt: Number(stats.totalStudentDebt) || 0,
+      debtorStudentsCount: Number(stats.debtorStudentsCount) || 0,
       recentActivity: [
         ...recentStudents.map((s: { id: string; name: string; createdAt: string }) => ({
           type: "student" as const,

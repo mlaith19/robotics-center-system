@@ -1,13 +1,18 @@
 "use client"
 
 import { Card } from "@/components/ui/card"
-import { BookOpen, Users, Calendar, TrendingUp, GraduationCap, Building2, Banknote, Loader2 } from "lucide-react"
+import { BookOpen, Users, Calendar, TrendingUp, GraduationCap, Building2, Banknote, Loader2, Clock, Wallet, AlertCircle, UserRound } from "lucide-react"
 import { useEffect, useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { useUserType } from "@/lib/use-user-type"
 import { useLanguage } from "@/lib/i18n/context"
 import { useCurrentUser } from "@/lib/auth-context"
 import { hasFullAccessRole } from "@/lib/permissions"
+
+interface TeacherDashboardAggregate {
+  totalAttendanceHours: number
+  totalSalaryExpenses: number
+}
 
 interface DashboardStats {
   totalCourses: number
@@ -17,6 +22,8 @@ interface DashboardStats {
   totalEnrollments: number
   monthlyIncome: number
   monthlyExpenses: number
+  totalStudentDebt: number
+  debtorStudentsCount: number
   recentActivity: {
     type: "student" | "course"
     id: string
@@ -44,6 +51,7 @@ export default function DashboardPage() {
   const { t, dir } = useLanguage()
   const currentUser = useCurrentUser()
   const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [teacherAggregate, setTeacherAggregate] = useState<TeacherDashboardAggregate | null>(null)
   const [loading, setLoading] = useState(true)
 
   const roleToken = (currentUser?.roleKey || currentUser?.role || "").toString()
@@ -82,14 +90,23 @@ export default function DashboardPage() {
     dataFetchedRef.current = true
 
     if (isAdmin) {
-      // Admin sees dashboard stats
-      fetch("/api/dashboard/stats")
-        .then((res) => {
+      Promise.all([
+        fetch("/api/dashboard/stats").then((res) => {
           if (res.status === 404) return null
           return res.ok ? res.json() : null
-        })
-        .then((statsData) => {
+        }),
+        fetch("/api/teachers?aggregate=1", { cache: "no-store" }).then((res) => (res.ok ? res.json() : null)),
+      ])
+        .then(([statsData, teachersPayload]) => {
           if (statsData) setStats(statsData)
+          if (teachersPayload?.aggregate) {
+            setTeacherAggregate({
+              totalAttendanceHours: Number(teachersPayload.aggregate.totalAttendanceHours ?? 0),
+              totalSalaryExpenses: Number(teachersPayload.aggregate.totalSalaryExpenses ?? 0),
+            })
+          } else {
+            setTeacherAggregate(null)
+          }
           setLoading(false)
         })
         .catch(() => setLoading(false))
@@ -193,6 +210,70 @@ export default function DashboardPage() {
           </div>
         </Card>
       </div>
+
+      {/* מורים: סה״כ שעות נוכחות + סה״כ משכורות ששולמו */}
+      {isAdmin && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
+          <Card className="border-teal-200 bg-gradient-to-br from-teal-50 to-cyan-50 p-4 dark:border-teal-800 dark:from-teal-950/40 dark:to-cyan-950/30 sm:p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 flex-1 text-right">
+                <p className="text-sm font-medium text-teal-700 dark:text-teal-300">סה״כ שעות נוכחות (מורים)</p>
+                <p className="mt-1 text-2xl font-bold tabular-nums text-teal-900 dark:text-teal-100 sm:text-3xl">
+                  {teacherAggregate != null
+                    ? teacherAggregate.totalAttendanceHours.toLocaleString("he-IL")
+                    : "—"}
+                </p>
+              </div>
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-teal-500/20 sm:h-12 sm:w-12">
+                <Clock className="h-5 w-5 text-teal-600 dark:text-teal-400 sm:h-6 sm:w-6" />
+              </div>
+            </div>
+          </Card>
+          <Card className="border-rose-200 bg-gradient-to-br from-rose-50 to-orange-50 p-4 dark:border-rose-900 dark:from-rose-950/40 dark:to-orange-950/30 sm:p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 flex-1 text-right">
+                <p className="text-sm font-medium text-rose-700 dark:text-rose-300">סה״כ ישולם משכורות (הוצאות)</p>
+                <p className="mt-1 text-2xl font-bold tabular-nums text-rose-900 dark:text-rose-100 sm:text-3xl">
+                  {teacherAggregate != null
+                    ? `₪${Math.round(teacherAggregate.totalSalaryExpenses).toLocaleString("he-IL")}`
+                    : "—"}
+                </p>
+              </div>
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rose-500/20 sm:h-12 sm:w-12">
+                <Wallet className="h-5 w-5 text-rose-600 dark:text-rose-400 sm:h-6 sm:w-6" />
+              </div>
+            </div>
+          </Card>
+          <Card className="border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50 p-4 dark:border-amber-900 dark:from-amber-950/40 dark:to-yellow-950/30 sm:p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 flex-1 text-right">
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-300">סה״כ חייבים (תלמידים)</p>
+                <p className="mt-1 text-2xl font-bold tabular-nums text-amber-950 dark:text-amber-100 sm:text-3xl">
+                  {stats != null
+                    ? `₪${Math.round(stats.totalStudentDebt ?? 0).toLocaleString("he-IL")}`
+                    : "—"}
+                </p>
+              </div>
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 sm:h-12 sm:w-12">
+                <AlertCircle className="h-5 w-5 text-amber-700 dark:text-amber-400 sm:h-6 sm:w-6" />
+              </div>
+            </div>
+          </Card>
+          <Card className="border-indigo-200 bg-gradient-to-br from-indigo-50 to-violet-50 p-4 dark:border-indigo-800 dark:from-indigo-950/40 dark:to-violet-950/30 sm:p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 flex-1 text-right">
+                <p className="text-sm font-medium text-indigo-700 dark:text-indigo-300">כמות תלמידים חייבים</p>
+                <p className="mt-1 text-2xl font-bold tabular-nums text-indigo-900 dark:text-indigo-100 sm:text-3xl">
+                  {stats != null ? (stats.debtorStudentsCount ?? 0).toLocaleString("he-IL") : "—"}
+                </p>
+              </div>
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-500/20 sm:h-12 sm:w-12">
+                <UserRound className="h-5 w-5 text-indigo-700 dark:text-indigo-400 sm:h-6 sm:w-6" />
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
 
       {/* Stats Row 2 - Financial */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
