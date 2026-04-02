@@ -50,13 +50,13 @@ export const POST = withTenantAuth(async (req, session, { params }: Ctx) => {
     for (const sessionDate of dates) {
       const hit =
         (await db`
-          SELECT id FROM "CampDay" WHERE "courseId" = ${courseId} AND "sessionDate" = ${sessionDate}
+          SELECT id FROM "CampMeeting" WHERE "courseId" = ${courseId} AND "sessionDate" = ${sessionDate}
         `) || []
       if (hit.length) continue
       const id = randomUUID()
       await db`
-        INSERT INTO "CampDay" (id, "courseId", "sessionDate")
-        VALUES (${id}, ${courseId}, ${sessionDate})
+        INSERT INTO "CampMeeting" (id, "courseId", "sessionDate", "sortOrder")
+        VALUES (${id}, ${courseId}, ${sessionDate}, ${created + 1})
       `
       created += 1
     }

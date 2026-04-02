@@ -64,23 +64,23 @@ export const GET = withTenantAuth(async (req, session) => {
     const rows =
       (await db`
         SELECT
-          ca.id as "assignmentId",
-          cd."sessionDate" as "sessionDate",
-          cs."startTime" as "slotStart",
-          cs."endTime" as "slotEnd",
-          ca."slotSortOrder" as "slotSortOrder",
-          ca."lessonTitle" as "lessonTitle",
+          cc.id as "assignmentId",
+          cm."sessionDate" as "sessionDate",
+          cms."startTime" as "slotStart",
+          cms."endTime" as "slotEnd",
+          cms."sortOrder" as "slotSortOrder",
+          cc."lessonTitle" as "lessonTitle",
           c.id as "courseId",
           c.name as "courseName",
-          ca."classroomNo" as "classroomNo",
+          cc."classroomNo" as "classroomNo",
           to_char(c."startTime"::time, 'HH24:MI') as "courseStartTime",
           to_char(c."endTime"::time, 'HH24:MI') as "courseEndTime"
-        FROM "CampClassAssignment" ca
-        INNER JOIN "CampDay" cd ON ca."campDayId" = cd.id
-        INNER JOIN "Course" c ON cd."courseId" = c.id
-        LEFT JOIN "CampSlot" cs ON cs."courseId" = c.id AND cs."sortOrder" = ca."slotSortOrder"
-        WHERE cd."sessionDate" >= ${start}
-          AND cd."sessionDate" <= ${end}
+        FROM "CampMeetingCell" cc
+        INNER JOIN "CampMeetingSlot" cms ON cc."slotId" = cms.id
+        INNER JOIN "CampMeeting" cm ON cms."meetingId" = cm.id
+        INNER JOIN "Course" c ON cm."courseId" = c.id
+        WHERE cm."sessionDate" >= ${start}
+          AND cm."sessionDate" <= ${end}
           AND split_part(c."courseType", '_', 1) = 'camp'
       `) || []
 
@@ -105,14 +105,14 @@ export const GET = withTenantAuth(async (req, session) => {
         courseEndTime: r.courseEndTime != null ? String(r.courseEndTime) : null,
       }
       const gRows =
-        (await db`SELECT "groupLabel" FROM "CampClassAssignmentGroup" WHERE "assignmentId" = ${event.assignmentId}`) || []
+        (await db`SELECT "groupLabel" FROM "CampMeetingCellGroup" WHERE "cellId" = ${event.assignmentId}`) || []
       event.groupLabels = (gRows as { groupLabel: string }[]).map((x) => String(x.groupLabel)).filter(Boolean)
       const tRows =
         (await db`
           SELECT ct."teacherId" as "teacherId", t.name as "teacherName"
-          FROM "CampClassAssignmentTeacher" ct
+          FROM "CampMeetingCellTeacher" ct
           LEFT JOIN "Teacher" t ON ct."teacherId" = t.id
-          WHERE ct."assignmentId" = ${event.assignmentId}
+          WHERE ct."cellId" = ${event.assignmentId}
         `) || []
       event.teacherIds = (tRows as { teacherId: string }[]).map((x) => String(x.teacherId))
       event.teacherNames = (tRows as { teacherName?: string }[]).map((x) => String(x.teacherName || "")).filter(Boolean)

@@ -62,68 +62,79 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
         SELECT id, name FROM "Teacher"
         ORDER BY name
       `) || []
-    const slots =
+    const meetingsRows =
       (await db`
-        SELECT id, "courseId", "sortOrder", "startTime", "endTime", "isBreak", "breakTitle"
-        FROM "CampSlot"
+        SELECT id, "sessionDate", "sortOrder"
+        FROM "CampMeeting"
         WHERE "courseId" = ${courseId}
-        ORDER BY "sortOrder", "startTime"
-      `) || []
-    const daysRows =
-      (await db`
-        SELECT id, "courseId", "sessionDate"
-        FROM "CampDay"
-        WHERE "courseId" = ${courseId}
-        ORDER BY "sessionDate"
+        ORDER BY "sortOrder", "sessionDate"
       `) || []
 
-    const days: {
+    const meetings: Array<{
       id: string
       sessionDate: string
-      assignments: {
+      sortOrder: number
+      slots: Array<{
         id: string
-        slotSortOrder: number
-        classroomNo: number
-        lessonTitle: string
-        groupLabels: string[]
-        teacherIds: string[]
-      }[]
-    }[] = []
+        sortOrder: number
+        startTime: string
+        endTime: string
+        isBreak: boolean
+        breakTitle: string
+        cells: Array<{
+          id: string
+          classroomNo: number
+          lessonTitle: string
+          groupLabels: string[]
+          teacherIds: string[]
+        }>
+      }>
+    }> = []
 
-    for (const d of daysRows as { id: string; sessionDate: string }[]) {
-      const assignsRows =
+    for (const m of meetingsRows as { id: string; sessionDate: string; sortOrder: number }[]) {
+      const slotRows =
         (await db`
-          SELECT id, "slotSortOrder", "classroomNo", "lessonTitle"
-          FROM "CampClassAssignment"
-          WHERE "campDayId" = ${d.id}
-          ORDER BY "slotSortOrder", "classroomNo"
+          SELECT id, "sortOrder", "startTime", "endTime", "isBreak", "breakTitle"
+          FROM "CampMeetingSlot"
+          WHERE "meetingId" = ${m.id}
+          ORDER BY "sortOrder", "startTime"
         `) || []
-      const assigns: {
-        id: string
-        slotSortOrder: number
-        classroomNo: number
-        lessonTitle: string
-        groupLabels: string[]
-        teacherIds: string[]
-      }[] = []
-      for (const a of assignsRows as { id: string; slotSortOrder: number; classroomNo: number; lessonTitle: string }[]) {
-        const groupsRows =
-          (await db`SELECT "groupLabel" FROM "CampClassAssignmentGroup" WHERE "assignmentId" = ${a.id} ORDER BY "groupLabel"`) || []
-        const teacherRows =
-          (await db`SELECT "teacherId" FROM "CampClassAssignmentTeacher" WHERE "assignmentId" = ${a.id}`) || []
-        assigns.push({
-          id: a.id,
-          slotSortOrder: Number(a.slotSortOrder),
-          classroomNo: Number(a.classroomNo),
-          lessonTitle: String(a.lessonTitle || ""),
-          groupLabels: (groupsRows as { groupLabel: string }[]).map((x) => String(x.groupLabel)),
-          teacherIds: (teacherRows as { teacherId: string }[]).map((x) => String(x.teacherId)),
+      const slots = []
+      for (const s of slotRows as { id: string; sortOrder: number; startTime: string; endTime: string; isBreak: boolean; breakTitle: string }[]) {
+        const cellRows =
+          (await db`
+            SELECT id, "classroomNo", "lessonTitle"
+            FROM "CampMeetingCell"
+            WHERE "slotId" = ${s.id}
+            ORDER BY "classroomNo"
+          `) || []
+        const cells = []
+        for (const c of cellRows as { id: string; classroomNo: number; lessonTitle: string }[]) {
+          const gRows = (await db`SELECT "groupLabel" FROM "CampMeetingCellGroup" WHERE "cellId" = ${c.id} ORDER BY "groupLabel"`) || []
+          const tRows = (await db`SELECT "teacherId" FROM "CampMeetingCellTeacher" WHERE "cellId" = ${c.id}`) || []
+          cells.push({
+            id: c.id,
+            classroomNo: Number(c.classroomNo),
+            lessonTitle: String(c.lessonTitle || ""),
+            groupLabels: (gRows as { groupLabel: string }[]).map((x) => String(x.groupLabel)),
+            teacherIds: (tRows as { teacherId: string }[]).map((x) => String(x.teacherId)),
+          })
+        }
+        slots.push({
+          id: s.id,
+          sortOrder: Number(s.sortOrder),
+          startTime: String(s.startTime),
+          endTime: String(s.endTime),
+          isBreak: Boolean(s.isBreak),
+          breakTitle: String(s.breakTitle || ""),
+          cells,
         })
       }
-      days.push({
-        id: d.id,
-        sessionDate: d.sessionDate,
-        assignments: assigns,
+      meetings.push({
+        id: m.id,
+        sessionDate: m.sessionDate,
+        sortOrder: Number(m.sortOrder || 0),
+        slots,
       })
     }
 
@@ -133,13 +144,7 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
       classrooms,
       teachers,
       groupLetters: HEBREW_GROUP_LETTERS,
-      slots: (slots as { id: string; sortOrder: number; startTime: string; endTime: string; isBreak?: boolean; breakTitle?: string }[]).map((s) => ({
-        ...s,
-        sortOrder: Number(s.sortOrder),
-        isBreak: Boolean(s.isBreak),
-        breakTitle: String(s.breakTitle || ""),
-      })),
-      days,
+      meetings,
       editable: canEditCampStructure(session),
     })
   } catch (err) {
@@ -172,128 +177,81 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
       return Response.json({ error: "Not a camp course", code: "not_camp" }, { status: 400 })
     }
 
-    const slotsIn = Array.isArray(body.slots) ? body.slots : []
-    const daysIn = Array.isArray(body.days) ? body.days : []
+    const meetingsIn = Array.isArray(body.meetings) ? body.meetings : []
 
     await db.begin(async (sql) => {
-      const sIds = slotsIn.map((s: { id?: string }) => cleanStr(s.id)).filter((x: string) => x && isUuidLike(x))
-      const existingS =
-        (await sql`
-          SELECT id FROM "CampSlot" WHERE "courseId" = ${courseId}
-        `) || []
-      for (const row of existingS as { id: string }[]) {
-        if (!sIds.includes(row.id)) {
-          await sql`DELETE FROM "CampSlot" WHERE id = ${row.id} AND "courseId" = ${courseId}`
-        }
-      }
-      for (const s of slotsIn) {
-        const startTime = cleanStr((s as { startTime?: string }).startTime)
-        const endTime = cleanStr((s as { endTime?: string }).endTime)
-        if (!startTime || !endTime) continue
-        const sortOrder = Number((s as { sortOrder?: number }).sortOrder) || 0
-        const isBreak = Boolean((s as { isBreak?: boolean }).isBreak)
-        const breakTitle = cleanStr((s as { breakTitle?: string }).breakTitle)
-        let sid = cleanStr((s as { id?: string }).id)
-        if (sid && isUuidLike(sid)) {
-          const hit =
-            (await sql`SELECT id FROM "CampSlot" WHERE id = ${sid} AND "courseId" = ${courseId}`) || []
-          if (hit.length) {
-            await sql`
-              UPDATE "CampSlot"
-              SET "sortOrder" = ${sortOrder}, "startTime" = ${startTime}, "endTime" = ${endTime}, "isBreak" = ${isBreak}, "breakTitle" = ${breakTitle}
-              WHERE id = ${sid} AND "courseId" = ${courseId}
-            `
-            continue
-          }
-        }
-        sid = randomUUID()
-        await sql`
-          INSERT INTO "CampSlot" (id, "courseId", "sortOrder", "startTime", "endTime", "isBreak", "breakTitle")
-          VALUES (${sid}, ${courseId}, ${sortOrder}, ${startTime}, ${endTime}, ${isBreak}, ${breakTitle})
-        `
+      const meetingIds = meetingsIn.map((m: { id?: string }) => cleanStr(m.id)).filter((x: string) => x && isUuidLike(x))
+      const existingMeetings = (await sql`SELECT id FROM "CampMeeting" WHERE "courseId" = ${courseId}`) || []
+      for (const row of existingMeetings as { id: string }[]) {
+        if (!meetingIds.includes(row.id)) await sql`DELETE FROM "CampMeeting" WHERE id = ${row.id}`
       }
 
-      const dIds = daysIn.map((d: { id?: string }) => cleanStr(d.id)).filter((x: string) => x && isUuidLike(x))
-      const existingD =
-        (await sql`
-          SELECT id FROM "CampDay" WHERE "courseId" = ${courseId}
-        `) || []
-      for (const row of existingD as { id: string }[]) {
-        if (!dIds.includes(row.id)) {
-          await sql`DELETE FROM "CampDay" WHERE id = ${row.id} AND "courseId" = ${courseId}`
-        }
-      }
-
-      for (const d of daysIn) {
-        const sessionDate = cleanStr((d as { sessionDate?: string }).sessionDate)
+      for (const m of meetingsIn) {
+        const sessionDate = cleanStr((m as { sessionDate?: string }).sessionDate)
         if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) continue
-        let dayId = cleanStr((d as { id?: string }).id)
-        if (dayId && isUuidLike(dayId)) {
-          const hit =
-            (await sql`SELECT id FROM "CampDay" WHERE id = ${dayId} AND "courseId" = ${courseId}`) || []
-          if (!hit.length) dayId = ""
-        } else dayId = ""
-
-        if (!dayId) {
-          const byDate =
-            (await sql`
-              SELECT id FROM "CampDay" WHERE "courseId" = ${courseId} AND "sessionDate" = ${sessionDate}
-            `) || []
-          if (byDate.length) {
-            dayId = (byDate[0] as { id: string }).id
-          } else {
-            dayId = randomUUID()
-            await sql`
-              INSERT INTO "CampDay" (id, "courseId", "sessionDate")
-              VALUES (${dayId}, ${courseId}, ${sessionDate})
-            `
-          }
+        const sortOrder = Number((m as { sortOrder?: number }).sortOrder || 0)
+        let meetingId = cleanStr((m as { id?: string }).id)
+        if (!meetingId || !isUuidLike(meetingId)) {
+          meetingId = randomUUID()
+          await sql`
+            INSERT INTO "CampMeeting" (id, "courseId", "sessionDate", "sortOrder")
+            VALUES (${meetingId}, ${courseId}, ${sessionDate}, ${sortOrder})
+            ON CONFLICT ("courseId","sessionDate") DO UPDATE SET "sortOrder" = EXCLUDED."sortOrder"
+          `
+          const byDate = (await sql`SELECT id FROM "CampMeeting" WHERE "courseId"=${courseId} AND "sessionDate"=${sessionDate}`) || []
+          meetingId = String((byDate[0] as { id: string }).id)
         } else {
-          await sql`
-            UPDATE "CampDay" SET "sessionDate" = ${sessionDate}
-            WHERE id = ${dayId} AND "courseId" = ${courseId}
-          `
+          await sql`UPDATE "CampMeeting" SET "sessionDate"=${sessionDate}, "sortOrder"=${sortOrder} WHERE id=${meetingId} AND "courseId"=${courseId}`
         }
 
-        const oldAssign = (await sql`SELECT id FROM "CampClassAssignment" WHERE "campDayId" = ${dayId}`) || []
-        for (const a of oldAssign as { id: string }[]) {
-          await sql`DELETE FROM "CampClassAssignmentGroup" WHERE "assignmentId" = ${a.id}`
-          await sql`DELETE FROM "CampClassAssignmentTeacher" WHERE "assignmentId" = ${a.id}`
-        }
-        await sql`DELETE FROM "CampClassAssignment" WHERE "campDayId" = ${dayId}`
-
-        const assigns = Array.isArray((d as { assignments?: unknown }).assignments)
-          ? (d as { assignments: unknown[] }).assignments
-          : []
-        for (const a of assigns) {
-          const slotSortOrder = Number((a as { slotSortOrder?: number }).slotSortOrder)
-          const classroomNo = Number((a as { classroomNo?: number }).classroomNo)
-          const groupLabels = Array.isArray((a as { groupLabels?: unknown[] }).groupLabels)
-            ? (a as { groupLabels: unknown[] }).groupLabels.map((g) => String(g || "").trim()).filter((g) => HEBREW_GROUP_LETTERS.includes(g))
-            : []
-          const teacherIds = Array.isArray((a as { teacherIds?: unknown[] }).teacherIds)
-            ? (a as { teacherIds: unknown[] }).teacherIds.map((t) => String(t || "").trim()).filter((t) => isUuidLike(t))
-            : []
-          const lessonTitle = cleanStr((a as { lessonTitle?: string }).lessonTitle)
-          if (!Number.isFinite(slotSortOrder) || !Number.isFinite(classroomNo) || classroomNo <= 0) continue
-          const aid = randomUUID()
-          await sql`
-            INSERT INTO "CampClassAssignment" (id, "campDayId", "slotSortOrder", "classroomNo", "lessonTitle")
-            VALUES (${aid}, ${dayId}, ${slotSortOrder}, ${classroomNo}, ${lessonTitle || ""})
-          `
-          for (const g of [...new Set(groupLabels)]) {
-            await sql`
-              INSERT INTO "CampClassAssignmentGroup" (id, "assignmentId", "groupLabel")
-              VALUES (${randomUUID()}, ${aid}, ${g})
-            `
+        const oldSlots = (await sql`SELECT id FROM "CampMeetingSlot" WHERE "meetingId" = ${meetingId}`) || []
+        for (const s of oldSlots as { id: string }[]) {
+          const oldCells = (await sql`SELECT id FROM "CampMeetingCell" WHERE "slotId" = ${s.id}`) || []
+          for (const c of oldCells as { id: string }[]) {
+            await sql`DELETE FROM "CampMeetingCellGroup" WHERE "cellId" = ${c.id}`
+            await sql`DELETE FROM "CampMeetingCellTeacher" WHERE "cellId" = ${c.id}`
           }
-          for (const t of [...new Set(teacherIds)]) {
-            const ok = (await sql`SELECT 1 FROM "Teacher" WHERE id = ${t}`) || []
-            if (!ok.length) continue
+          await sql`DELETE FROM "CampMeetingCell" WHERE "slotId" = ${s.id}`
+        }
+        await sql`DELETE FROM "CampMeetingSlot" WHERE "meetingId" = ${meetingId}`
+
+        const slots = Array.isArray((m as { slots?: unknown[] }).slots) ? (m as { slots: unknown[] }).slots : []
+        for (const s of slots) {
+          const sort = Number((s as { sortOrder?: number }).sortOrder || 0)
+          const startTime = cleanStr((s as { startTime?: string }).startTime)
+          const endTime = cleanStr((s as { endTime?: string }).endTime)
+          const isBreak = Boolean((s as { isBreak?: boolean }).isBreak)
+          const breakTitle = cleanStr((s as { breakTitle?: string }).breakTitle)
+          if (!startTime || !endTime) continue
+          const slotId = randomUUID()
+          await sql`
+            INSERT INTO "CampMeetingSlot" (id, "meetingId", "sortOrder", "startTime", "endTime", "isBreak", "breakTitle")
+            VALUES (${slotId}, ${meetingId}, ${sort}, ${startTime}, ${endTime}, ${isBreak}, ${breakTitle})
+          `
+          const cells = Array.isArray((s as { cells?: unknown[] }).cells) ? (s as { cells: unknown[] }).cells : []
+          for (const c of cells) {
+            const classroomNo = Number((c as { classroomNo?: number }).classroomNo)
+            if (!Number.isFinite(classroomNo) || classroomNo <= 0) continue
+            const lessonTitle = cleanStr((c as { lessonTitle?: string }).lessonTitle)
+            const cellId = randomUUID()
             await sql`
-              INSERT INTO "CampClassAssignmentTeacher" (id, "assignmentId", "teacherId")
-              VALUES (${randomUUID()}, ${aid}, ${t})
+              INSERT INTO "CampMeetingCell" (id, "slotId", "classroomNo", "lessonTitle")
+              VALUES (${cellId}, ${slotId}, ${classroomNo}, ${lessonTitle})
             `
+            const groupLabels = Array.isArray((c as { groupLabels?: unknown[] }).groupLabels)
+              ? (c as { groupLabels: unknown[] }).groupLabels.map((g) => String(g || "").trim()).filter((g) => HEBREW_GROUP_LETTERS.includes(g))
+              : []
+            for (const g of [...new Set(groupLabels)]) {
+              await sql`INSERT INTO "CampMeetingCellGroup" (id, "cellId", "groupLabel") VALUES (${randomUUID()}, ${cellId}, ${g})`
+            }
+            const teacherIds = Array.isArray((c as { teacherIds?: unknown[] }).teacherIds)
+              ? (c as { teacherIds: unknown[] }).teacherIds.map((t) => String(t || "").trim()).filter((t) => isUuidLike(t))
+              : []
+            for (const t of [...new Set(teacherIds)]) {
+              const ok = (await sql`SELECT 1 FROM "Teacher" WHERE id = ${t}`) || []
+              if (!ok.length) continue
+              await sql`INSERT INTO "CampMeetingCellTeacher" (id, "cellId", "teacherId") VALUES (${randomUUID()}, ${cellId}, ${t})`
+            }
           }
         }
       }

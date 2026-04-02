@@ -10,16 +10,17 @@ import { Loader2, Plus, Trash2, CalendarRange } from "lucide-react"
 
 type TeacherOpt = { id: string; name: string }
 type ClassroomDef = { number: number; name: string; notes?: string }
-type CampSlot = {
+type CampMeetingCell = { id: string; classroomNo: number; lessonTitle: string; groupLabels: string[]; teacherIds: string[] }
+type CampMeetingSlot = {
   id: string
   sortOrder: number
   startTime: string
   endTime: string
-  isBreak?: boolean
-  breakTitle?: string
+  isBreak: boolean
+  breakTitle: string
+  cells: CampMeetingCell[]
 }
-type CampAssignment = { id: string; slotSortOrder: number; classroomNo: number; lessonTitle: string; groupLabels: string[]; teacherIds: string[] }
-type CampDay = { id: string; sessionDate: string; assignments: CampAssignment[] }
+type CampMeeting = { id: string; sessionDate: string; sortOrder: number; slots: CampMeetingSlot[] }
 
 function newId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID()
@@ -42,9 +43,8 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
   const [groupLetters, setGroupLetters] = useState<string[]>([])
   const [classroomsCount, setClassroomsCount] = useState(6)
   const [classroomsDef, setClassroomsDef] = useState<ClassroomDef[]>([])
-  const [slots, setSlots] = useState<CampSlot[]>([])
-  const [days, setDays] = useState<CampDay[]>([])
-  const [activeDayId, setActiveDayId] = useState("")
+  const [meetings, setMeetings] = useState<CampMeeting[]>([])
+  const [activeMeetingId, setActiveMeetingId] = useState("")
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -61,8 +61,7 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
       setGroupLetters(Array.isArray(data.groupLetters) ? data.groupLetters : [])
       setClassroomsCount(Number(data.classroomsCount || 6))
       setClassroomsDef(Array.isArray(data.classrooms) ? data.classrooms : [])
-      setSlots(Array.isArray(data.slots) ? data.slots : [])
-      setDays(Array.isArray(data.days) ? data.days : [])
+      setMeetings(Array.isArray(data.meetings) ? data.meetings : [])
     } catch {
       setErr("שגיאת רשת")
     } finally {
@@ -74,13 +73,12 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
     load()
   }, [load])
   useEffect(() => {
-    if (!activeDayId && days.length > 0) setActiveDayId(days[0].id)
-    if (activeDayId && !days.some((d) => d.id === activeDayId)) {
-      setActiveDayId(days[0]?.id || "")
+    if (!activeMeetingId && meetings.length > 0) setActiveMeetingId(meetings[0].id)
+    if (activeMeetingId && !meetings.some((d) => d.id === activeMeetingId)) {
+      setActiveMeetingId(meetings[0]?.id || "")
     }
-  }, [days, activeDayId])
+  }, [meetings, activeMeetingId])
 
-  const sortedSlots = [...slots].sort((a, b) => a.sortOrder - b.sortOrder || a.startTime.localeCompare(b.startTime))
   const classrooms = Array.from({ length: Math.max(1, classroomsCount) }, (_, i) => i + 1).map((n) => ({
     number: n,
     name: (classroomsDef.find((c) => Number(c.number) === n)?.name || `כיתה ${n}`),
@@ -94,7 +92,7 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
       const res = await fetch(`/api/courses/${courseId}/camp`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slots, days }),
+        body: JSON.stringify({ meetings }),
       })
       if (!res.ok) {
         const j = await res.json().catch(() => ({}))
@@ -128,26 +126,34 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
     }
   }
 
-  function assignmentFor(day: CampDay, slotSort: number, classroomNo: number): CampAssignment {
-    return day.assignments.find((a) => a.slotSortOrder === slotSort && a.classroomNo === classroomNo)
-      || { id: newId(), slotSortOrder: slotSort, classroomNo, lessonTitle: "", groupLabels: [], teacherIds: [] }
+  function cellFor(slot: CampMeetingSlot, classroomNo: number): CampMeetingCell {
+    return slot.cells.find((c) => c.classroomNo === classroomNo)
+      || { id: newId(), classroomNo, lessonTitle: "", groupLabels: [], teacherIds: [] }
   }
 
-  function patchAssignment(dayId: string, slotSort: number, classroomNo: number, patch: Partial<CampAssignment>) {
-    setDays((prev) => prev.map((d) => {
-      if (d.id !== dayId) return d
-      const next = [...d.assignments]
-      const idx = next.findIndex((a) => a.slotSortOrder === slotSort && a.classroomNo === classroomNo)
-      const base = idx >= 0 ? { ...next[idx] } : assignmentFor(d, slotSort, classroomNo)
-      const merged = { ...base, ...patch }
-      if (idx >= 0) next[idx] = merged
-      else next.push(merged)
-      return { ...d, assignments: next }
+  function patchCell(meetingId: string, slotId: string, classroomNo: number, patch: Partial<CampMeetingCell>) {
+    setMeetings((prev) => prev.map((m) => {
+      if (m.id !== meetingId) return m
+      return {
+        ...m,
+        slots: m.slots.map((s) => {
+          if (s.id !== slotId) return s
+          const idx = s.cells.findIndex((c) => c.classroomNo === classroomNo)
+          const base = idx >= 0 ? { ...s.cells[idx] } : cellFor(s, classroomNo)
+          const merged = { ...base, ...patch }
+          if (idx >= 0) {
+            const next = [...s.cells]
+            next[idx] = merged
+            return { ...s, cells: next }
+          }
+          return { ...s, cells: [...s.cells, merged] }
+        }),
+      }
     }))
   }
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
-  const sortedDays = [...days].sort((a, b) => a.sessionDate.localeCompare(b.sessionDate))
+  const sortedMeetings = [...meetings].sort((a, b) => a.sortOrder - b.sortOrder || a.sessionDate.localeCompare(b.sessionDate))
 
   return (
     <div className="space-y-6" dir="rtl">
@@ -159,31 +165,7 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
           <CardTitle className="text-lg">מבנה קייטנה</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="text-sm text-muted-foreground">עמודות הטבלה הן כיתה 1..{classroomsCount} לפי הגדרת מרכז.</div>
-          {slots.map((s, i) => (
-            <div key={s.id} className="flex flex-wrap items-end gap-2">
-              <Input type="number" className="w-20" disabled={!canEdit} value={s.sortOrder} onChange={(e) => setSlots((p) => p.map((x, j) => j === i ? { ...x, sortOrder: Number(e.target.value) } : x))} />
-              <Input type="time" className="w-32" disabled={!canEdit} value={String(s.startTime || "").slice(0, 5)} onChange={(e) => setSlots((p) => p.map((x, j) => j === i ? { ...x, startTime: e.target.value } : x))} />
-              <Input type="time" className="w-32" disabled={!canEdit} value={String(s.endTime || "").slice(0, 5)} onChange={(e) => setSlots((p) => p.map((x, j) => j === i ? { ...x, endTime: e.target.value } : x))} />
-              <label className="flex items-center gap-2 text-xs">
-                <Checkbox
-                  checked={Boolean(s.isBreak)}
-                  disabled={!canEdit}
-                  onCheckedChange={(v) => setSlots((p) => p.map((x, j) => j === i ? { ...x, isBreak: Boolean(v) } : x))}
-                />
-                הפסקה
-              </label>
-              <Input
-                className="w-40"
-                disabled={!canEdit || !s.isBreak}
-                placeholder="כותרת הפסקה"
-                value={s.breakTitle || ""}
-                onChange={(e) => setSlots((p) => p.map((x, j) => j === i ? { ...x, breakTitle: e.target.value } : x))}
-              />
-              {canEdit && <Button type="button" variant="ghost" size="icon" onClick={() => setSlots((p) => p.filter((_, j) => j !== i))}><Trash2 className="h-4 w-4 text-destructive" /></Button>}
-            </div>
-          ))}
-          {canEdit && <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => setSlots((p) => [...p, { id: newId(), sortOrder: p.length, startTime: "08:30", endTime: "09:00" }])}><Plus className="h-4 w-4" />הוסף משבצת</Button>}
+          <div className="text-sm text-muted-foreground">עמודות הטבלה הן כיתה 1..{classroomsCount} לפי הגדרת מרכז. משבצות זמן מוגדרות לכל מפגש בנפרד.</div>
           <div className="flex gap-2">
             {canEdit && <Button type="button" variant="secondary" onClick={handleGenerateDays} disabled={genLoading}>{genLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}צור ימים מתאריכי הקורס</Button>}
             {canEdit && <Button type="button" onClick={handleSave} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}שמור מבנה</Button>}
@@ -191,20 +173,41 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
         </CardContent>
       </Card>
 
-      {sortedDays.length > 0 && (
-        <Tabs value={activeDayId} onValueChange={setActiveDayId} className="w-full">
+      {sortedMeetings.length > 0 && (
+        <Tabs value={activeMeetingId} onValueChange={setActiveMeetingId} className="w-full">
           <TabsList className="h-auto w-full flex-wrap justify-start gap-1">
-            {sortedDays.map((day, i) => (
-              <TabsTrigger key={day.id} value={day.id}>
-                מפגש {i + 1} - {hebrewWeekday(day.sessionDate)}
+            {sortedMeetings.map((meeting, i) => (
+              <TabsTrigger key={meeting.id} value={meeting.id}>
+                מפגש {i + 1} - {hebrewWeekday(meeting.sessionDate)}
               </TabsTrigger>
             ))}
           </TabsList>
-          {sortedDays.map((day, i) => (
-            <TabsContent key={day.id} value={day.id}>
+          {sortedMeetings.map((meeting, i) => {
+            const sortedSlots = [...meeting.slots].sort((a, b) => a.sortOrder - b.sortOrder || a.startTime.localeCompare(b.startTime))
+            return (
+            <TabsContent key={meeting.id} value={meeting.id}>
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-base">מפגש {i + 1} - {hebrewWeekday(day.sessionDate)} ({day.sessionDate})</CardTitle>
+                  <CardTitle className="text-base">מפגש {i + 1} - {hebrewWeekday(meeting.sessionDate)} ({meeting.sessionDate})</CardTitle>
+                  {canEdit && (
+                    <div className="pt-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="gap-1"
+                        onClick={() =>
+                          setMeetings((prev) => prev.map((m) => m.id !== meeting.id ? m : {
+                            ...m,
+                            slots: [...m.slots, { id: newId(), sortOrder: m.slots.length + 1, startTime: "08:30", endTime: "09:15", isBreak: false, breakTitle: "", cells: [] }],
+                          }))
+                        }
+                      >
+                        <Plus className="h-4 w-4" />
+                        הוסף משבצת למפגש
+                      </Button>
+                    </div>
+                  )}
                 </CardHeader>
                 <CardContent className="overflow-x-auto">
                   <table className="w-full min-w-[900px] border-collapse text-sm">
@@ -220,14 +223,33 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
                           </tr>
                         ) : (
                           <tr key={slot.id}>
-                            <td className="border p-2 align-top whitespace-nowrap">{slot.startTime} - {slot.endTime}</td>
+                            <td className="border p-2 align-top whitespace-nowrap">
+                              <div className="space-y-2">
+                                <div>{slot.startTime} - {slot.endTime}</div>
+                                {canEdit && (
+                                  <div className="space-y-2">
+                                    <Input type="number" value={slot.sortOrder} onChange={(e) => setMeetings((prev) => prev.map((m) => m.id !== meeting.id ? m : { ...m, slots: m.slots.map((x) => x.id !== slot.id ? x : { ...x, sortOrder: Number(e.target.value || 0) }) }))} />
+                                    <Input type="time" value={String(slot.startTime || "").slice(0, 5)} onChange={(e) => setMeetings((prev) => prev.map((m) => m.id !== meeting.id ? m : { ...m, slots: m.slots.map((x) => x.id !== slot.id ? x : { ...x, startTime: e.target.value }) }))} />
+                                    <Input type="time" value={String(slot.endTime || "").slice(0, 5)} onChange={(e) => setMeetings((prev) => prev.map((m) => m.id !== meeting.id ? m : { ...m, slots: m.slots.map((x) => x.id !== slot.id ? x : { ...x, endTime: e.target.value }) }))} />
+                                    <label className="flex items-center gap-2 text-xs">
+                                      <Checkbox checked={slot.isBreak} onCheckedChange={(v) => setMeetings((prev) => prev.map((m) => m.id !== meeting.id ? m : { ...m, slots: m.slots.map((x) => x.id !== slot.id ? x : { ...x, isBreak: Boolean(v) }) }))} />
+                                      משבצת הפסקה
+                                    </label>
+                                    {slot.isBreak && (
+                                      <Input placeholder="כותרת הפסקה" value={slot.breakTitle || ""} onChange={(e) => setMeetings((prev) => prev.map((m) => m.id !== meeting.id ? m : { ...m, slots: m.slots.map((x) => x.id !== slot.id ? x : { ...x, breakTitle: e.target.value }) }))} />
+                                    )}
+                                    <Button type="button" variant="ghost" size="icon" onClick={() => setMeetings((prev) => prev.map((m) => m.id !== meeting.id ? m : { ...m, slots: m.slots.filter((x) => x.id !== slot.id) }))}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
                             {classrooms.map((classroom) => {
                               const classNo = classroom.number
-                              const a = assignmentFor(day, slot.sortOrder, classNo)
+                              const a = cellFor(slot, classNo)
                               return (
                                 <td key={classroom.number} className="border p-2 align-top">
                                   <div className="space-y-2">
-                                    <Input placeholder="שם שיעור" value={a.lessonTitle} disabled={!canEdit} onChange={(e) => patchAssignment(day.id, slot.sortOrder, classNo, { lessonTitle: e.target.value })} />
+                                    <Input placeholder="שם שיעור" value={a.lessonTitle} disabled={!canEdit} onChange={(e) => patchCell(meeting.id, slot.id, classNo, { lessonTitle: e.target.value })} />
                                     <div className="grid grid-cols-6 gap-1">
                                       {groupLetters.map((g) => (
                                         <label key={g} className="flex items-center gap-1 text-xs">
@@ -236,7 +258,7 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
                                             disabled={!canEdit}
                                             onCheckedChange={(v) => {
                                               const next = v ? [...new Set([...a.groupLabels, g])] : a.groupLabels.filter((x) => x !== g)
-                                              patchAssignment(day.id, slot.sortOrder, classNo, { groupLabels: next })
+                                              patchCell(meeting.id, slot.id, classNo, { groupLabels: next })
                                             }}
                                           />
                                           {g}
@@ -251,7 +273,7 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
                                             disabled={!canEdit}
                                             onCheckedChange={(v) => {
                                               const next = v ? [...new Set([...a.teacherIds, t.id])] : a.teacherIds.filter((x) => x !== t.id)
-                                              patchAssignment(day.id, slot.sortOrder, classNo, { teacherIds: next })
+                                              patchCell(meeting.id, slot.id, classNo, { teacherIds: next })
                                             }}
                                           />
                                           {t.name}
@@ -270,7 +292,7 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
                 </CardContent>
               </Card>
             </TabsContent>
-          ))}
+          )})}
         </Tabs>
       )}
     </div>

@@ -72,134 +72,83 @@ export async function ensureCampTables(sql: Sql) {
   }
 
   await safe(
-    "CampGroup",
+    "CampMeeting",
     sql`
-      CREATE TABLE IF NOT EXISTS "CampGroup" (
-        "id" TEXT NOT NULL PRIMARY KEY,
-        "courseId" TEXT NOT NULL REFERENCES "Course"("id") ON DELETE CASCADE,
-        "label" TEXT NOT NULL,
-        "sortOrder" INTEGER NOT NULL DEFAULT 0,
-        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )
-    `,
-  )
-  await safe("CampGroup idx", sql`CREATE INDEX IF NOT EXISTS "CampGroup_courseId_idx" ON "CampGroup"("courseId")`)
-
-  await safe(
-    "CampRoom",
-    sql`
-      CREATE TABLE IF NOT EXISTS "CampRoom" (
-        "id" TEXT NOT NULL PRIMARY KEY,
-        "courseId" TEXT NOT NULL REFERENCES "Course"("id") ON DELETE CASCADE,
-        "label" TEXT NOT NULL,
-        "teacherId" TEXT REFERENCES "Teacher"("id") ON DELETE SET NULL,
-        "sortOrder" INTEGER NOT NULL DEFAULT 0,
-        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )
-    `,
-  )
-  await safe("CampRoom idx", sql`CREATE INDEX IF NOT EXISTS "CampRoom_courseId_idx" ON "CampRoom"("courseId")`)
-
-  await safe(
-    "CampSlot",
-    sql`
-      CREATE TABLE IF NOT EXISTS "CampSlot" (
-        "id" TEXT NOT NULL PRIMARY KEY,
-        "courseId" TEXT NOT NULL REFERENCES "Course"("id") ON DELETE CASCADE,
-        "sortOrder" INTEGER NOT NULL,
-        "startTime" TEXT NOT NULL,
-        "endTime" TEXT NOT NULL,
-        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )
-    `,
-  )
-  await safe("CampSlot idx", sql`CREATE INDEX IF NOT EXISTS "CampSlot_courseId_idx" ON "CampSlot"("courseId")`)
-  await safe("CampSlot isBreak", sql`ALTER TABLE "CampSlot" ADD COLUMN IF NOT EXISTS "isBreak" BOOLEAN NOT NULL DEFAULT false`)
-  await safe("CampSlot breakTitle", sql`ALTER TABLE "CampSlot" ADD COLUMN IF NOT EXISTS "breakTitle" TEXT NOT NULL DEFAULT ''`)
-
-  await safe(
-    "CampDay",
-    sql`
-      CREATE TABLE IF NOT EXISTS "CampDay" (
+      CREATE TABLE IF NOT EXISTS "CampMeeting" (
         "id" TEXT NOT NULL PRIMARY KEY,
         "courseId" TEXT NOT NULL REFERENCES "Course"("id") ON DELETE CASCADE,
         "sessionDate" TEXT NOT NULL,
+        "sortOrder" INTEGER NOT NULL DEFAULT 0,
         "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT "CampDay_courseId_sessionDate_key" UNIQUE ("courseId", "sessionDate")
+        CONSTRAINT "CampMeeting_course_sessionDate_key" UNIQUE ("courseId", "sessionDate")
       )
     `,
   )
-  await safe("CampDay idx", sql`CREATE INDEX IF NOT EXISTS "CampDay_courseId_idx" ON "CampDay"("courseId")`)
+  await safe("CampMeeting idx", sql`CREATE INDEX IF NOT EXISTS "CampMeeting_courseId_idx" ON "CampMeeting"("courseId")`)
 
   await safe(
-    "CampAssignment",
+    "CampMeetingSlot",
     sql`
-      CREATE TABLE IF NOT EXISTS "CampAssignment" (
+      CREATE TABLE IF NOT EXISTS "CampMeetingSlot" (
         "id" TEXT NOT NULL PRIMARY KEY,
-        "campDayId" TEXT NOT NULL REFERENCES "CampDay"("id") ON DELETE CASCADE,
-        "slotSortOrder" INTEGER NOT NULL,
-        "roomId" TEXT NOT NULL REFERENCES "CampRoom"("id") ON DELETE CASCADE,
-        "groupId" TEXT NOT NULL REFERENCES "CampGroup"("id") ON DELETE CASCADE,
-        "lessonTitle" TEXT NOT NULL DEFAULT '',
+        "meetingId" TEXT NOT NULL REFERENCES "CampMeeting"("id") ON DELETE CASCADE,
+        "sortOrder" INTEGER NOT NULL,
+        "startTime" TEXT NOT NULL,
+        "endTime" TEXT NOT NULL,
+        "isBreak" BOOLEAN NOT NULL DEFAULT false,
+        "breakTitle" TEXT NOT NULL DEFAULT '',
         "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT "CampAssignment_day_slot_room_key" UNIQUE ("campDayId", "slotSortOrder", "roomId")
+        CONSTRAINT "CampMeetingSlot_meeting_sortOrder_key" UNIQUE ("meetingId", "sortOrder")
       )
     `,
   )
-  await safe(
-    "CampAssignment idx",
-    sql`CREATE INDEX IF NOT EXISTS "CampAssignment_campDayId_idx" ON "CampAssignment"("campDayId")`,
-  )
+  await safe("CampMeetingSlot idx", sql`CREATE INDEX IF NOT EXISTS "CampMeetingSlot_meetingId_idx" ON "CampMeetingSlot"("meetingId")`)
 
   await safe(
-    "CampClassAssignment",
+    "CampMeetingCell",
     sql`
-      CREATE TABLE IF NOT EXISTS "CampClassAssignment" (
+      CREATE TABLE IF NOT EXISTS "CampMeetingCell" (
         "id" TEXT NOT NULL PRIMARY KEY,
-        "campDayId" TEXT NOT NULL REFERENCES "CampDay"("id") ON DELETE CASCADE,
-        "slotSortOrder" INTEGER NOT NULL,
+        "slotId" TEXT NOT NULL REFERENCES "CampMeetingSlot"("id") ON DELETE CASCADE,
         "classroomNo" INTEGER NOT NULL,
         "lessonTitle" TEXT NOT NULL DEFAULT '',
         "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT "CampClassAssignment_day_slot_class_key" UNIQUE ("campDayId", "slotSortOrder", "classroomNo")
+        CONSTRAINT "CampMeetingCell_slot_classroom_key" UNIQUE ("slotId", "classroomNo")
       )
     `,
   )
-  await safe(
-    "CampClassAssignment idx",
-    sql`CREATE INDEX IF NOT EXISTS "CampClassAssignment_campDayId_idx" ON "CampClassAssignment"("campDayId")`,
-  )
+  await safe("CampMeetingCell idx", sql`CREATE INDEX IF NOT EXISTS "CampMeetingCell_slotId_idx" ON "CampMeetingCell"("slotId")`)
 
   await safe(
-    "CampClassAssignmentGroup",
+    "CampMeetingCellGroup",
     sql`
-      CREATE TABLE IF NOT EXISTS "CampClassAssignmentGroup" (
+      CREATE TABLE IF NOT EXISTS "CampMeetingCellGroup" (
         "id" TEXT NOT NULL PRIMARY KEY,
-        "assignmentId" TEXT NOT NULL REFERENCES "CampClassAssignment"("id") ON DELETE CASCADE,
+        "cellId" TEXT NOT NULL REFERENCES "CampMeetingCell"("id") ON DELETE CASCADE,
         "groupLabel" TEXT NOT NULL,
         "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `,
   )
   await safe(
-    "CampClassAssignmentGroup uniq",
-    sql`CREATE UNIQUE INDEX IF NOT EXISTS "CampClassAssignmentGroup_assignment_group_key" ON "CampClassAssignmentGroup"("assignmentId", "groupLabel")`,
+    "CampMeetingCellGroup uniq",
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS "CampMeetingCellGroup_cell_group_key" ON "CampMeetingCellGroup"("cellId", "groupLabel")`,
   )
 
   await safe(
-    "CampClassAssignmentTeacher",
+    "CampMeetingCellTeacher",
     sql`
-      CREATE TABLE IF NOT EXISTS "CampClassAssignmentTeacher" (
+      CREATE TABLE IF NOT EXISTS "CampMeetingCellTeacher" (
         "id" TEXT NOT NULL PRIMARY KEY,
-        "assignmentId" TEXT NOT NULL REFERENCES "CampClassAssignment"("id") ON DELETE CASCADE,
+        "cellId" TEXT NOT NULL REFERENCES "CampMeetingCell"("id") ON DELETE CASCADE,
         "teacherId" TEXT NOT NULL REFERENCES "Teacher"("id") ON DELETE CASCADE,
         "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `,
   )
   await safe(
-    "CampClassAssignmentTeacher uniq",
-    sql`CREATE UNIQUE INDEX IF NOT EXISTS "CampClassAssignmentTeacher_assignment_teacher_key" ON "CampClassAssignmentTeacher"("assignmentId", "teacherId")`,
+    "CampMeetingCellTeacher uniq",
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS "CampMeetingCellTeacher_cell_teacher_key" ON "CampMeetingCellTeacher"("cellId", "teacherId")`,
   )
 
   await safe(
