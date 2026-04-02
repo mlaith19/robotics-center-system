@@ -5,16 +5,30 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Loader2, Plus, Trash2, CalendarRange } from "lucide-react"
 
 type TeacherOpt = { id: string; name: string }
-type CampSlot = { id: string; sortOrder: number; startTime: string; endTime: string }
+type CampSlot = {
+  id: string
+  sortOrder: number
+  startTime: string
+  endTime: string
+  isBreak?: boolean
+  breakTitle?: string
+}
 type CampAssignment = { id: string; slotSortOrder: number; classroomNo: number; lessonTitle: string; groupLabels: string[]; teacherIds: string[] }
 type CampDay = { id: string; sessionDate: string; assignments: CampAssignment[] }
 
 function newId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID()
   return `tmp-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+function hebrewWeekday(ymd: string): string {
+  const d = new Date(`${ymd}T00:00:00`)
+  const names = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"]
+  return names[d.getDay()] || ""
 }
 
 export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
@@ -28,6 +42,7 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
   const [classroomsCount, setClassroomsCount] = useState(6)
   const [slots, setSlots] = useState<CampSlot[]>([])
   const [days, setDays] = useState<CampDay[]>([])
+  const [activeDayId, setActiveDayId] = useState("")
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -55,6 +70,12 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
   useEffect(() => {
     load()
   }, [load])
+  useEffect(() => {
+    if (!activeDayId && days.length > 0) setActiveDayId(days[0].id)
+    if (activeDayId && !days.some((d) => d.id === activeDayId)) {
+      setActiveDayId(days[0]?.id || "")
+    }
+  }, [days, activeDayId])
 
   const sortedSlots = [...slots].sort((a, b) => a.sortOrder - b.sortOrder || a.startTime.localeCompare(b.startTime))
   const classrooms = Array.from({ length: Math.max(1, classroomsCount) }, (_, i) => i + 1)
@@ -120,6 +141,7 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
   }
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+  const sortedDays = [...days].sort((a, b) => a.sessionDate.localeCompare(b.sessionDate))
 
   return (
     <div className="space-y-6" dir="rtl">
@@ -137,6 +159,21 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
               <Input type="number" className="w-20" disabled={!canEdit} value={s.sortOrder} onChange={(e) => setSlots((p) => p.map((x, j) => j === i ? { ...x, sortOrder: Number(e.target.value) } : x))} />
               <Input type="time" className="w-32" disabled={!canEdit} value={String(s.startTime || "").slice(0, 5)} onChange={(e) => setSlots((p) => p.map((x, j) => j === i ? { ...x, startTime: e.target.value } : x))} />
               <Input type="time" className="w-32" disabled={!canEdit} value={String(s.endTime || "").slice(0, 5)} onChange={(e) => setSlots((p) => p.map((x, j) => j === i ? { ...x, endTime: e.target.value } : x))} />
+              <label className="flex items-center gap-2 text-xs">
+                <Checkbox
+                  checked={Boolean(s.isBreak)}
+                  disabled={!canEdit}
+                  onCheckedChange={(v) => setSlots((p) => p.map((x, j) => j === i ? { ...x, isBreak: Boolean(v) } : x))}
+                />
+                הפסקה
+              </label>
+              <Input
+                className="w-40"
+                disabled={!canEdit || !s.isBreak}
+                placeholder="כותרת הפסקה"
+                value={s.breakTitle || ""}
+                onChange={(e) => setSlots((p) => p.map((x, j) => j === i ? { ...x, breakTitle: e.target.value } : x))}
+              />
               {canEdit && <Button type="button" variant="ghost" size="icon" onClick={() => setSlots((p) => p.filter((_, j) => j !== i))}><Trash2 className="h-4 w-4 text-destructive" /></Button>}
             </div>
           ))}
@@ -148,63 +185,87 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
         </CardContent>
       </Card>
 
-      {days.slice().sort((a, b) => a.sessionDate.localeCompare(b.sessionDate)).map((day) => (
-        <Card key={day.id}>
-          <CardHeader className="pb-2"><CardTitle className="text-base">יום {day.sessionDate}</CardTitle></CardHeader>
-          <CardContent className="overflow-x-auto">
-            <table className="w-full min-w-[900px] border-collapse text-sm">
-              <thead><tr><th className="border p-2 bg-muted/40 text-right">שעה</th>{classrooms.map((c) => <th key={c} className="border p-2 bg-muted/40 text-right">כיתה {c}</th>)}</tr></thead>
-              <tbody>
-                {sortedSlots.map((slot) => (
-                  <tr key={slot.id}>
-                    <td className="border p-2 align-top whitespace-nowrap">{slot.startTime} - {slot.endTime}</td>
-                    {classrooms.map((classNo) => {
-                      const a = assignmentFor(day, slot.sortOrder, classNo)
-                      return (
-                        <td key={classNo} className="border p-2 align-top">
-                          <div className="space-y-2">
-                            <Input placeholder="שם שיעור" value={a.lessonTitle} disabled={!canEdit} onChange={(e) => patchAssignment(day.id, slot.sortOrder, classNo, { lessonTitle: e.target.value })} />
-                            <div className="grid grid-cols-6 gap-1">
-                              {groupLetters.map((g) => (
-                                <label key={g} className="flex items-center gap-1 text-xs">
-                                  <Checkbox
-                                    checked={a.groupLabels.includes(g)}
-                                    disabled={!canEdit}
-                                    onCheckedChange={(v) => {
-                                      const next = v ? [...new Set([...a.groupLabels, g])] : a.groupLabels.filter((x) => x !== g)
-                                      patchAssignment(day.id, slot.sortOrder, classNo, { groupLabels: next })
-                                    }}
-                                  />
-                                  {g}
-                                </label>
-                              ))}
-                            </div>
-                            <div className="space-y-1">
-                              {teachers.map((t) => (
-                                <label key={t.id} className="flex items-center gap-1 text-xs">
-                                  <Checkbox
-                                    checked={a.teacherIds.includes(t.id)}
-                                    disabled={!canEdit}
-                                    onCheckedChange={(v) => {
-                                      const next = v ? [...new Set([...a.teacherIds, t.id])] : a.teacherIds.filter((x) => x !== t.id)
-                                      patchAssignment(day.id, slot.sortOrder, classNo, { teacherIds: next })
-                                    }}
-                                  />
-                                  {t.name}
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-                        </td>
-                      )
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </CardContent>
-        </Card>
-      ))}
+      {sortedDays.length > 0 && (
+        <Tabs value={activeDayId} onValueChange={setActiveDayId} className="w-full">
+          <TabsList className="h-auto w-full flex-wrap justify-start gap-1">
+            {sortedDays.map((day, i) => (
+              <TabsTrigger key={day.id} value={day.id}>
+                מפגש {i + 1} - {hebrewWeekday(day.sessionDate)}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {sortedDays.map((day, i) => (
+            <TabsContent key={day.id} value={day.id}>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">מפגש {i + 1} - {hebrewWeekday(day.sessionDate)} ({day.sessionDate})</CardTitle>
+                </CardHeader>
+                <CardContent className="overflow-x-auto">
+                  <table className="w-full min-w-[900px] border-collapse text-sm">
+                    <thead><tr><th className="border p-2 bg-muted/40 text-right">שעה</th>{classrooms.map((c) => <th key={c} className="border p-2 bg-muted/40 text-right">כיתה {c}</th>)}</tr></thead>
+                    <tbody>
+                      {sortedSlots.map((slot) => (
+                        slot.isBreak ? (
+                          <tr key={slot.id} className="bg-amber-100/70">
+                            <td className="border p-2 font-medium whitespace-nowrap">{slot.startTime} - {slot.endTime}</td>
+                            <td className="border p-2 font-medium text-amber-900" colSpan={classrooms.length}>
+                              {slot.breakTitle?.trim() || "הפסקה"}
+                            </td>
+                          </tr>
+                        ) : (
+                          <tr key={slot.id}>
+                            <td className="border p-2 align-top whitespace-nowrap">{slot.startTime} - {slot.endTime}</td>
+                            {classrooms.map((classNo) => {
+                              const a = assignmentFor(day, slot.sortOrder, classNo)
+                              return (
+                                <td key={classNo} className="border p-2 align-top">
+                                  <div className="space-y-2">
+                                    <Input placeholder="שם שיעור" value={a.lessonTitle} disabled={!canEdit} onChange={(e) => patchAssignment(day.id, slot.sortOrder, classNo, { lessonTitle: e.target.value })} />
+                                    <div className="grid grid-cols-6 gap-1">
+                                      {groupLetters.map((g) => (
+                                        <label key={g} className="flex items-center gap-1 text-xs">
+                                          <Checkbox
+                                            checked={a.groupLabels.includes(g)}
+                                            disabled={!canEdit}
+                                            onCheckedChange={(v) => {
+                                              const next = v ? [...new Set([...a.groupLabels, g])] : a.groupLabels.filter((x) => x !== g)
+                                              patchAssignment(day.id, slot.sortOrder, classNo, { groupLabels: next })
+                                            }}
+                                          />
+                                          {g}
+                                        </label>
+                                      ))}
+                                    </div>
+                                    <div className="space-y-1">
+                                      {teachers.map((t) => (
+                                        <label key={t.id} className="flex items-center gap-1 text-xs">
+                                          <Checkbox
+                                            checked={a.teacherIds.includes(t.id)}
+                                            disabled={!canEdit}
+                                            onCheckedChange={(v) => {
+                                              const next = v ? [...new Set([...a.teacherIds, t.id])] : a.teacherIds.filter((x) => x !== t.id)
+                                              patchAssignment(day.id, slot.sortOrder, classNo, { teacherIds: next })
+                                            }}
+                                          />
+                                          {t.name}
+                                        </label>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        )
+                      ))}
+                    </tbody>
+                  </table>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          ))}
+        </Tabs>
+      )}
     </div>
   )
 }
