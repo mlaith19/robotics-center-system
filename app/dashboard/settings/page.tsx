@@ -40,6 +40,7 @@ interface CenterSettings {
   registration_fee?: number
   discount_siblings?: number
   max_students_per_class?: number
+  camp_classrooms_count?: number
   email?: string
   website?: string
   working_hours?: string
@@ -115,6 +116,7 @@ export default function SettingsPage() {
     registration_fee: 0,
     discount_siblings: 0,
     max_students_per_class: 0,
+    camp_classrooms_count: 6,
     email: "",
     website: "",
     working_hours: "",
@@ -193,6 +195,7 @@ export default function SettingsPage() {
         registration_fee: settingsData.registration_fee || 0,
         discount_siblings: settingsData.discount_siblings || 0,
         max_students_per_class: settingsData.max_students_per_class || 0,
+        camp_classrooms_count: Number(settingsData.camp_classrooms_count || 6),
         email: settingsData.email || "",
         website: settingsData.website || "",
         working_hours: settingsData.working_hours || "",
@@ -697,6 +700,26 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 px-3 sm:px-6">
+              <div className="grid grid-cols-1 gap-3 rounded-lg border p-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="campClassroomsCount" className="text-right block">כמות כיתות לקייטנה</Label>
+                  <Input
+                    id="campClassroomsCount"
+                    type="number"
+                    min="1"
+                    max="12"
+                    value={settings.camp_classrooms_count || 6}
+                    onChange={(e) =>
+                      setSettings({ ...settings, camp_classrooms_count: Math.max(1, Math.min(12, Number(e.target.value) || 6)) })
+                    }
+                    className="text-right"
+                    dir="rtl"
+                  />
+                </div>
+                <div className="text-sm text-muted-foreground text-right self-end">
+                  ערך זה קובע כמה עמודות כיתה יופיעו בטאב קייטנה (כיתה 1..N).
+                </div>
+              </div>
               <div className="flex flex-row-reverse justify-stretch sm:justify-end">
                 <Button type="button" onClick={openAddSiblingPackage} className="w-full gap-2 sm:w-auto">
                   <Plus className="h-4 w-4" />

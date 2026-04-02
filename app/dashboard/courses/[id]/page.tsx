@@ -45,7 +45,7 @@ interface Enrollment {
   studentName: string
   status: string
   enrollmentDate: string
-  campGroupId?: string | null
+  campGroupLabel?: string | null
   createdByUserId?: string | null
   createdByUserName?: string | null
   siblingDiscountPackageName?: string | null
@@ -87,7 +87,7 @@ const dayLabels: Record<string, Record<"he" | "en" | "ar", string>> = {
 import { useCurrentUser } from "@/lib/auth-context"
 import { hasPermission, hasFullAccessRole } from "@/lib/permissions"
 import { getCourseStatusPresentation } from "@/lib/course-status"
-import { isCampCourseType } from "@/lib/camp-kaytana"
+import { HEBREW_GROUP_LETTERS, isCampCourseType } from "@/lib/camp-kaytana"
 import { CourseCampTab } from "./course-camp-tab"
 
 export default function CourseViewPage() {
@@ -191,22 +191,7 @@ export default function CourseViewPage() {
   const [savingSession, setSavingSession] = useState(false)
   const [feedbackDrafts, setFeedbackDrafts] = useState<Record<string, Record<string, string>>>({})
   const [savingFeedbackBySession, setSavingFeedbackBySession] = useState<Record<string, boolean>>({})
-  const [campGroups, setCampGroups] = useState<{ id: string; label: string }[]>([])
-
-  useEffect(() => {
-    if (!id || !course || !isCampCourseType(course.courseType)) {
-      setCampGroups([])
-      return
-    }
-    fetch(`/api/courses/${id}/camp`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) =>
-        setCampGroups(
-          Array.isArray(d?.groups) ? d.groups.map((g: { id: string; label: string }) => ({ id: g.id, label: g.label })) : [],
-        ),
-      )
-      .catch(() => setCampGroups([]))
-  }, [id, course?.courseType])
+  const campGroups = HEBREW_GROUP_LETTERS
 
   useEffect(() => {
     if (!currentUser?.id) return
@@ -325,12 +310,12 @@ export default function CourseViewPage() {
     }
   }
 
-  async function saveEnrollmentCampGroup(enrollmentId: string, campGroupId: string) {
+  async function saveEnrollmentCampGroup(enrollmentId: string, campGroupLabel: string) {
     try {
       const res = await fetch(`/api/enrollments/${enrollmentId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ campGroupId: campGroupId || null }),
+        body: JSON.stringify({ campGroupLabel: campGroupLabel || null }),
       })
       if (!res.ok) return
       const enrollmentsRes = await fetch(`/api/enrollments?courseId=${id}`)
@@ -769,7 +754,7 @@ export default function CourseViewPage() {
                             <TableCell className="text-right">
                               {canEditCourses && !isStudentUser ? (
                                 <Select
-                                  value={enrollment.campGroupId || "__none__"}
+                                  value={enrollment.campGroupLabel || "__none__"}
                                   onValueChange={(v) =>
                                     saveEnrollmentCampGroup(enrollment.id, v === "__none__" ? "" : v)
                                   }
@@ -780,15 +765,15 @@ export default function CourseViewPage() {
                                   <SelectContent>
                                     <SelectItem value="__none__">—</SelectItem>
                                     {campGroups.map((g) => (
-                                      <SelectItem key={g.id} value={g.id}>
-                                        {g.label}
+                                      <SelectItem key={g} value={g}>
+                                        {g}
                                       </SelectItem>
                                     ))}
                                   </SelectContent>
                                 </Select>
                               ) : (
                                 <span className="text-muted-foreground">
-                                  {campGroups.find((g) => g.id === enrollment.campGroupId)?.label || "—"}
+                                  {enrollment.campGroupLabel || "—"}
                                 </span>
                               )}
                             </TableCell>
@@ -810,7 +795,7 @@ export default function CourseViewPage() {
 
         {canTabCamp && (
           <TabsContent value="camp" className="space-y-4">
-            <CourseCampTab courseId={id} teachers={teachers} canEdit={!isStudentUser && canEditCourses} />
+            <CourseCampTab courseId={id} canEdit={!isStudentUser && canEditCourses} />
           </TabsContent>
         )}
 

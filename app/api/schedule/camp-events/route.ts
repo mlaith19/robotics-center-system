@@ -14,12 +14,11 @@ export type CampScheduleEventDTO = {
   lessonTitle: string
   courseId: string
   courseName: string
-  roomId: string
-  roomLabel: string
-  groupId: string
-  groupLabel: string
-  roomTeacherId: string | null
-  teacherName: string | null
+  classroomNo: number
+  classLabel: string
+  groupLabels: string[]
+  teacherIds: string[]
+  teacherNames: string[]
   courseStartTime: string | null
   courseEndTime: string | null
 }
@@ -73,21 +72,13 @@ export const GET = withTenantAuth(async (req, session) => {
           ca."lessonTitle" as "lessonTitle",
           c.id as "courseId",
           c.name as "courseName",
-          cr.id as "roomId",
-          cr.label as "roomLabel",
-          cg.id as "groupId",
-          cg.label as "groupLabel",
-          cr."teacherId" as "roomTeacherId",
-          t.name as "teacherName",
+          ca."classroomNo" as "classroomNo",
           to_char(c."startTime"::time, 'HH24:MI') as "courseStartTime",
           to_char(c."endTime"::time, 'HH24:MI') as "courseEndTime"
-        FROM "CampAssignment" ca
+        FROM "CampClassAssignment" ca
         INNER JOIN "CampDay" cd ON ca."campDayId" = cd.id
         INNER JOIN "Course" c ON cd."courseId" = c.id
-        INNER JOIN "CampRoom" cr ON ca."roomId" = cr.id
-        INNER JOIN "CampGroup" cg ON ca."groupId" = cg.id
         LEFT JOIN "CampSlot" cs ON cs."courseId" = c.id AND cs."sortOrder" = ca."slotSortOrder"
-        LEFT JOIN "Teacher" t ON cr."teacherId" = t.id
         WHERE cd."sessionDate" >= ${start}
           AND cd."sessionDate" <= ${end}
           AND split_part(c."courseType", '_', 1) = 'camp'
@@ -105,15 +96,26 @@ export const GET = withTenantAuth(async (req, session) => {
         lessonTitle: String(r.lessonTitle ?? ""),
         courseId: String(r.courseId),
         courseName: String(r.courseName),
-        roomId: String(r.roomId),
-        roomLabel: String(r.roomLabel),
-        groupId: String(r.groupId),
-        groupLabel: String(r.groupLabel),
-        roomTeacherId: r.roomTeacherId != null ? String(r.roomTeacherId) : null,
-        teacherName: r.teacherName != null ? String(r.teacherName) : null,
+        classroomNo: Number(r.classroomNo || 1),
+        classLabel: `כיתה ${Number(r.classroomNo || 1)}`,
+        groupLabels: [],
+        teacherIds: [],
+        teacherNames: [],
         courseStartTime: r.courseStartTime != null ? String(r.courseStartTime) : null,
         courseEndTime: r.courseEndTime != null ? String(r.courseEndTime) : null,
       }
+      const gRows =
+        (await db`SELECT "groupLabel" FROM "CampClassAssignmentGroup" WHERE "assignmentId" = ${event.assignmentId}`) || []
+      event.groupLabels = (gRows as { groupLabel: string }[]).map((x) => String(x.groupLabel)).filter(Boolean)
+      const tRows =
+        (await db`
+          SELECT ct."teacherId" as "teacherId", t.name as "teacherName"
+          FROM "CampClassAssignmentTeacher" ct
+          LEFT JOIN "Teacher" t ON ct."teacherId" = t.id
+          WHERE ct."assignmentId" = ${event.assignmentId}
+        `) || []
+      event.teacherIds = (tRows as { teacherId: string }[]).map((x) => String(x.teacherId))
+      event.teacherNames = (tRows as { teacherName?: string }[]).map((x) => String(x.teacherName || "")).filter(Boolean)
 
       if (!event.slotStart) event.slotStart = event.courseStartTime
       if (!event.slotEnd) event.slotEnd = event.courseEndTime
@@ -129,15 +131,15 @@ export const GET = withTenantAuth(async (req, session) => {
       if (filterStudentId && canFilterByStudent) {
         const enr =
           (await db`
-            SELECT "courseId", "campGroupId" FROM "Enrollment"
+            SELECT "courseId", "campGroupLabel" FROM "Enrollment"
             WHERE "studentId" = ${filterStudentId} AND status = ${"active"}
           `) || []
         const keys = new Set(
-          (enr as { courseId: string; campGroupId: string | null }[])
-            .filter((e) => e.campGroupId)
-            .map((e) => `${e.courseId}\t${e.campGroupId}`),
+          (enr as { courseId: string; campGroupLabel: string | null }[])
+            .filter((e) => e.campGroupLabel)
+            .map((e) => `${e.courseId}\t${e.campGroupLabel}`),
         )
-        filtered = filtered.filter((e) => keys.has(`${e.courseId}\t${e.groupId}`))
+        filtered = filtered.filter((e) => e.groupLabels.some((g) => keys.has(`${e.courseId}\t${g}`)))
       }
     } else if (teacherId) {
       const courseIdsFromTeacher =
@@ -147,20 +149,20 @@ export const GET = withTenantAuth(async (req, session) => {
         `) || []
       const courseSet = new Set((courseIdsFromTeacher as { id: string }[]).map((c) => c.id))
       filtered = filtered.filter(
-        (e) => e.roomTeacherId === teacherId || courseSet.has(e.courseId),
+        (e) => e.teacherIds.includes(teacherId) || courseSet.has(e.courseId),
       )
     } else if (studentId) {
       const enr =
         (await db`
-          SELECT "courseId", "campGroupId" FROM "Enrollment"
+          SELECT "courseId", "campGroupLabel" FROM "Enrollment"
           WHERE "studentId" = ${studentId} AND status = ${"active"}
         `) || []
       const keys = new Set(
-        (enr as { courseId: string; campGroupId: string | null }[])
-          .filter((e) => e.campGroupId)
-          .map((e) => `${e.courseId}\t${e.campGroupId}`),
+        (enr as { courseId: string; campGroupLabel: string | null }[])
+          .filter((e) => e.campGroupLabel)
+          .map((e) => `${e.courseId}\t${e.campGroupLabel}`),
       )
-      filtered = filtered.filter((e) => keys.has(`${e.courseId}\t${e.groupId}`))
+      filtered = filtered.filter((e) => e.groupLabels.some((g) => keys.has(`${e.courseId}\t${g}`)))
     } else {
       filtered = []
     }

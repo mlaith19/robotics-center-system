@@ -1,5 +1,9 @@
 import type { Sql } from "postgres"
 
+export const HEBREW_GROUP_LETTERS = [
+  "א","ב","ג","ד","ה","ו","ז","ח","ט","י","כ","ל","מ","נ","ס","ע","פ","צ","ק","ר","ש","ת",
+]
+
 /** מחזיר את סוג הקורס הבסיסי בלי סיומות תמחור (_total / _session / _hour) */
 export function baseCourseType(raw: string | null | undefined): string {
   if (!raw || typeof raw !== "string") return "regular"
@@ -146,11 +150,75 @@ export async function ensureCampTables(sql: Sql) {
   )
 
   await safe(
+    "CampClassAssignment",
+    sql`
+      CREATE TABLE IF NOT EXISTS "CampClassAssignment" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "campDayId" TEXT NOT NULL REFERENCES "CampDay"("id") ON DELETE CASCADE,
+        "slotSortOrder" INTEGER NOT NULL,
+        "classroomNo" INTEGER NOT NULL,
+        "lessonTitle" TEXT NOT NULL DEFAULT '',
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "CampClassAssignment_day_slot_class_key" UNIQUE ("campDayId", "slotSortOrder", "classroomNo")
+      )
+    `,
+  )
+  await safe(
+    "CampClassAssignment idx",
+    sql`CREATE INDEX IF NOT EXISTS "CampClassAssignment_campDayId_idx" ON "CampClassAssignment"("campDayId")`,
+  )
+
+  await safe(
+    "CampClassAssignmentGroup",
+    sql`
+      CREATE TABLE IF NOT EXISTS "CampClassAssignmentGroup" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "assignmentId" TEXT NOT NULL REFERENCES "CampClassAssignment"("id") ON DELETE CASCADE,
+        "groupLabel" TEXT NOT NULL,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `,
+  )
+  await safe(
+    "CampClassAssignmentGroup uniq",
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS "CampClassAssignmentGroup_assignment_group_key" ON "CampClassAssignmentGroup"("assignmentId", "groupLabel")`,
+  )
+
+  await safe(
+    "CampClassAssignmentTeacher",
+    sql`
+      CREATE TABLE IF NOT EXISTS "CampClassAssignmentTeacher" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "assignmentId" TEXT NOT NULL REFERENCES "CampClassAssignment"("id") ON DELETE CASCADE,
+        "teacherId" TEXT NOT NULL REFERENCES "Teacher"("id") ON DELETE CASCADE,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `,
+  )
+  await safe(
+    "CampClassAssignmentTeacher uniq",
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS "CampClassAssignmentTeacher_assignment_teacher_key" ON "CampClassAssignmentTeacher"("assignmentId", "teacherId")`,
+  )
+
+  await safe(
     "Enrollment campGroupId",
     sql`ALTER TABLE "Enrollment" ADD COLUMN IF NOT EXISTS "campGroupId" TEXT`,
   )
   await safe(
     "Enrollment campGroupId idx",
     sql`CREATE INDEX IF NOT EXISTS "Enrollment_campGroupId_idx" ON "Enrollment"("campGroupId")`,
+  )
+  await safe(
+    "Enrollment campGroupLabel",
+    sql`ALTER TABLE "Enrollment" ADD COLUMN IF NOT EXISTS "campGroupLabel" TEXT`,
+  )
+  await safe(
+    "Enrollment campGroupLabel idx",
+    sql`CREATE INDEX IF NOT EXISTS "Enrollment_campGroupLabel_idx" ON "Enrollment"("campGroupLabel")`,
+  )
+
+  await safe(
+    "center_settings campClassroomsCount",
+    sql`ALTER TABLE "center_settings" ADD COLUMN IF NOT EXISTS "camp_classrooms_count" INTEGER NOT NULL DEFAULT 6`,
   )
 }

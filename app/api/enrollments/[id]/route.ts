@@ -1,7 +1,7 @@
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
 import { requirePerm } from "@/lib/require-perm"
-import { ensureCampTables, isCampCourseType } from "@/lib/camp-kaytana"
+import { ensureCampTables, HEBREW_GROUP_LETTERS, isCampCourseType } from "@/lib/camp-kaytana"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -33,16 +33,17 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
   try {
     const { id } = await params
     const body   = await req.json()
-    const { sessionsLeft, status, campGroupId } = body
+    const { sessionsLeft, status, campGroupLabel, campGroupId } = body
 
-    if (campGroupId !== undefined) {
+    if (campGroupLabel !== undefined || campGroupId !== undefined) {
       const denied = requirePerm(session, "courses.edit")
       if (denied) return denied
       await ensureCampTables(db)
+      const raw = campGroupLabel !== undefined ? campGroupLabel : campGroupId
       const groupVal =
-        campGroupId === null || campGroupId === ""
+        raw === null || raw === ""
           ? null
-          : String(campGroupId).trim()
+          : String(raw).trim()
       const enr =
         (await db`
           SELECT e.id, e."courseId", c."courseType" as "courseType"
@@ -55,17 +56,12 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
       if (!isCampCourseType(courseType)) {
         return Response.json({ error: "Course is not camp type", code: "not_camp" }, { status: 400 })
       }
-      const courseId = String((enr[0] as { courseId: string }).courseId)
-      if (groupVal) {
-        const g =
-          (await db`
-            SELECT id FROM "CampGroup" WHERE id = ${groupVal} AND "courseId" = ${courseId}
-          `) || []
-        if (g.length === 0) return Response.json({ error: "Invalid camp group for course" }, { status: 400 })
+      if (groupVal && !HEBREW_GROUP_LETTERS.includes(groupVal)) {
+        return Response.json({ error: "Invalid camp group label. Expected one Hebrew letter א-ת" }, { status: 400 })
       }
       const result =
         await db`
-          UPDATE "Enrollment" SET "campGroupId" = ${groupVal} WHERE id = ${id} RETURNING *
+          UPDATE "Enrollment" SET "campGroupLabel" = ${groupVal}, "campGroupId" = NULL WHERE id = ${id} RETURNING *
         `
       return Response.json(result[0])
     }

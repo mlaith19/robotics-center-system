@@ -45,17 +45,16 @@ interface Course {
 interface CampScheduleEvent {
   assignmentId: string
   sessionDate: string
-  slotStart: string
-  slotEnd: string
+  slotStart: string | null
+  slotEnd: string | null
   lessonTitle: string
   courseId: string
   courseName: string
-  roomId: string
-  roomLabel: string
-  groupId: string
-  groupLabel: string
-  roomTeacherId: string | null
-  teacherName: string | null
+  classroomNo: number
+  classLabel: string
+  groupLabels: string[]
+  teacherIds: string[]
+  teacherNames: string[]
 }
 
 interface Student {
@@ -317,34 +316,29 @@ export default function SchedulePage() {
       .filter((e) => e.sessionDate === dateYmd)
       .filter((e) => {
         if (filterCourse !== "all" && e.courseId !== filterCourse) return false
-        if (filterTeacher !== "all") {
-          if (e.roomTeacherId !== filterTeacher) return false
-        }
+        if (filterTeacher !== "all" && !e.teacherIds.includes(filterTeacher)) return false
         return true
       })
       .map((e) => {
         const title =
           e.lessonTitle?.trim() ?
             `${e.lessonTitle.trim()} · ${e.courseName}`
-          : `${e.courseName} · ${e.groupLabel}`
+          : `${e.courseName} · ${(e.groupLabels || []).join(", ")}`
         return {
           id: `camp-${e.assignmentId}`,
           name: title,
-          description: [e.roomLabel && `כיתה: ${e.roomLabel}`, e.groupLabel && `קבוצה: ${e.groupLabel}`].filter(Boolean).join(" · "),
+          description: [`כיתה: ${e.classLabel || `כיתה ${e.classroomNo}`}`, (e.groupLabels || []).length ? `קבוצות: ${(e.groupLabels || []).join(", ")}` : ""].filter(Boolean).join(" · "),
           startTime: e.slotStart,
           endTime: e.slotEnd,
           startDate: e.sessionDate,
           endDate: e.sessionDate,
-          teachers:
-            e.teacherName && e.roomTeacherId ?
-              [{ id: e.roomTeacherId, name: e.teacherName }]
-            : [],
+          teachers: (e.teacherIds || []).map((id, idx) => ({ id, name: e.teacherNames?.[idx] || "מורה" })),
           isCampSlot: true,
           campAssignmentId: e.assignmentId,
           campSessionDate: e.sessionDate,
           campLessonTitle: e.lessonTitle,
-          campGroupLabel: e.groupLabel,
-          campRoomLabel: e.roomLabel,
+          campGroupLabel: (e.groupLabels || []).join(", "),
+          campRoomLabel: e.classLabel || `כיתה ${e.classroomNo}`,
           campCourseId: e.courseId,
         } satisfies Course
       })
