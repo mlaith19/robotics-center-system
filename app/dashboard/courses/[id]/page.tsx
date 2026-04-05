@@ -220,6 +220,11 @@ export default function CourseViewPage() {
     currentUser?.role === "אדמין" ||
     currentUser?.role === "מנהל"
   const userPerms = currentUser?.permissions || []
+  const canDeleteTeacherAttendanceRow = canDeleteTeacherAttendanceRecord({
+    roleKey: currentUser?.roleKey,
+    role: currentUser?.role,
+    permissions: userPerms,
+  })
   const canEditCourses = isAdmin || hasPermission(userPerms, "courses.edit")
   const canTabGeneral = isAdmin || hasPermission(userPerms, "courses.tab.general")
   const canTabStudents = isAdmin || hasPermission(userPerms, "courses.tab.students")
