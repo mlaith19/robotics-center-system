@@ -16,6 +16,7 @@ import { useCurrentUser } from "@/lib/auth-context"
 import { hasPermission, hasFullAccessRole } from "@/lib/permissions"
 import { useUserType } from "@/lib/use-user-type"
 import { getCourseStatusPresentation } from "@/lib/course-status"
+import { isCampCourseType, listCampSessionDates } from "@/lib/camp-kaytana"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { useLanguage } from "@/lib/i18n/context"
@@ -51,6 +52,20 @@ function isTotalCoursePricingType(courseType?: string) {
     typeof courseType === "string" &&
     (courseType.endsWith("_total") || courseType.endsWith("_session") || courseType.endsWith("_hour"))
   )
+}
+
+/** מספר מפגשים לכרטיס: קייטנה / תמחור לפי מפגש או שעה — מחושב מתאריכים וימים (מתוקן לעומת שדה duration ישן/UTC). */
+function displaySessionsOnCourseCard(c: Course): string {
+  const ct = String(c.courseType || "")
+  const pricingByMeetings = ct.endsWith("_session") || ct.endsWith("_hour")
+  const campDates =
+    isCampCourseType(ct) && c.startDate && c.endDate && c.daysOfWeek && c.daysOfWeek.length > 0
+  if ((pricingByMeetings || campDates) && c.startDate && c.endDate && c.daysOfWeek?.length) {
+    const n = listCampSessionDates(c.startDate, c.endDate, c.daysOfWeek).length
+    if (n > 0) return String(n)
+  }
+  if (c.duration != null && String(c.duration).trim() !== "") return String(c.duration)
+  return ""
 }
 
 type Teacher = {
@@ -520,6 +535,7 @@ export default function CoursesPage() {
               status: c.status,
               endDate: c.endDate,
             })
+            const sessionsLabel = displaySessionsOnCourseCard(c)
             return (
             <Card
               key={c.id}
@@ -544,11 +560,11 @@ export default function CoursesPage() {
                   <span>{c.enrollmentCount || 0} {t("courses.students")}</span>
                 </div>
 
-                {/* Duration */}
-                {c.duration && (
+                {/* Duration / meeting count */}
+                {sessionsLabel && (
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Clock className="h-4 w-4 text-blue-500" />
-                    <span>{c.duration}</span>
+                    <span>{sessionsLabel}</span>
                   </div>
                 )}
 

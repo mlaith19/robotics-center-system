@@ -6,6 +6,12 @@ import { parseCourseDateForDb, parseCourseTimeForDb, courseTimeToDisplayValue } 
 import { getCourseRegistrationVisibilityMap, setCourseRegistrationVisibility } from "@/lib/course-registration-visibility"
 import { ensureSiblingDiscountTables } from "@/lib/sibling-discount"
 import { ensureTeacherTariffTables, loadCourseTeacherTariffMap, syncCourseTeacherTariffs } from "@/lib/teacher-tariff-profiles"
+import {
+  ensureCourseSessionPricesColumn,
+  normalizeSessionPricesMap,
+  buildSessionPricesForCourseDates,
+  courseTypeIsPerSession,
+} from "@/lib/course-session-prices"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -24,6 +30,7 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
   const { id } = await params
   try {
     await ensureSiblingDiscountTables(db)
+    await ensureCourseSessionPricesColumn(db)
     await runAutoCompleteExpiredCourses(db)
     const result = await db`
       SELECT
@@ -66,6 +73,7 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
 
   try {
     await ensureSiblingDiscountTables(db)
+    await ensureCourseSessionPricesColumn(db)
     const teacherIdsPre = Array.isArray(body.teacherIds) ? body.teacherIds.map((x: unknown) => String(x)) : []
     const rawTariffPre = body.teacherTariffByTeacherId
     const tariffMapPre =
@@ -94,27 +102,41 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
     // PostgreSQL then casts TEXT → TIMESTAMP literally, with no timezone conversion.
     const startTimeVal = startTime !== null ? db.typed(startTime, 25) : null
     const endTimeVal   = endTime   !== null ? db.typed(endTime,   25) : null
+    const courseTypePut = cleanStr(body.courseType) || "regular"
+    const daysOfWeekPut = Array.isArray(body.daysOfWeek) ? body.daysOfWeek : []
+    let durationPut = body.duration ? Number(body.duration) : null
+    let pricePut = body.price != null ? Number(body.price) : null
+    let sessionPricesPut: Record<string, number> = {}
+    if (courseTypeIsPerSession(courseTypePut)) {
+      const input = normalizeSessionPricesMap(body.sessionPrices)
+      const fallback = pricePut != null && !Number.isNaN(pricePut) && pricePut >= 0 ? pricePut : 0
+      sessionPricesPut = buildSessionPricesForCourseDates(startDate, endDate, daysOfWeekPut, input, fallback)
+      const keys = Object.keys(sessionPricesPut)
+      durationPut = keys.length
+      pricePut = Math.round(keys.reduce((s, k) => s + (sessionPricesPut[k] ?? 0), 0) * 100) / 100
+    }
     const result = await db`
       UPDATE "Course"
       SET name = ${name},
           description = ${cleanStr(body.description)},
           level = ${cleanStr(body.level) || "beginner"},
-          duration = ${body.duration ? Number(body.duration) : null},
-          price = ${body.price ? Number(body.price) : null},
+          duration = ${durationPut},
+          price = ${pricePut},
           status = ${cleanStr(body.status) || "active"},
           "courseNumber" = ${cleanStr(body.courseNumber)},
           category = ${cleanStr(body.category)},
-          "courseType" = ${cleanStr(body.courseType) || "regular"},
+          "courseType" = ${courseTypePut},
           location = ${cleanStr(body.location) || "center"},
           "startDate" = ${startDate},
           "endDate"   = ${endDate},
           "startTime" = ${startTimeVal}::timestamp,
           "endTime"   = ${endTimeVal}::timestamp,
-          "daysOfWeek" = ${Array.isArray(body.daysOfWeek) ? body.daysOfWeek : []},
+          "daysOfWeek" = ${daysOfWeekPut},
           "teacherIds" = ${Array.isArray(body.teacherIds) ? body.teacherIds : []},
           "schoolId"       = ${cleanStr(body.schoolId)},
           "gafanProgramId" = ${cleanStr(body.gafanProgramId)},
           "siblingDiscountPackageId" = ${cleanStr(body.siblingDiscountPackageId)},
+          "sessionPrices" = ${db.json(sessionPricesPut)},
           "updatedAt" = ${now}
       WHERE id = ${id}
       RETURNING *

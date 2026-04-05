@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -12,6 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { ArrowRight, BookOpen, Save, Calendar, Users, MessageSquare } from "lucide-react"
 import { useLanguage } from "@/lib/i18n/context"
+import { listCampSessionDates } from "@/lib/camp-kaytana"
+import { PerSessionPriceList } from "@/components/course/per-session-price-list"
 
 interface Teacher {
   id: string
@@ -69,39 +71,6 @@ function normalizeCourseType(raw: string): string {
     .replace(new RegExp(`${HOURLY_PRICE_SUFFIX}$`), "")
 }
 
-function mapDayKeyToJsDay(key: string): number {
-  const m: Record<string, number> = {
-    sunday: 0,
-    monday: 1,
-    tuesday: 2,
-    wednesday: 3,
-    thursday: 4,
-    friday: 5,
-    saturday: 6,
-  }
-  return m[key] ?? -1
-}
-
-/** startYmd, endYmd: YYYY-MM-DD מ-input type=date */
-function countSessionsBetween(startYmd: string, endYmd: string, dayKeys: string[]): number {
-  if (!startYmd || !endYmd || dayKeys.length === 0) return 0
-  const wanted = new Set(dayKeys.map(mapDayKeyToJsDay).filter((d) => d >= 0))
-  if (wanted.size === 0) return 0
-  const [ys, ms, ds] = startYmd.split("-").map(Number)
-  const [ye, me, de] = endYmd.split("-").map(Number)
-  if ([ys, ms, ds, ye, me, de].some((n) => Number.isNaN(n))) return 0
-  const cur = new Date(ys, ms - 1, ds)
-  const end = new Date(ye, me - 1, de)
-  if (cur > end) return 0
-  const endTime = end.getTime()
-  let count = 0
-  while (cur.getTime() <= endTime) {
-    if (wanted.has(cur.getDay())) count++
-    cur.setDate(cur.getDate() + 1)
-  }
-  return count
-}
-
 /** שדות time מהדפדפן: HH:MM או HH:MM:SS */
 function hoursBetweenTimeInputs(start: string, end: string): number | null {
   if (!start?.trim() || !end?.trim()) return null
@@ -134,6 +103,7 @@ export default function NewCoursePage() {
   const [courseCategories, setCourseCategories] = useState<{ id: string; name: string }[]>([])
   const [tariffProfiles, setTariffProfiles] = useState<TariffProfile[]>([])
   const [teacherTariffByTeacherId, setTeacherTariffByTeacherId] = useState<Record<string, string>>({})
+  const [sessionPricesByDate, setSessionPricesByDate] = useState<Record<string, string>>({})
 
   const [formData, setFormData] = useState({
     name: "",
@@ -171,25 +141,67 @@ export default function NewCoursePage() {
   const computedSessionCount = useMemo(
     () =>
       needsSessionCount
-        ? countSessionsBetween(formData.startDate, formData.endDate, formData.daysOfWeek)
+        ? listCampSessionDates(formData.startDate, formData.endDate, formData.daysOfWeek).length
         : 0,
     [needsSessionCount, formData.startDate, formData.endDate, formData.daysOfWeek],
   )
+  const sessionDatesList = useMemo(
+    () =>
+      formData.pricingMode === "perSession"
+        ? listCampSessionDates(formData.startDate, formData.endDate, formData.daysOfWeek)
+        : [],
+    [formData.pricingMode, formData.startDate, formData.endDate, formData.daysOfWeek],
+  )
+  const defaultPriceRef = useRef(formData.price)
+  defaultPriceRef.current = formData.price
+
+  useEffect(() => {
+    if (formData.pricingMode !== "perSession") {
+      setSessionPricesByDate({})
+      return
+    }
+    const dates = listCampSessionDates(formData.startDate, formData.endDate, formData.daysOfWeek)
+    setSessionPricesByDate((prev) => {
+      const next: Record<string, string> = {}
+      const def = defaultPriceRef.current
+      for (const d of dates) {
+        if (prev[d] != null && prev[d] !== "") next[d] = prev[d]
+        else next[d] = def
+      }
+      return next
+    })
+  }, [formData.pricingMode, formData.startDate, formData.endDate, formData.daysOfWeek])
+
   const computedCoursePrice = useMemo(() => {
     if (!needsSessionCount) return 0
-    const p = Number(formData.price)
-    if (Number.isNaN(p)) return 0
     if (needsHourlyRange) {
+      const p = Number(formData.price)
+      if (Number.isNaN(p)) return 0
       if (hoursPerSession == null || hoursPerSession <= 0) return 0
       return Math.round(computedSessionCount * hoursPerSession * p * 100) / 100
     }
+    if (formData.pricingMode === "perSession" && sessionDatesList.length > 0) {
+      const def = Number(formData.price)
+      let sum = 0
+      for (const d of sessionDatesList) {
+        const v = Number(sessionPricesByDate[d])
+        if (Number.isFinite(v) && v >= 0) sum += v
+        else if (Number.isFinite(def) && def >= 0) sum += def
+      }
+      return Math.round(sum * 100) / 100
+    }
+    const p = Number(formData.price)
+    if (Number.isNaN(p)) return 0
     return Math.round(computedSessionCount * p * 100) / 100
   }, [
     needsSessionCount,
     computedSessionCount,
     formData.price,
+    formData.pricingMode,
     needsHourlyRange,
     hoursPerSession,
+    sessionDatesList,
+    sessionPricesByDate,
   ])
 
   useEffect(() => {
@@ -315,18 +327,23 @@ export default function NewCoursePage() {
         setErr("לא נמצאו מפגשים בטווח התאריכים ובימים שנבחרו — בדוק תאריכים וימי שבוע")
         return
       }
-      const per = Number(formData.price)
-      if (Number.isNaN(per) || per <= 0) {
-        setErr(needsHourlyRange ? "הזן מחיר חיובי לשעה" : "הזן מחיר חיובי למפגש")
-        return
-      }
       if (needsHourlyRange) {
+        const per = Number(formData.price)
+        if (Number.isNaN(per) || per <= 0) {
+          setErr("הזן מחיר חיובי לשעה")
+          return
+        }
         if (!formData.startTime?.trim() || !formData.endTime?.trim()) {
           setErr("בתמחור לפי שעה יש למלא שעת התחלה ושעת סיום לחישוב אורך המפגש")
           return
         }
         if (hoursPerSession == null || hoursPerSession <= 0) {
           setErr("שעת הסיום חייבת להיות אחרי שעת ההתחלה כדי לחשב שעות למפגש")
+          return
+        }
+      } else if (formData.pricingMode === "perSession") {
+        if (computedCoursePrice <= 0) {
+          setErr("הזן מחיר חיובי לכל מפגש או מחיר ברירת מחדל למפגש")
           return
         }
       }
@@ -356,6 +373,16 @@ export default function NewCoursePage() {
                 ? `${baseCourseType}${HOURLY_PRICE_SUFFIX}`
                 : baseCourseType
 
+      const sessionPricesPayload: Record<string, number> | undefined =
+        formData.pricingMode === "perSession" && sessionDatesList.length > 0
+          ? Object.fromEntries(
+              sessionDatesList.map((d) => {
+                const n = Number(sessionPricesByDate[d] ?? formData.price)
+                return [d, Math.round(n * 100) / 100]
+              }),
+            )
+          : undefined
+
       const res = await fetch("/api/courses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -366,6 +393,7 @@ export default function NewCoursePage() {
           courseType: courseTypeOut,
           duration: durationOut,
           price: priceOut,
+          ...(sessionPricesPayload ? { sessionPrices: sessionPricesPayload } : {}),
         }),
       })
       if (!res.ok) {
@@ -882,7 +910,9 @@ export default function NewCoursePage() {
       : needsSessionCount
         ? needsHourlyRange
           ? "מחיר לשעה × אורך מפגש × מספר מפגשים (שעות ותאריכים מהכרטיסייה למעלה)"
-          : "מחיר לכל מפגש; סה״כ = מחיר למפגש × מספר מפגשים"
+          : formData.pricingMode === "perSession"
+            ? "מחיר ברירת מחדל למפגש + רשימת מפגשים (ניתן לשנות מחיר לכל תאריך)"
+            : "מחיר לכל מפגש; סה״כ = מחיר למפגש × מספר מפגשים"
         : formData.pricingMode === "perCourse"
           ? "מחיר כולל לקורס כולו"
           : "הגדר את מחיר הקורס"}
@@ -937,7 +967,9 @@ export default function NewCoursePage() {
       : needsSessionCount
         ? needsHourlyRange
           ? "מחיר לשעה (ש\"ח) *"
-          : "מחיר למפגש (ש\"ח) *"
+          : formData.pricingMode === "perSession"
+            ? "מחיר ברירת מחדל למפגש (ש\"ח) *"
+            : "מחיר למפגש (ש\"ח) *"
         : "מחיר הקורס (ש\"ח) *"}
   </Label>
   <Input
@@ -962,6 +994,15 @@ export default function NewCoursePage() {
         ? `${(hoursPerSession * computedSessionCount).toFixed(2)} שעות`
         : "—"}
     </p>
+  )}
+  {formData.pricingMode === "perSession" && !needsHourlyRange && sessionDatesList.length > 0 && (
+    <PerSessionPriceList
+      sessionDates={sessionDatesList}
+      values={sessionPricesByDate}
+      onChange={setSessionPricesByDate}
+      defaultPrice={formData.price}
+      defaultPriceLabel='השדה "מחיר ברירת מחדל למפגש" משמש למפגשים חדשים ולכפתור "החל על כל המפגשים".'
+    />
   )}
   {needsSessionCount && (
     <div className="text-right space-y-1 pt-2 border-t border-emerald-200/80 mt-3">

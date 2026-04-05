@@ -1,4 +1,5 @@
 import type { Sql } from "postgres"
+import { normalizeCourseCalendarYmd } from "./course-db-fields"
 
 export const HEBREW_GROUP_LETTERS = [
   "א","ב","ג","ד","ה","ו","ז","ח","ט","י","כ","ל","מ","נ","ס","ע","פ","צ","ק","ר","ש","ת",
@@ -37,7 +38,9 @@ export function listCampSessionDates(
   endYmd: string | null | undefined,
   daysOfWeek: string[] | null | undefined,
 ): string[] {
-  if (!startYmd || !endYmd) return []
+  const startNorm = normalizeCourseCalendarYmd(startYmd)
+  const endNorm = normalizeCourseCalendarYmd(endYmd)
+  if (!startNorm || !endNorm) return []
   const wanted = new Set<number>()
   const arr = Array.isArray(daysOfWeek) ? daysOfWeek : []
   for (const d of arr) {
@@ -46,8 +49,8 @@ export function listCampSessionDates(
   }
   if (wanted.size === 0) return []
 
-  const [ys, ms, ds] = startYmd.split("-").map(Number)
-  const [ye, me, de] = endYmd.split("-").map(Number)
+  const [ys, ms, ds] = startNorm.split("-").map(Number)
+  const [ye, me, de] = endNorm.split("-").map(Number)
   if ([ys, ms, ds, ye, me, de].some((n) => Number.isNaN(n))) return []
 
   const out: string[] = []

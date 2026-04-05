@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { ArrowRight, Pencil, Loader2, BookOpen, Calendar, Users, BarChart3, CalendarCheck, Check, X, Thermometer, Plane, CalendarRange, Printer } from "lucide-react"
-import { courseTimeToDisplayValue } from "@/lib/course-db-fields"
+import { courseTimeToDisplayValue, normalizeCourseCalendarYmd } from "@/lib/course-db-fields"
 import { useLanguage } from "@/lib/i18n/context"
 
 interface Course {
@@ -97,10 +97,24 @@ const dayLabels: Record<string, Record<"he" | "en" | "ar", string>> = {
   saturday: { he: "שבת", en: "Saturday", ar: "السبت" },
 }
 
+const JS_DAY_TO_KEY = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const
+
+function formatCourseSessionDateOption(ymd: string, locale: "he" | "en" | "ar"): string {
+  const [y, m, d] = ymd.split("-").map(Number)
+  if (!y || !m || !d) return ymd
+  const dt = new Date(y, m - 1, d)
+  if (Number.isNaN(dt.getTime())) return ymd
+  const tag = locale === "ar" ? "ar" : locale === "en" ? "en-GB" : "he-IL"
+  const cal = new Intl.DateTimeFormat(tag, { day: "2-digit", month: "2-digit", year: "numeric" }).format(dt)
+  const key = JS_DAY_TO_KEY[dt.getDay()]
+  const dayName = dayLabels[key]?.[locale] || key
+  return `${cal} · ${dayName}`
+}
+
 import { useCurrentUser } from "@/lib/auth-context"
 import { hasPermission, hasFullAccessRole } from "@/lib/permissions"
 import { getCourseStatusPresentation } from "@/lib/course-status"
-import { HEBREW_GROUP_LETTERS, isCampCourseType } from "@/lib/camp-kaytana"
+import { HEBREW_GROUP_LETTERS, isCampCourseType, listCampSessionDates } from "@/lib/camp-kaytana"
 import { CourseCampTab } from "./course-camp-tab"
 
 export default function CourseViewPage() {
@@ -220,6 +234,29 @@ export default function CourseViewPage() {
   const [paymentsForCourse, setPaymentsForCourse] = useState<CoursePaymentRow[]>([])
   const campGroups = HEBREW_GROUP_LETTERS
 
+  const allowedAttendanceDates = useMemo(() => {
+    if (!course) return []
+    const start = normalizeCourseCalendarYmd(course.startDate)
+    const end = normalizeCourseCalendarYmd(course.endDate)
+    const days = Array.isArray(course.daysOfWeek) && course.daysOfWeek.length > 0 ? course.daysOfWeek : []
+    if (!start || !end || days.length === 0) return []
+    return listCampSessionDates(start, end, days)
+  }, [course?.startDate, course?.endDate, course?.daysOfWeek])
+
+  const attendanceDateBounds = useMemo(() => {
+    if (!course) return { min: "", max: "" }
+    return {
+      min: normalizeCourseCalendarYmd(course.startDate) || "",
+      max: normalizeCourseCalendarYmd(course.endDate) || "",
+    }
+  }, [course?.startDate, course?.endDate])
+
+  /** תאריך נוכחות אפקטיבי ל-API/UI כשיש רשימת מפגשים — מונע ערך שלא קיים ב-Select */
+  const attendanceDateForApi = useMemo(() => {
+    if (allowedAttendanceDates.length === 0) return attendanceDate
+    return allowedAttendanceDates.includes(attendanceDate) ? attendanceDate : allowedAttendanceDates[0]
+  }, [allowedAttendanceDates.join("|"), attendanceDate])
+
   useEffect(() => {
     if (!currentUser?.id) return
     fetch(`/api/students/by-user/${currentUser.id}`)
@@ -272,8 +309,8 @@ export default function CourseViewPage() {
   }, [id, canTabAttendanceStudents, canTabAttendanceTeachers])
 
   useEffect(() => {
-    if (!canTabAttendanceStudents || !id || !attendanceDate) return
-    fetch(`/api/attendance?courseId=${id}&date=${attendanceDate}`)
+    if (!canTabAttendanceStudents || !id || !attendanceDateForApi) return
+    fetch(`/api/attendance?courseId=${id}&date=${attendanceDateForApi}`)
       .then((res) => res.ok ? res.json() : [])
       .then((rows) => {
         const next: Record<string, string> = {}
@@ -283,7 +320,7 @@ export default function CourseViewPage() {
         setAttendanceByStudent(next)
       })
       .catch(() => setAttendanceByStudent({}))
-  }, [id, attendanceDate, canTabAttendanceStudents])
+  }, [id, attendanceDateForApi, canTabAttendanceStudents])
 
   async function loadCoursePayments() {
     if (!canTabPayments) return
@@ -418,7 +455,7 @@ export default function CourseViewPage() {
         body: JSON.stringify({
           studentId,
           courseId: id,
-          date: attendanceDate,
+          date: attendanceDateForApi,
           status,
         }),
       })
@@ -1208,14 +1245,31 @@ export default function CourseViewPage() {
                   </div>
                   <CardTitle className="text-lg">{tr.studentAttendanceTitle}</CardTitle>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">{tr.date}:</span>
-                  <input
-                    type="date"
-                    value={attendanceDate}
-                    onChange={(e) => setAttendanceDate(e.target.value)}
-                    className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
-                  />
+                <div className="flex flex-col items-stretch gap-1 sm:flex-row sm:items-center sm:gap-2">
+                  <span className="text-sm text-muted-foreground shrink-0">{tr.date}:</span>
+                  {allowedAttendanceDates.length > 0 ? (
+                    <Select value={attendanceDateForApi} onValueChange={setAttendanceDate}>
+                      <SelectTrigger className="h-9 w-full min-w-[200px] max-w-[min(100vw-2rem,320px)]" dir={isRtl ? "rtl" : "ltr"}>
+                        <SelectValue placeholder={tr.date} />
+                      </SelectTrigger>
+                      <SelectContent dir={isRtl ? "rtl" : "ltr"}>
+                        {allowedAttendanceDates.map((d) => (
+                          <SelectItem key={d} value={d}>
+                            {formatCourseSessionDateOption(d, locale === "ar" ? "ar" : locale === "en" ? "en" : "he")}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <input
+                      type="date"
+                      value={attendanceDate}
+                      onChange={(e) => setAttendanceDate(e.target.value)}
+                      min={attendanceDateBounds.min || undefined}
+                      max={attendanceDateBounds.max || undefined}
+                      className="flex h-9 w-full min-w-0 max-w-[min(100vw-2rem,200px)] rounded-md border border-input bg-background px-3 py-1 text-sm"
+                    />
+                  )}
                   <Button
                     type="button"
                     size="sm"
@@ -1224,7 +1278,7 @@ export default function CourseViewPage() {
                       const w = window.open("", "_blank")
                       if (!w) return
                       const logoHtml = centerLogo ? `<img src="${centerLogo}" style="max-height:60px;max-width:160px;object-fit:contain" />` : ""
-                      const dateStr = new Date(attendanceDate).toLocaleDateString(localeTag)
+                      const dateStr = new Date(attendanceDateForApi).toLocaleDateString(localeTag)
                       w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>רשימת נוכחות - ${course?.name || ""}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}

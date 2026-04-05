@@ -7,6 +7,12 @@ import { parseCourseDateForDb, parseCourseTimeForDb, courseTimeToDisplayValue } 
 import { getCourseRegistrationVisibilityMap, setCourseRegistrationVisibility } from "@/lib/course-registration-visibility"
 import { ensureSiblingDiscountTables } from "@/lib/sibling-discount"
 import { syncCourseTeacherTariffs } from "@/lib/teacher-tariff-profiles"
+import {
+  ensureCourseSessionPricesColumn,
+  normalizeSessionPricesMap,
+  buildSessionPricesForCourseDates,
+  courseTypeIsPerSession,
+} from "@/lib/course-session-prices"
 
 export const GET = withTenantAuth(async (req, session) => {
   const featureErr = await requireFeatureFromRequest(req, "courses", session)
@@ -25,6 +31,7 @@ export const GET = withTenantAuth(async (req, session) => {
   const db = tenant.db
   try {
     await ensureSiblingDiscountTables(db)
+    await ensureCourseSessionPricesColumn(db)
     // Avoid blocking/slowing every courses read request.
     // Keep status sync as best-effort background work.
     runAutoCompleteExpiredCourses(db).catch((e) => {
@@ -100,6 +107,7 @@ export const POST = withTenantAuth(async (req, session) => {
   const db = tenant.db
   try {
     await ensureSiblingDiscountTables(db)
+    await ensureCourseSessionPricesColumn(db)
     const body = await req.json()
     const name = body.name ? String(body.name).trim() : null
     if (!name) return Response.json({ error: "name is required" }, { status: 400 })
@@ -108,8 +116,8 @@ export const POST = withTenantAuth(async (req, session) => {
     const now = new Date().toISOString()
     const description = body.description ? String(body.description).trim() : null
     const level = body.level ? String(body.level).trim() : "beginner"
-    const duration = body.duration ? Number(body.duration) : null
-    const price = body.price ? Number(body.price) : null
+    let duration = body.duration ? Number(body.duration) : null
+    let price = body.price ? Number(body.price) : null
     const status = body.status ? String(body.status).trim() : "active"
     const courseNumber = body.courseNumber ? String(body.courseNumber).trim() : null
     const category = body.category ? String(body.category).trim() : null
@@ -145,20 +153,30 @@ export const POST = withTenantAuth(async (req, session) => {
     const startTimeVal = startTime !== null ? db.typed(startTime, 25) : null
     const endTimeVal   = endTime   !== null ? db.typed(endTime,   25) : null
 
+    let sessionPricesJson: Record<string, number> = {}
+    if (courseTypeIsPerSession(courseType)) {
+      const input = normalizeSessionPricesMap(body.sessionPrices)
+      const fallback = price != null && !Number.isNaN(price) && price >= 0 ? price : 0
+      sessionPricesJson = buildSessionPricesForCourseDates(startDate, endDate, daysOfWeek, input, fallback)
+      const keys = Object.keys(sessionPricesJson)
+      duration = keys.length
+      price = Math.round(keys.reduce((s, k) => s + (sessionPricesJson[k] ?? 0), 0) * 100) / 100
+    }
+
     const result = await db`
       INSERT INTO "Course" (
         id, name, description, level, duration, price, status, 
         "courseNumber", category, "courseType", location,
         "startDate", "endDate", "startTime", "endTime",
         "daysOfWeek", "teacherIds", "schoolId", "gafanProgramId", "siblingDiscountPackageId",
-        "createdAt", "updatedAt"
+        "sessionPrices", "createdAt", "updatedAt"
       )
       VALUES (
         ${id}, ${name}, ${description}, ${level}, ${duration}, ${price}, ${status},
         ${courseNumber}, ${category}, ${courseType}, ${location},
         ${startDate}, ${endDate}, ${startTimeVal}::timestamp, ${endTimeVal}::timestamp,
         ${daysOfWeek}, ${teacherIds}, ${schoolId}, ${gafanProgramId}, ${siblingDiscountPackageId},
-        ${now}, ${now}
+        ${db.json(sessionPricesJson)}, ${now}, ${now}
       )
       RETURNING *
     `

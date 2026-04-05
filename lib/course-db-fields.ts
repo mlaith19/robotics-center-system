@@ -8,14 +8,29 @@
  *   - This avoids all timezone shifts (UTC+2 / DST etc.)
  */
 
-export function parseCourseDateForDb(raw: unknown): string | null {
+/**
+ * YYYY-MM-DD לפי יום בלוח השנה המקומי של הדפדפן/שרת.
+ * מונע סטייה מול toISOString() (יום UTC) כשמחרוזת היא ISO מלאה — חשוב לישראל/אזורי זמן חיוביים.
+ */
+export function normalizeCourseCalendarYmd(raw: unknown): string | null {
   if (raw == null) return null
   const s = String(raw).trim()
   if (!s) return null
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
   const d = new Date(s)
-  if (isNaN(d.getTime())) return null
-  return d.toISOString().split("T")[0]
+  if (Number.isNaN(d.getTime())) return null
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  return `${y}-${m}-${day}`
+}
+
+export function parseCourseDateForDb(raw: unknown): string | null {
+  if (raw == null) return null
+  const s = String(raw).trim()
+  if (!s) return null
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+  return normalizeCourseCalendarYmd(s)
 }
 
 /** Returns "1970-01-01 HH:MM:SS" – a valid timestamp literal without timezone. */

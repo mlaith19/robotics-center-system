@@ -3,6 +3,15 @@ import { handleDbError } from "@/lib/db"
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
 import { sessionRolesGrantFullAccess } from "@/lib/permissions"
+import { normalizeCourseCalendarYmd } from "@/lib/course-db-fields"
+import { listCampSessionDates } from "@/lib/camp-kaytana"
+
+function extractAttendanceDateYmd(raw: unknown): string {
+  const s = String(raw ?? "").trim()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+  const head = s.split("T")[0]
+  return /^\d{4}-\d{2}-\d{2}$/.test(head) ? head : ""
+}
 
 export const GET = withTenantAuth(async (req, _session) => {
   const [tenant, tenantErr] = await requireTenant(req)
@@ -236,6 +245,31 @@ export const POST = withTenantAuth(async (req, session) => {
     if (courseId) {
       const courseExists = await db`SELECT id FROM "Course" WHERE id = ${courseId}`
       if (courseExists.length === 0) return Response.json({ error: "Course not found" }, { status: 404 })
+    }
+
+    if (studentId && courseId) {
+      const crsRows = await db`
+        SELECT "startDate", "endDate", "daysOfWeek" FROM "Course" WHERE id = ${courseId} LIMIT 1
+      `
+      const cr = crsRows[0] as
+        | { startDate?: string | null; endDate?: string | null; daysOfWeek?: unknown }
+        | undefined
+      const start = normalizeCourseCalendarYmd(cr?.startDate)
+      const end = normalizeCourseCalendarYmd(cr?.endDate)
+      const dow = Array.isArray(cr?.daysOfWeek) ? (cr.daysOfWeek as string[]) : []
+      if (start && end && dow.length > 0) {
+        const allowed = listCampSessionDates(start, end, dow)
+        const dateYmd = extractAttendanceDateYmd(date)
+        if (!dateYmd || !allowed.includes(dateYmd)) {
+          return Response.json(
+            {
+              error: "התאריך אינו יום מפגש של הקורס בטווח ובימי השבוע שהוגדרו",
+              code: "attendance.invalid_course_date",
+            },
+            { status: 400 },
+          )
+        }
+      }
     }
     if (studentId) {
       const studentExists = await db`SELECT id FROM "Student" WHERE id = ${studentId}`
