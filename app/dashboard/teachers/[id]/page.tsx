@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ArrowRight, Mail, Phone, Edit, BookOpen, CalendarCheck, Plus, Loader2, Printer, Trash2 } from "lucide-react"
 import { useCurrentUser } from "@/lib/auth-context"
-import { hasPermission, hasFullAccessRole } from "@/lib/permissions"
+import { hasPermission, hasFullAccessRole, canDeleteTeacherAttendanceRecord } from "@/lib/permissions"
 import { courseTimeToDisplayValue } from "@/lib/course-db-fields"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -173,6 +173,11 @@ export default function TeacherViewPage() {
     currentUser?.role === "אדמין" ||
     currentUser?.role === "מנהל"
   const userPerms = currentUser?.permissions || []
+  const canDeleteTeacherAttendanceRow = canDeleteTeacherAttendanceRecord({
+    roleKey: currentUser?.roleKey,
+    role: currentUser?.role,
+    permissions: userPerms,
+  })
   /** מחיר קורס / נתונים כספיים של קורס — כמו בדף הקורסים; מורה בלי הרשאה לא רואה בפופאפ */
   const canSeeCourseFinancial = isAdmin || hasPermission(userPerms, "courses.financial")
   const hasAnyPermission = (...permissionIds: string[]) => permissionIds.some((perm) => hasPermission(userPerms, perm))
@@ -526,7 +531,7 @@ export default function TeacherViewPage() {
   }
 
   async function handleDeleteAttendanceRecord(recordId: string) {
-    if (!isAdmin || !id || typeof id !== "string") return
+    if (!canDeleteTeacherAttendanceRow || !id || typeof id !== "string") return
     if (!window.confirm("למחוק את רשומת הנוכחות?")) return
     setDeletingAttendanceId(recordId)
     try {
@@ -990,7 +995,7 @@ export default function TeacherViewPage() {
                           </>
                         ) : null}
                         <th className="border p-2 text-right font-medium">הערה</th>
-                        {isAdmin ? <th className="border p-2 text-center font-medium w-14">מחיקה</th> : null}
+                        {canDeleteTeacherAttendanceRow ? <th className="border p-2 text-center font-medium w-14">מחיקה</th> : null}
                       </tr>
                     </thead>
                     <tbody>
@@ -1028,7 +1033,7 @@ export default function TeacherViewPage() {
                               </>
                             ) : null}
                             <td className="border p-2 text-right text-muted-foreground">{a.notes || "—"}</td>
-                            {isAdmin ? (
+                            {canDeleteTeacherAttendanceRow ? (
                               <td className="border p-2 text-center">
                                 <Button
                                   type="button"

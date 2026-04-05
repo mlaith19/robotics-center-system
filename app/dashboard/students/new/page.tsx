@@ -45,6 +45,7 @@ export default function NewStudentPage() {
     fullName: isEn ? "Full Name *" : "שם מלא *",
     idNumber: isEn ? "ID Number" : "תעודת זהות",
     birthDate: isEn ? "Birth Date" : "תאריך לידה",
+    profileImageOptional: isEn ? "Profile image (optional)" : isAr ? "صورة الملف الشخصي (اختياري)" : "תמונת פרופיל (לא חובה)",
     email: isEn ? "Email (optional)" : "אימייל (אופציונלי)",
     mobile: isEn ? "Mobile Number" : "מספר נייד",
     extraMobile: isEn ? "Additional Mobile Number" : "מספר נייד נוסף",
@@ -290,7 +291,7 @@ export default function NewStudentPage() {
               </div>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="profileImageUpload">{isEn ? "Profile image" : "תמונת פרופיל"}</Label>
+              <Label htmlFor="profileImageUpload">{tr.profileImageOptional}</Label>
               <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
                 {newStudent.profileImage ? (
                   <img src={newStudent.profileImage} alt="profile preview" className="mx-auto h-16 w-16 rounded-full border bg-white object-cover sm:mx-0" />
@@ -298,7 +299,7 @@ export default function NewStudentPage() {
                   <div className="mx-auto h-16 w-16 rounded-full border-2 border-dashed bg-muted sm:mx-0" />
                 )}
                 <div className="min-w-0 flex-1 space-y-2">
-                  <Input id="profileImageUpload" type="file" accept="image/*" capture="environment" className="text-xs sm:text-sm" onChange={handleProfileImageUpload} />
+                  <Input id="profileImageUpload" type="file" accept="image/*" className="text-xs sm:text-sm" onChange={handleProfileImageUpload} />
                   {newStudent.profileImage && (
                     <Button type="button" variant="outline" size="sm" onClick={() => setNewStudent((prev) => ({ ...prev, profileImage: "" }))}>
                       <X className="h-4 w-4 mr-1" />

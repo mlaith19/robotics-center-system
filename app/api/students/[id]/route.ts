@@ -4,6 +4,7 @@ import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
 import { ensureProfileImageColumns, resolveProfileImageWithFallback } from "@/lib/profile-image"
 import { ensureSiblingDiscountTables } from "@/lib/sibling-discount"
+import { ensureStudentRegistrationInterestColumn } from "@/lib/student-registration-interest"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -106,6 +107,12 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
     }
     const now = new Date().toISOString()
     const profileImage = resolveProfileImageWithFallback(body.profileImage)
+    const registrationInterest =
+      body.registrationInterest === null || body.registrationInterest === ""
+        ? null
+        : typeof body.registrationInterest === "string"
+          ? body.registrationInterest.trim() || null
+          : undefined
     const createUserAccount = body.createUserAccount === true
     const username = body.username ? String(body.username).trim() : null
     const password = body.password ? String(body.password) : null
@@ -122,7 +129,9 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
       `
     }
 
-    const result = await db`
+    const result =
+      registrationInterest === undefined
+        ? await db`
       UPDATE "Student"
       SET 
         name = ${body.name || null}, 
@@ -139,6 +148,33 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
         "healthFund" = ${body.healthFund || null},
         allergies = ${body.allergies || null},
         "profileImage" = ${profileImage},
+        "siblingDiscountPackageId" = ${body.siblingDiscountPackageId || null},
+        "totalSessions" = ${body.totalSessions || 12},
+        "courseIds" = ${JSON.stringify(body.courseIds || [])}::jsonb,
+        "courseSessions" = ${JSON.stringify(body.courseSessions || {})}::jsonb,
+        "userId" = COALESCE(${userId}, "userId"),
+        "updatedAt" = ${now}
+      WHERE id = ${id}
+      RETURNING *
+    `
+        : await db`
+      UPDATE "Student"
+      SET 
+        name = ${body.name || null}, 
+        email = ${body.email || null}, 
+        phone = ${body.phone || null},
+        address = ${body.address || null},
+        city = ${body.city || null},
+        status = ${body.status || 'פעיל'},
+        "birthDate" = ${body.birthDate || null},
+        "idNumber" = ${body.idNumber || null},
+        father = ${body.father || null},
+        mother = ${body.mother || null},
+        "additionalPhone" = ${body.additionalPhone || null},
+        "healthFund" = ${body.healthFund || null},
+        allergies = ${body.allergies || null},
+        "profileImage" = ${profileImage},
+        "registrationInterest" = ${registrationInterest},
         "siblingDiscountPackageId" = ${body.siblingDiscountPackageId || null},
         "totalSessions" = ${body.totalSessions || 12},
         "courseIds" = ${JSON.stringify(body.courseIds || [])}::jsonb,

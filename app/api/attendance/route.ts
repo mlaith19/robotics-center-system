@@ -2,7 +2,7 @@ import postgres from "postgres"
 import { handleDbError } from "@/lib/db"
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
-import { sessionRolesGrantFullAccess } from "@/lib/permissions"
+import { sessionRolesGrantFullAccess, canDeleteTeacherAttendanceRecord } from "@/lib/permissions"
 import { normalizeCourseCalendarYmd } from "@/lib/course-db-fields"
 import { listCampSessionDates, isCampCourseType } from "@/lib/camp-kaytana"
 import {
@@ -479,14 +479,18 @@ export const DELETE = withTenantAuth(async (req, _session) => {
     const courseId  = searchParams.get("courseId")
     const date      = searchParams.get("date")
     const isAdmin = sessionRolesGrantFullAccess(_session.roleKey, _session.role)
+    const canDelTeacherAtt = canDeleteTeacherAttendanceRecord(_session)
 
     if (id) {
       const existing = await db`SELECT "teacherId" FROM "Attendance" WHERE id = ${id} LIMIT 1`
       if (existing.length === 0) {
         return Response.json({ error: "Attendance not found" }, { status: 404 })
       }
-      if (existing[0].teacherId && !isAdmin) {
-        return Response.json({ error: "Only admin can delete teacher attendance" }, { status: 403 })
+      if (existing[0].teacherId && !canDelTeacherAtt) {
+        return Response.json(
+          { error: "אין הרשאה למחיקת נוכחות מורה", code: "attendance.delete_teacher.forbidden" },
+          { status: 403 },
+        )
       }
       await db`DELETE FROM "Attendance" WHERE id = ${id}`
       return Response.json({ success: true })
@@ -516,8 +520,11 @@ export const DELETE = withTenantAuth(async (req, _session) => {
       return Response.json({ success: true })
     }
     if (teacherId && courseId && date) {
-      if (!isAdmin) {
-        return Response.json({ error: "Only admin can delete teacher attendance manually" }, { status: 403 })
+      if (!canDelTeacherAtt) {
+        return Response.json(
+          { error: "אין הרשאה למחיקת נוכחות מורה", code: "attendance.delete_teacher.forbidden" },
+          { status: 403 },
+        )
       }
       await db`DELETE FROM "Attendance" WHERE "teacherId" = ${teacherId} AND "courseId" = ${courseId} AND "date" = ${date}`
       return Response.json({ success: true })

@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { ArrowRight, Pencil, Loader2, BookOpen, Calendar, Users, BarChart3, CalendarCheck, Check, X, Thermometer, Plane, CalendarRange, Printer, Layers } from "lucide-react"
+import { ArrowRight, Pencil, Loader2, BookOpen, Calendar, Users, BarChart3, CalendarCheck, Check, X, Thermometer, Plane, CalendarRange, Printer, Layers, Trash2 } from "lucide-react"
 import { courseTimeToDisplayValue, normalizeCourseCalendarYmd } from "@/lib/course-db-fields"
 import { useLanguage } from "@/lib/i18n/context"
 
@@ -112,7 +112,7 @@ function formatCourseSessionDateOption(ymd: string, locale: "he" | "en" | "ar"):
 }
 
 import { useCurrentUser } from "@/lib/auth-context"
-import { hasPermission, hasFullAccessRole } from "@/lib/permissions"
+import { hasPermission, hasFullAccessRole, canDeleteTeacherAttendanceRecord } from "@/lib/permissions"
 import { getCourseStatusPresentation } from "@/lib/course-status"
 import { HEBREW_GROUP_LETTERS, isCampCourseType, listCampSessionDates } from "@/lib/camp-kaytana"
 import { CourseCampTab } from "./course-camp-tab"
@@ -185,6 +185,13 @@ export default function CourseViewPage() {
     noLinkedStudents: locale === "ar" ? "لا يوجد طلاب مرتبطون بهذه الدورة" : locale === "en" ? "No students linked to this course" : "אין תלמידים משויכים לקורס זה",
     noStudentAttendance: locale === "ar" ? "لا توجد سجلات حضور طلاب لهذه الدورة بعد." : locale === "en" ? "No student attendance records for this course yet." : "אין עדיין רשומות נוכחות תלמידים לקורס זה.",
     noTeacherAttendance: locale === "ar" ? "لا توجد سجلات حضور معلمين لهذه الدورة." : locale === "en" ? "No teacher attendance records for this course." : "אין רשומות נוכחות מורים לקורס זה.",
+    actions: locale === "ar" ? "إجراءات" : locale === "en" ? "Actions" : "פעולות",
+    deleteTeacherAttendanceConfirm:
+      locale === "ar"
+        ? "حذف سجل حضور المعلم؟"
+        : locale === "en"
+          ? "Delete this teacher attendance record?"
+          : "למחוק את רשומת נוכחות המורה?",
     sessionsFeedback: locale === "ar" ? "الجلسات والملاحظات" : locale === "en" ? "Sessions & Feedback" : "מפגשים ומשוב",
     newSession: locale === "ar" ? "מפגש חדש" : locale === "en" ? "New Session" : "מפגש חדש",
     sessionDate: locale === "ar" ? "تاريخ الجلسة" : locale === "en" ? "Session Date" : "תאריך מפגש",
@@ -232,6 +239,7 @@ export default function CourseViewPage() {
   const [attendanceDate, setAttendanceDate] = useState(() => new Date().toISOString().split("T")[0])
   const [attendanceByStudent, setAttendanceByStudent] = useState<Record<string, string>>({})
   const [savingByStudent, setSavingByStudent] = useState<Record<string, boolean>>({})
+  const [deletingTeacherAttendanceId, setDeletingTeacherAttendanceId] = useState<string | null>(null)
   const [sessions, setSessions] = useState<CourseSessionItem[]>([])
   const [newSessionDate, setNewSessionDate] = useState(() => new Date().toISOString().split("T")[0])
   const [newSessionTopic, setNewSessionTopic] = useState("")
@@ -550,6 +558,31 @@ export default function CourseViewPage() {
       setAttendanceByStudent((p) => ({ ...p, [studentId]: prev }))
     } finally {
       setSavingByStudent((p) => ({ ...p, [studentId]: false }))
+    }
+  }
+
+  async function deleteTeacherAttendanceRecord(recordId: string) {
+    if (!canDeleteTeacherAttendanceRow) return
+    if (!window.confirm(tr.deleteTeacherAttendanceConfirm)) return
+    setDeletingTeacherAttendanceId(recordId)
+    try {
+      const res = await fetch(`/api/attendance?id=${encodeURIComponent(recordId)}`, { method: "DELETE" })
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => null)
+        const msg =
+          errBody && typeof errBody === "object" && "error" in errBody
+            ? String((errBody as { error?: string }).error || "")
+            : ""
+        throw new Error(msg || "Failed to delete")
+      }
+      const allRes = await fetch(`/api/attendance?courseId=${id}`)
+      const allRows = allRes.ok ? await allRes.json() : []
+      setAttendanceList(Array.isArray(allRows) ? allRows : [])
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : ""
+      if (msg) window.alert(msg)
+    } finally {
+      setDeletingTeacherAttendanceId(null)
     }
   }
 
@@ -1732,7 +1765,7 @@ tr:nth-child(even) td{background:#f9fafb}
                 const teacherAttendance = attendanceList.filter((a) => a.teacherId != null)
                 return teacherAttendance.length > 0 ? (
                   <div className="overflow-x-auto rounded-md border">
-                    <Table className="min-w-[660px]">
+                    <Table className="min-w-[720px]">
                       <TableHeader>
                         <TableRow className="bg-muted/50">
                           <TableHead className="text-right">{tr.date}</TableHead>
@@ -1743,6 +1776,9 @@ tr:nth-child(even) td{background:#f9fafb}
                           <TableHead className="text-right">{tr.status}</TableHead>
                           <TableHead className="text-right">{tr.note}</TableHead>
                           <TableHead className="text-right">{tr.performedBy}</TableHead>
+                          {canDeleteTeacherAttendanceRow ? (
+                            <TableHead className="w-12 text-center">{tr.actions}</TableHead>
+                          ) : null}
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1755,6 +1791,7 @@ tr:nth-child(even) td{background:#f9fafb}
                             const teacher = teachers.find((t) => t.id === a.teacherId)
                             const teacherName = teacher?.name ?? "—"
                             const statusLabel = a.status === "present" || a.status === "PRESENT" ? tr.present : a.status === "absent" || a.status === "ABSENT" ? tr.absent : a.status
+                            const busy = deletingTeacherAttendanceId === a.id
                             return (
                               <TableRow key={a.id}>
                                 <TableCell className="text-right">{new Date(a.date).toLocaleDateString(localeTag)}</TableCell>
@@ -1765,6 +1802,21 @@ tr:nth-child(even) td{background:#f9fafb}
                                 <TableCell className="text-right">{statusLabel}</TableCell>
                                 <TableCell className="text-right text-muted-foreground">{a.notes ?? "—"}</TableCell>
                                 <TableCell className="text-right text-muted-foreground">{a.createdByUserName || "—"}</TableCell>
+                                {canDeleteTeacherAttendanceRow ? (
+                                  <TableCell className="text-center p-1">
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                      disabled={busy}
+                                      aria-label={locale === "en" ? "Delete attendance" : locale === "ar" ? "حذف" : "מחיקת נוכחות"}
+                                      onClick={() => deleteTeacherAttendanceRecord(a.id)}
+                                    >
+                                      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                    </Button>
+                                  </TableCell>
+                                ) : null}
                               </TableRow>
                             )
                           })

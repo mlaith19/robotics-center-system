@@ -138,6 +138,11 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       { id: "nav.attendance", name: "הצגה בסרגל", description: "הצגת דף נוכחות בסרגל הצדדי" },
       { id: "attendance.view", name: "צפייה בנוכחות", description: "צפייה בנוכחות תלמידים" },
       { id: "attendance.edit", name: "עריכת נוכחות", description: "עדכון נוכחות תלמידים ומורים" },
+      {
+        id: "attendance.teacher.delete",
+        name: "מחיקת נוכחות מורה",
+        description: "מחיקת רשומות נוכחות מורה (דף קורס — טאב נוכחות מורה, דף מורה)",
+      },
     ],
   },
   {
@@ -315,7 +320,7 @@ export const ROLE_PRESETS: RolePreset[] = [
       "gafan.view", "gafan.edit",
       "reports.view",
       "schedule.view", "schedule.edit",
-      "attendance.view", "attendance.edit",
+      "attendance.view", "attendance.edit", "attendance.teacher.delete",
       "settings.home",
     ],
     visiblePages: [
@@ -410,6 +415,16 @@ export function sessionRolesGrantFullAccess(
   roleName?: string | null,
 ): boolean {
   return hasFullAccessRole(roleKey) || hasFullAccessRole(roleName)
+}
+
+/** מחיקת רשומות נוכחות מורה (דף קורס / דף מורה) — אדמין או הרשאה attendance.teacher.delete */
+export function canDeleteTeacherAttendanceRecord(session: {
+  roleKey?: string | null
+  role?: string | null
+  permissions?: string[]
+}): boolean {
+  if (sessionRolesGrantFullAccess(session.roleKey, session.role)) return true
+  return hasPermission(session.permissions ?? [], "attendance.teacher.delete")
 }
 
 export function canShowInSidebar(

@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
 import { ensureProfileImageColumns, normalizeProfileImageInput, resolveProfileImageWithFallback } from "@/lib/profile-image"
+import { ensureStudentRegistrationInterestColumn } from "@/lib/student-registration-interest"
 
 function normalizeBirthDateInput(raw: unknown): string | null {
   const value = typeof raw === "string" ? raw.trim() : ""
@@ -25,12 +26,13 @@ export async function GET(req: Request) {
   if (tenantErr) return tenantErr
   const db = tenant.db
   try {
+    await ensureStudentRegistrationInterestColumn(db)
     const url = new URL(req.url)
     const idNumber = String(url.searchParams.get("idNumber") ?? "").trim()
     if (!idNumber) return Response.json({ error: "idNumber is required" }, { status: 400 })
 
     const rows = await db`
-      SELECT id, name, email, phone, "birthDate", father, mother, "healthFund", allergies, "idNumber", "userId", "profileImage"
+      SELECT id, name, email, phone, "birthDate", father, mother, "healthFund", allergies, "idNumber", "userId", "profileImage", "registrationInterest"
       FROM "Student"
       WHERE "idNumber" = ${idNumber}
       LIMIT 1
@@ -51,6 +53,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json()
     await ensureProfileImageColumns(db as unknown as (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown[]>)
+    await ensureStudentRegistrationInterestColumn(db)
     const name = String(body.name ?? "").trim()
     const idNumber = String(body.idNumber ?? "").trim()
     const phone = body.phone ? String(body.phone).trim() : null
@@ -63,6 +66,7 @@ export async function POST(req: Request) {
     const profileImageInput = normalizeProfileImageInput(body.profileImage)
     const profileImageFallback = resolveProfileImageWithFallback(body.profileImage)
     const courseIds = uniqueCourseIds(body.courseIds)
+    const registrationInterestRaw = String(body.registrationInterest ?? "").trim()
     const now = new Date().toISOString()
 
     if (!name) return Response.json({ error: "name is required" }, { status: 400 })
@@ -80,6 +84,16 @@ export async function POST(req: Request) {
       const row = existing[0] as { id: string; userId?: string | null; courseIds?: unknown }
       const currentCourseIds = uniqueCourseIds(row.courseIds)
       const mergedCourseIds = [...new Set([...currentCourseIds, ...courseIds])]
+      const interestStored = mergedCourseIds.length > 0 ? null : registrationInterestRaw || null
+      if (mergedCourseIds.length === 0 && registrationInterestRaw.length < 2) {
+        return Response.json(
+          {
+            error: "כשאין קורס ספציפי יש לציין באיזה תחום או קורס מתעניינים",
+            code: "registration.interest_required",
+          },
+          { status: 400 },
+        )
+      }
 
       await db`
         UPDATE "Student"
@@ -95,6 +109,7 @@ export async function POST(req: Request) {
           status = 'מתעניין',
           "profileImage" = COALESCE(${profileImageInput}, "profileImage", ${profileImageFallback}),
           "courseIds" = ${JSON.stringify(mergedCourseIds)}::jsonb,
+          "registrationInterest" = ${interestStored},
           "updatedAt" = ${now}
         WHERE id = ${row.id}
       `
@@ -108,6 +123,17 @@ export async function POST(req: Request) {
       }
 
       return Response.json({ success: true, existingStudent: true, studentId: row.id })
+    }
+
+    const interestStoredNew = courseIds.length > 0 ? null : registrationInterestRaw || null
+    if (courseIds.length === 0 && registrationInterestRaw.length < 2) {
+      return Response.json(
+        {
+          error: "כשאין קורס ספציפי יש לציין באיזה תחום או קורס מתעניינים",
+          code: "registration.interest_required",
+        },
+        { status: 400 },
+      )
     }
 
     const username = idNumber
@@ -130,11 +156,11 @@ export async function POST(req: Request) {
     await db`
       INSERT INTO "Student" (
         id, name, email, phone, status, "birthDate", "idNumber", father, mother, "healthFund", allergies,
-        "totalSessions", "courseIds", "courseSessions", "profileImage", "userId", "createdAt", "updatedAt"
+        "totalSessions", "courseIds", "courseSessions", "profileImage", "registrationInterest", "userId", "createdAt", "updatedAt"
       )
       VALUES (
         ${studentId}, ${name}, ${email}, ${phone}, 'מתעניין', ${birthDate}, ${idNumber}, ${father}, ${mother}, ${healthFund}, ${allergies},
-        12, ${JSON.stringify(courseIds)}::jsonb, ${JSON.stringify({})}::jsonb, ${profileImageFallback}, ${userId}, ${now}, ${now}
+        12, ${JSON.stringify(courseIds)}::jsonb, ${JSON.stringify({})}::jsonb, ${profileImageFallback}, ${interestStoredNew}, ${userId}, ${now}, ${now}
       )
     `
 

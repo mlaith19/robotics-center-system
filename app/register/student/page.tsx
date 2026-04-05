@@ -24,6 +24,7 @@ function RegisterStudentContent() {
   const [healthFund, setHealthFund] = useState("")
   const [allergies, setAllergies] = useState("")
   const [profileImage, setProfileImage] = useState("")
+  const [registrationInterest, setRegistrationInterest] = useState("")
   const [confirmCenterAgreement, setConfirmCenterAgreement] = useState(false)
   const [confirmPhotoConsent, setConfirmPhotoConsent] = useState(false)
   const [noSensitivity, setNoSensitivity] = useState(false)
@@ -75,6 +76,7 @@ function RegisterStudentContent() {
         setHealthFund(String(s.healthFund ?? ""))
         setAllergies(String(s.allergies ?? ""))
         setProfileImage(String(s.profileImage ?? ""))
+        setRegistrationInterest(String((s as { registrationInterest?: string | null }).registrationInterest ?? ""))
         const bd = s.birthDate ? String(s.birthDate).split("T")[0] : ""
         setBirthDate(bd)
       } catch {
@@ -120,12 +122,12 @@ function RegisterStudentContent() {
       setError("יש לאשר את הסכם המרכז כדי להמשיך")
       return
     }
-    if (!confirmPhotoConsent) {
-      setError("יש לאשר צילום של הילד כדי להמשיך")
-      return
-    }
     if (!noSensitivity && !allergies.trim()) {
       setError("יש לציין רגישויות או לסמן שאין רגישות לילד")
+      return
+    }
+    if (!selectedCourseId && registrationInterest.trim().length < 2) {
+      setError("יש לציין באיזה תחום או קורס מתעניינים (כשלא נרשמים מקישור לקורס ספציפי)")
       return
     }
     setIsSubmitting(true)
@@ -149,6 +151,7 @@ function RegisterStudentContent() {
           status: "מתעניין",
           courseIds: selectedCourseId ? [selectedCourseId] : [],
           courseSessions: {},
+          registrationInterest: selectedCourseId ? null : registrationInterest.trim() || null,
         }),
       })
       if (!res.ok) {
@@ -168,6 +171,7 @@ function RegisterStudentContent() {
       setHealthFund("")
       setAllergies("")
       setProfileImage("")
+      setRegistrationInterest("")
       setConfirmCenterAgreement(false)
       setConfirmPhotoConsent(false)
       setNoSensitivity(false)
@@ -297,8 +301,22 @@ function RegisterStudentContent() {
                 disabled={isSubmitting}
               />
             </div>
+            {!selectedCourseId && (
+              <div className="space-y-2">
+                <Label htmlFor="registrationInterest">באיזה תחום או קורס מתעניינים? *</Label>
+                <Textarea
+                  id="registrationInterest"
+                  value={registrationInterest}
+                  onChange={(e) => setRegistrationInterest(e.target.value)}
+                  placeholder="לדוגמה: רובוטיקה לילדים, קורס קיץ, לגו..."
+                  className="min-h-[88px]"
+                  disabled={isSubmitting}
+                  required
+                />
+              </div>
+            )}
             <div className="space-y-2">
-              <Label htmlFor="profileImageUpload">תמונת פרופיל</Label>
+              <Label htmlFor="profileImageUpload">תמונת פרופיל (לא חובה)</Label>
               <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
                 {profileImage ? (
                   <img src={profileImage} alt="profile preview" className="mx-auto h-16 w-16 rounded-full border bg-white object-cover sm:mx-0" />
@@ -310,7 +328,6 @@ function RegisterStudentContent() {
                     id="profileImageUpload"
                     type="file"
                     accept="image/*"
-                    capture="environment"
                     className="text-xs sm:text-sm"
                     onChange={handleProfileImageUpload}
                     disabled={isSubmitting}
@@ -399,7 +416,7 @@ function RegisterStudentContent() {
                   disabled={isSubmitting}
                 />
                 <Label htmlFor="confirmPhotoConsent" className="cursor-pointer text-sm leading-snug">
-                  מאשר צילום של הילד *
+                  מאשר צילום של הילד במסגרת הפעילות (רשות)
                 </Label>
               </div>
               <div className="flex items-start gap-3">

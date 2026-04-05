@@ -13,6 +13,8 @@ export function normalizeProfileImageInput(raw: unknown): string | null {
   if (typeof raw !== "string") return null
   const value = raw.trim()
   if (!value) return null
+  // תמונות מהעלאה בצד הלקוח נשלחות כ-data URL — חייבים לשמור כמו שהן (לא לשבור עם "/" קידומת)
+  if (value.startsWith("data:")) return value
   if (/^https?:\/\//i.test(value)) return value
   if (value.startsWith("/")) return value
   return `/${value}`

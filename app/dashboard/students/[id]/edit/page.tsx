@@ -66,6 +66,7 @@ export default function EditStudentPage() {
     fullName: isEn ? "Full Name *" : "שם מלא *",
     idNumber: isEn ? "ID Number" : "תעודת זהות",
     birthDate: isEn ? "Birth Date" : "תאריך לידה",
+    profileImageOptional: isEn ? "Profile image (optional)" : isAr ? "صورة الملف الشخصي (اختياري)" : "תמונת פרופיל (לא חובה)",
     city: isEn ? "City" : "עיר",
     address: isEn ? "Address" : "כתובת",
     fatherName: isEn ? "Father Name" : "שם האב",
@@ -437,7 +438,7 @@ export default function EditStudentPage() {
               </div>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="profileImageUpload" className="text-base font-medium">תמונת פרופיל</Label>
+              <Label htmlFor="profileImageUpload" className="text-base font-medium">{tr.profileImageOptional}</Label>
               <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
                 {student.profileImage ? (
                   <img src={student.profileImage} alt="profile preview" className="mx-auto h-16 w-16 rounded-full border bg-white object-cover sm:mx-0" />
@@ -445,7 +446,7 @@ export default function EditStudentPage() {
                   <div className="mx-auto h-16 w-16 rounded-full border-2 border-dashed bg-muted sm:mx-0" />
                 )}
                 <div className="min-w-0 flex-1 space-y-2">
-                  <Input id="profileImageUpload" type="file" accept="image/*" capture="environment" className="bg-white text-xs sm:text-sm" onChange={handleProfileImageUpload} />
+                  <Input id="profileImageUpload" type="file" accept="image/*" className="bg-white text-xs sm:text-sm" onChange={handleProfileImageUpload} />
                   {student.profileImage && (
                     <Button type="button" variant="outline" size="sm" onClick={() => updateStudent({ profileImage: "" })}>
                       <X className="h-4 w-4 mr-1" />

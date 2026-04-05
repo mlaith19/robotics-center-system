@@ -91,6 +91,39 @@ function formatDate(dateString?: string, localeTag = "he-IL") {
   return new Intl.DateTimeFormat(localeTag).format(d)
 }
 
+/** תאריך לידה בפורמט YYYY-MM-DD או ISO — חישוב גיל במניין מלאים */
+function parseBirthLocalDate(dateString?: string | null): Date | null {
+  if (!dateString) return null
+  const head = String(dateString).trim().split("T")[0]
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(head)
+  if (m) {
+    const y = Number(m[1])
+    const mo = Number(m[2]) - 1
+    const day = Number(m[3])
+    const d = new Date(y, mo, day)
+    return Number.isNaN(d.getTime()) ? null : d
+  }
+  const d = new Date(dateString)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+function ageYearsFromBirthDate(dateString?: string | null): number | null {
+  const birth = parseBirthLocalDate(dateString)
+  if (!birth) return null
+  const today = new Date()
+  let years = today.getFullYear() - birth.getFullYear()
+  const monthDiff = today.getMonth() - birth.getMonth()
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) years -= 1
+  if (years < 0 || years > 150) return null
+  return years
+}
+
+function ageLabel(years: number, isEn: boolean, isAr: boolean): string {
+  if (isAr) return `${years} سنة`
+  if (isEn) return `${years} years old`
+  return `גיל ${years}`
+}
+
 function formatDateTime(dateString?: string, localeTag = "he-IL") {
   if (!dateString) return "-"
   const d = new Date(dateString)
@@ -538,8 +571,20 @@ export function StudentTabs({
                 <span className="break-words font-medium">{safeText(student?.idNumber)}</span>
               </div>
               <div className="flex flex-col gap-1 text-right sm:flex-row sm:flex-row-reverse sm:items-center sm:justify-between sm:gap-0">
-                <span className="text-muted-foreground">{isEn ? "Birth Date:" : "תאריך לידה:"}</span>
-                <span className="font-medium">{formatDate(student?.birthDate || undefined, localeTag)}</span>
+                <span className="text-muted-foreground">{tx("תאריך לידה:", "Birth Date:", "تاريخ الميلاد:")}</span>
+                <span className="font-medium">
+                  {formatDate(student?.birthDate || undefined, localeTag)}
+                  {(() => {
+                    const age = ageYearsFromBirthDate(student?.birthDate)
+                    if (age == null) return null
+                    return (
+                      <span className="text-muted-foreground font-normal">
+                        {" "}
+                        ({ageLabel(age, isEn, isAr)})
+                      </span>
+                    )
+                  })()}
+                </span>
               </div>
               <div className="flex flex-col gap-1 text-right sm:flex-row sm:flex-row-reverse sm:items-center sm:justify-between sm:gap-0">
                 <span className="text-muted-foreground">{isEn ? "Address:" : "כתובת:"}</span>

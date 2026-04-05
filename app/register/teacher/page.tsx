@@ -162,7 +162,7 @@ export default function RegisterTeacherPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="profileImageUpload">תמונת פרופיל</Label>
+              <Label htmlFor="profileImageUpload">תמונת פרופיל (לא חובה)</Label>
               <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
                 {profileImage ? (
                   <img src={profileImage} alt="profile preview" className="mx-auto h-16 w-16 rounded-full border bg-white object-cover sm:mx-0" />
@@ -174,7 +174,6 @@ export default function RegisterTeacherPage() {
                     id="profileImageUpload"
                     type="file"
                     accept="image/*"
-                    capture="environment"
                     className="text-xs sm:text-sm"
                     onChange={handleProfileImageUpload}
                     disabled={isSubmitting}

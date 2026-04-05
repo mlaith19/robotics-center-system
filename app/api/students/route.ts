@@ -5,6 +5,7 @@ import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant, ensureSessionMatchesTenant } from "@/lib/tenant/resolve-tenant"
 import { ensureProfileImageColumns, resolveProfileImageWithFallback } from "@/lib/profile-image"
 import { ensureSiblingDiscountTables } from "@/lib/sibling-discount"
+import { ensureStudentRegistrationInterestColumn } from "@/lib/student-registration-interest"
 
 const PRIVILEGED_ROLES = ["owner", "admin", "administrator", "manager", "super_admin", "center_admin"]
 const ALLOWED_ROLES    = [...PRIVILEGED_ROLES, "teacher", "student"]
@@ -130,6 +131,7 @@ export const POST = withTenantAuth(async (req, session) => {
     const body = await req.json()
     await ensureProfileImageColumns(db as unknown as (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown[]>)
     await ensureSiblingDiscountTables(db)
+    await ensureStudentRegistrationInterestColumn(db)
     if (!body.name) return Response.json({ error: "name is required" }, { status: 400 })
     const profileImage = resolveProfileImageWithFallback(body.profileImage)
 
@@ -170,11 +172,16 @@ export const POST = withTenantAuth(async (req, session) => {
       `
     }
 
+    const registrationInterest =
+      typeof body.registrationInterest === "string" && body.registrationInterest.trim()
+        ? body.registrationInterest.trim()
+        : null
+
     const result = await db`
       INSERT INTO "Student" (
         id, name, email, phone, address, city, status, "birthDate",
         "idNumber", father, mother, "additionalPhone", "healthFund", allergies,
-        "siblingDiscountPackageId", "totalSessions", "courseIds", "courseSessions", "profileImage", "userId", "createdAt", "updatedAt"
+        "siblingDiscountPackageId", "totalSessions", "courseIds", "courseSessions", "profileImage", "registrationInterest", "userId", "createdAt", "updatedAt"
       )
       VALUES (
         ${studentId}, ${body.name}, ${body.email || null}, ${body.phone || null},
@@ -186,7 +193,7 @@ export const POST = withTenantAuth(async (req, session) => {
         ${body.totalSessions || 12},
         ${JSON.stringify(body.courseIds || [])}::jsonb,
         ${JSON.stringify(body.courseSessions || {})}::jsonb,
-        ${profileImage}, ${userId}, ${now}, ${now}
+        ${profileImage}, ${registrationInterest}, ${userId}, ${now}, ${now}
       )
       RETURNING *
     `

@@ -30,6 +30,7 @@ interface Student {
   status?: string
   createdAt: string
   courseIds?: string[] | string
+  registrationInterest?: string | null
 }
 
 interface Teacher {
@@ -125,6 +126,10 @@ export default function RegistrationPage() {
         status: STATUS_INTERESTED,
         createdAt: s.createdAt,
         courseId: parseCourseIds(s.courseIds)[0] || null,
+        registrationInterest:
+          typeof s.registrationInterest === "string" && s.registrationInterest.trim()
+            ? s.registrationInterest.trim()
+            : null,
       })),
     ...teachers
       .filter((t) => (t.status || "").trim() === STATUS_INTERESTED)
@@ -137,6 +142,7 @@ export default function RegistrationPage() {
         status: STATUS_INTERESTED,
         createdAt: t.createdAt,
         courseId: null as string | null,
+        registrationInterest: null as string | null,
       })),
   ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
@@ -372,6 +378,14 @@ export default function RegistrationPage() {
                             : "—"}
                         </span>
                       </div>
+                      {registration.type === "student" && (
+                        <div className="min-w-0">
+                          <span className="block text-xs opacity-80">תחום עניין</span>
+                          <span className="text-foreground break-words">
+                            {registration.registrationInterest || "—"}
+                          </span>
+                        </div>
+                      )}
                       <div>
                         <span className="block text-xs opacity-80">תאריך</span>
                         <span className="text-foreground">
@@ -415,6 +429,7 @@ export default function RegistrationPage() {
                 <TableHead className="text-right">אימייל</TableHead>
                 <TableHead className="text-right">סטטוס</TableHead>
                 <TableHead className="text-right">שם קורס</TableHead>
+                <TableHead className="text-right">תחום עניין</TableHead>
                 <TableHead className="text-right">תאריך רישום</TableHead>
                 <TableHead className="text-right">פעולות</TableHead>
               </TableRow>
@@ -422,7 +437,7 @@ export default function RegistrationPage() {
             <TableBody>
               {registrations.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                     אין מתעניינים כרגע – רק רשומות בסטטוס &quot;מתעניין&quot; מוצגות כאן
                   </TableCell>
                 </TableRow>
@@ -452,6 +467,11 @@ export default function RegistrationPage() {
                       {registration.type === "student"
                         ? (registration.courseId ? (courseMap.get(registration.courseId) || "קורס לא נמצא") : "לא נבחר")
                         : "-"}
+                    </TableCell>
+                    <TableCell className="max-w-[200px] align-top">
+                      {registration.type === "student"
+                        ? registration.registrationInterest || "—"
+                        : "—"}
                     </TableCell>
                     <TableCell>
                       {registration.createdAt
