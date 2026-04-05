@@ -1,12 +1,7 @@
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
-import {
-  ensureSiblingDiscountTables,
-  getSiblingRank,
-  resolveSiblingAmountByRank,
-  resolveEffectiveCoursePriceByPackage,
-  type SiblingDiscountPackage,
-} from "@/lib/sibling-discount"
+import { applySiblingAndAttendancePricingToEnrollmentRows } from "@/lib/enrollment-effective-price"
+import { ensureCourseSessionPricesColumn } from "@/lib/course-session-prices"
 
 function isMissingColumnError(e: unknown): boolean {
   const code = (e as { code?: string })?.code
@@ -40,7 +35,7 @@ export const GET = withTenantAuth(async (req, _session) => {
   const runWithUserJoin = async () => {
     if (courseId && studentId) {
       return db`
-        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", u.name as "createdByUserName"
+        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", u.name as "createdByUserName"
         FROM "Enrollment" e
         LEFT JOIN "Student" s ON e."studentId" = s.id
         LEFT JOIN "Course" c ON e."courseId" = c.id
@@ -51,7 +46,7 @@ export const GET = withTenantAuth(async (req, _session) => {
     }
     if (courseId) {
       return db`
-        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", u.name as "createdByUserName"
+        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", u.name as "createdByUserName"
         FROM "Enrollment" e
         LEFT JOIN "Student" s ON e."studentId" = s.id
         LEFT JOIN "Course" c ON e."courseId" = c.id
@@ -62,7 +57,7 @@ export const GET = withTenantAuth(async (req, _session) => {
     }
     if (studentId) {
       return db`
-        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", u.name as "createdByUserName"
+        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", u.name as "createdByUserName"
         FROM "Enrollment" e
         LEFT JOIN "Student" s ON e."studentId" = s.id
         LEFT JOIN "Course" c ON e."courseId" = c.id
@@ -72,7 +67,7 @@ export const GET = withTenantAuth(async (req, _session) => {
       `
     }
     return db`
-      SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", u.name as "createdByUserName"
+      SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", u.name as "createdByUserName"
       FROM "Enrollment" e
       LEFT JOIN "Student" s ON e."studentId" = s.id
       LEFT JOIN "Course" c ON e."courseId" = c.id
@@ -84,7 +79,7 @@ export const GET = withTenantAuth(async (req, _session) => {
   const runWithoutUserJoin = async () => {
     if (courseId && studentId) {
       return db`
-        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId"
+        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices"
         FROM "Enrollment" e
         LEFT JOIN "Student" s ON e."studentId" = s.id
         LEFT JOIN "Course" c ON e."courseId" = c.id
@@ -94,7 +89,7 @@ export const GET = withTenantAuth(async (req, _session) => {
     }
     if (courseId) {
       return db`
-        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId"
+        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices"
         FROM "Enrollment" e
         LEFT JOIN "Student" s ON e."studentId" = s.id
         LEFT JOIN "Course" c ON e."courseId" = c.id
@@ -104,7 +99,7 @@ export const GET = withTenantAuth(async (req, _session) => {
     }
     if (studentId) {
       return db`
-        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId"
+        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices"
         FROM "Enrollment" e
         LEFT JOIN "Student" s ON e."studentId" = s.id
         LEFT JOIN "Course" c ON e."courseId" = c.id
@@ -113,7 +108,7 @@ export const GET = withTenantAuth(async (req, _session) => {
       `
     }
     return db`
-      SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId"
+      SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices"
       FROM "Enrollment" e
       LEFT JOIN "Student" s ON e."studentId" = s.id
       LEFT JOIN "Course" c ON e."courseId" = c.id
@@ -123,7 +118,7 @@ export const GET = withTenantAuth(async (req, _session) => {
 
   try {
     await ensureEnrollmentAuditColumns(db)
-    await ensureSiblingDiscountTables(db)
+    await ensureCourseSessionPricesColumn(db)
     let result: Record<string, unknown>[]
     try {
       result = (await runWithUserJoin()) as Record<string, unknown>[]
@@ -136,97 +131,7 @@ export const GET = withTenantAuth(async (req, _session) => {
       }
     }
     const rows = result as Record<string, unknown>[]
-    const studentIds = [...new Set(rows.map((r) => String(r.studentId || "")).filter(Boolean))]
-    const packageByStudent = new Map<string, string>()
-    const groupByStudent = new Map<string, string>()
-    const groupPackage = new Map<string, string>()
-    if (studentIds.length) {
-      const students = await db<{ id: string; siblingDiscountPackageId: string | null; siblingGroupId: string | null }[]>`
-        SELECT id, "siblingDiscountPackageId", "siblingGroupId"
-        FROM "Student"
-        WHERE id = ANY(${studentIds}::text[])
-      `
-      for (const s of students) {
-        if (s.siblingDiscountPackageId) packageByStudent.set(s.id, s.siblingDiscountPackageId)
-        if (s.siblingGroupId) groupByStudent.set(s.id, s.siblingGroupId)
-      }
-      for (const s of students) {
-        if (!s.siblingGroupId) continue
-        if (!s.siblingDiscountPackageId) continue
-        if (!groupPackage.has(s.siblingGroupId)) {
-          groupPackage.set(s.siblingGroupId, s.siblingDiscountPackageId)
-        }
-      }
-      for (const s of students) {
-        if (packageByStudent.has(s.id)) continue
-        const gid = s.siblingGroupId
-        if (!gid) continue
-        const inherited = groupPackage.get(gid)
-        if (inherited) packageByStudent.set(s.id, inherited)
-      }
-    }
-
-    const packageIds = [
-      ...new Set(
-        rows
-          .map((r) => (r.siblingDiscountPackageId ? String(r.siblingDiscountPackageId) : ""))
-          .concat(Array.from(packageByStudent.values()))
-          .filter(Boolean)
-      ),
-    ]
-    const packagesMap = new Map<string, SiblingDiscountPackage>()
-    if (packageIds.length) {
-      const pkgs = await db<SiblingDiscountPackage[]>`
-        SELECT *
-        FROM "SiblingDiscountPackage"
-        WHERE id = ANY(${packageIds}::text[])
-          AND "isActive" = TRUE
-      `
-      for (const p of pkgs) packagesMap.set(String(p.id), p)
-    }
-
-    const rankCache = new Map<string, number | null>()
-    const finalRows = []
-    for (const r of rows) {
-      const studentIdVal = String(r.studentId || "")
-      const coursePackageId = r.siblingDiscountPackageId ? String(r.siblingDiscountPackageId) : null
-      const studentPackageId = packageByStudent.get(studentIdVal) || null
-      const packageId = coursePackageId || studentPackageId
-      const pkg = packageId ? packagesMap.get(packageId) : undefined
-      let effectivePrice = Number(r.coursePrice || 0)
-      let siblingDiscountPackageName: string | null = null
-      let siblingDiscountPackageSource: "course" | "student" | null = null
-      let siblingRank: number | null = null
-      let siblingRankLabel: string | null = null
-      if (pkg && studentIdVal) {
-        siblingDiscountPackageName = String(pkg.name || "")
-        siblingDiscountPackageSource = coursePackageId ? "course" : studentPackageId ? "student" : null
-        let rank = rankCache.get(studentIdVal)
-        if (rank === undefined) {
-          rank = await getSiblingRank(db, studentIdVal)
-          rankCache.set(studentIdVal, rank)
-        }
-        siblingRank = rank && rank > 0 ? rank : null
-        siblingRankLabel = siblingRank ? `אח ${siblingRank}` : null
-        const resolvedRank = rank && rank > 0 ? rank : 1
-        const amountForRank = resolveSiblingAmountByRank(pkg, resolvedRank)
-        if (amountForRank != null) {
-          effectivePrice = resolveEffectiveCoursePriceByPackage(pkg.pricingMode, amountForRank, {
-            duration: Number(r.courseDuration || 0),
-            startTime: r.startTime ? String(r.startTime) : null,
-            endTime: r.endTime ? String(r.endTime) : null,
-          })
-        }
-      }
-      finalRows.push({
-        ...r,
-        coursePrice: effectivePrice,
-        siblingDiscountPackageName,
-        siblingDiscountPackageSource,
-        siblingRank,
-        siblingRankLabel,
-      })
-    }
+    const finalRows = await applySiblingAndAttendancePricingToEnrollmentRows(db, rows)
     return Response.json(finalRows)
   } catch (err) {
     console.error("GET /api/enrollments error:", err)
