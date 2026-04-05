@@ -160,6 +160,7 @@ export async function applySiblingAndAttendancePricingToEnrollmentRows(
       }
     }
 
+    const siblingGroupIdOut = groupByStudent.get(studentIdVal) || null
     finalRows.push({
       ...r,
       coursePrice: effectivePrice,
@@ -167,6 +168,7 @@ export async function applySiblingAndAttendancePricingToEnrollmentRows(
       siblingDiscountPackageSource,
       siblingRank,
       siblingRankLabel,
+      siblingGroupId: siblingGroupIdOut,
     })
   }
 

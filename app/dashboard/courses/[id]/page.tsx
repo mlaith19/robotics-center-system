@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { ArrowRight, Pencil, Loader2, BookOpen, Calendar, Users, BarChart3, CalendarCheck, Check, X, Thermometer, Plane, CalendarRange, Printer, Layers, Trash2 } from "lucide-react"
+import { ArrowRight, Pencil, Loader2, BookOpen, Calendar, Users, BarChart3, CalendarCheck, Check, X, Thermometer, Plane, CalendarRange, Printer, Layers, Trash2, Clock } from "lucide-react"
 import { courseTimeToDisplayValue, normalizeCourseCalendarYmd } from "@/lib/course-db-fields"
 import { useLanguage } from "@/lib/i18n/context"
 
@@ -54,6 +54,8 @@ interface Enrollment {
   siblingDiscountPackageSource?: "course" | "student" | null
   siblingRank?: number | null
   siblingRankLabel?: string | null
+  /** קבוצת אחים מ־Student — למיון רציף ברשימת נוכחות */
+  siblingGroupId?: string | null
 }
 
 interface CourseSessionFeedback {
@@ -154,6 +156,85 @@ function attendanceHoursFromSlots(
   return "—"
 }
 
+function attendanceHoursToNumber(
+  hours: unknown,
+  slotStart: unknown,
+  slotEnd: unknown,
+  courseStart: string | null | undefined,
+  courseEnd: string | null | undefined,
+): number {
+  const str = attendanceHoursFromSlots(hours, slotStart, slotEnd, courseStart, courseEnd)
+  if (str === "—") return 0
+  const n = Number(str)
+  return Number.isNaN(n) || n < 0 ? 0 : n
+}
+
+const TEACHER_HOURS_CHIP_STYLES = [
+  "border-violet-300/80 bg-gradient-to-br from-violet-50 to-violet-100/90 text-violet-950 shadow-sm",
+  "border-sky-300/80 bg-gradient-to-br from-sky-50 to-sky-100/90 text-sky-950 shadow-sm",
+  "border-amber-300/80 bg-gradient-to-br from-amber-50 to-amber-100/90 text-amber-950 shadow-sm",
+  "border-emerald-300/80 bg-gradient-to-br from-emerald-50 to-emerald-100/90 text-emerald-950 shadow-sm",
+  "border-rose-300/80 bg-gradient-to-br from-rose-50 to-rose-100/90 text-rose-950 shadow-sm",
+  "border-indigo-300/80 bg-gradient-to-br from-indigo-50 to-indigo-100/90 text-indigo-950 shadow-sm",
+] as const
+
+/** פס צבע לשורה בטבלת נוכחות מורה — תואם לסדר הצבעים בכרטיסי הסיכום */
+const TEACHER_ROW_ACCENT_STYLES = [
+  "border-s-[3px] border-s-violet-500 bg-violet-50/45 hover:bg-violet-50/70",
+  "border-s-[3px] border-s-sky-500 bg-sky-50/45 hover:bg-sky-50/70",
+  "border-s-[3px] border-s-amber-500 bg-amber-50/45 hover:bg-amber-50/70",
+  "border-s-[3px] border-s-emerald-500 bg-emerald-50/45 hover:bg-emerald-50/70",
+  "border-s-[3px] border-s-rose-500 bg-rose-50/45 hover:bg-rose-50/70",
+  "border-s-[3px] border-s-indigo-500 bg-indigo-50/45 hover:bg-indigo-50/70",
+] as const
+
+function attendanceDateYmdForSort(raw: string): string {
+  const head = String(raw ?? "").trim().slice(0, 10)
+  return /^\d{4}-\d{2}-\d{2}$/.test(head) ? head : String(raw ?? "")
+}
+
+function slotStartDecimalForSort(
+  campSlotStart: unknown,
+  courseStart: string | null | undefined,
+): number {
+  const disp = attendanceSlotTimeDisplay(campSlotStart)
+  if (disp !== "—") {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(disp)
+    if (m) return Number(m[1]) + Number(m[2]) / 60
+  }
+  const cv = courseTimeToDisplayValue(courseStart) || ""
+  const m2 = /^(\d{1,2}):(\d{2})$/.exec(cv)
+  return m2 ? Number(m2[1]) + Number(m2[2]) / 60 : 0
+}
+
+type TeacherAttRow = {
+  id: string
+  teacherId: string | null
+  date: string
+  campSlotStart?: string | null
+  [k: string]: unknown
+}
+
+function compareTeacherAttendanceRows(
+  a: TeacherAttRow,
+  b: TeacherAttRow,
+  courseStart: string | null | undefined,
+  nameOf: (teacherId: string | null) => string,
+): number {
+  const da = attendanceDateYmdForSort(a.date)
+  const db = attendanceDateYmdForSort(b.date)
+  const dc = da.localeCompare(db)
+  if (dc !== 0) return dc
+  const ta = slotStartDecimalForSort(a.campSlotStart, courseStart)
+  const tb = slotStartDecimalForSort(b.campSlotStart, courseStart)
+  if (ta !== tb) return ta - tb
+  const na = nameOf(a.teacherId)
+  const nb = nameOf(b.teacherId)
+  const nc = na.localeCompare(nb, "he", { sensitivity: "base" })
+  if (nc !== 0) return nc
+  return String(a.id).localeCompare(String(b.id))
+}
+
 import { useCurrentUser } from "@/lib/auth-context"
 import { hasPermission, hasFullAccessRole, canDeleteTeacherAttendanceRecord } from "@/lib/permissions"
 import { getCourseStatusPresentation } from "@/lib/course-status"
@@ -235,6 +316,19 @@ export default function CourseViewPage() {
     noLinkedStudents: locale === "ar" ? "لا يوجد طلاب مرتبطون بهذه الدورة" : locale === "en" ? "No students linked to this course" : "אין תלמידים משויכים לקורס זה",
     noStudentAttendance: locale === "ar" ? "لا توجد سجلات حضور طلاب لهذه الدورة بعد." : locale === "en" ? "No student attendance records for this course yet." : "אין עדיין רשומות נוכחות תלמידים לקורס זה.",
     noTeacherAttendance: locale === "ar" ? "لا توجد سجلات حضور معلمين لهذه الدورة." : locale === "en" ? "No teacher attendance records for this course." : "אין רשומות נוכחות מורים לקורס זה.",
+    teacherHoursSummaryCamp:
+      locale === "ar"
+        ? "إجمالي الساعات (مخيّم)"
+        : locale === "en"
+          ? "Total hours (camp)"
+          : "סה״כ שעות לפי מורה · קייטנה",
+    teacherHoursSummaryCourse:
+      locale === "ar"
+        ? "إجمالي الساعات لكل معلم"
+        : locale === "en"
+          ? "Total hours per teacher"
+          : "סה״כ שעות לפי מורה",
+    hoursShort: locale === "ar" ? "س" : locale === "en" ? "h" : "ש׳",
     actions: locale === "ar" ? "إجراءات" : locale === "en" ? "Actions" : "פעולות",
     deleteTeacherAttendanceConfirm:
       locale === "ar"
@@ -467,6 +561,108 @@ export default function CourseViewPage() {
     }
     return campAttendanceEnrollments ?? enrollments
   }, [isCampCourse, isAdmin, canTabAttendanceStudents, campAttendanceEnrollments, enrollments])
+
+  /** נוכחים קודם, אחר כך שאר הסטטוסים; אחים מאותה siblingGroupId רצופים (לפי סדר אח) */
+  const sortedEnrollmentsForAttendanceTab = useMemo(() => {
+    const list = enrollmentsForAttendanceTab
+    const isPresent = (e: Enrollment) => {
+      const st = attendanceByStudent[e.studentId]
+      return st === "present" || st === "PRESENT"
+    }
+    const sibRank = (e: Enrollment) =>
+      e.siblingRank != null && Number(e.siblingRank) > 0 ? Number(e.siblingRank) : 9999
+    const groupKey = (e: Enrollment) => {
+      const g = String(e.siblingGroupId ?? "").trim()
+      return g.length > 0 ? g : `__solo_${e.studentId}`
+    }
+    const sortBlock = (block: Enrollment[]) => {
+      const byGroup = new Map<string, Enrollment[]>()
+      for (const e of block) {
+        const k = groupKey(e)
+        if (!byGroup.has(k)) byGroup.set(k, [])
+        byGroup.get(k)!.push(e)
+      }
+      for (const arr of byGroup.values()) {
+        arr.sort(
+          (a, b) =>
+            sibRank(a) - sibRank(b) ||
+            (a.studentName || "").localeCompare(b.studentName || "", "he", { sensitivity: "base" }),
+        )
+      }
+      const keys = [...byGroup.keys()].sort((ka, kb) => {
+        const a0 = byGroup.get(ka)![0]!
+        const b0 = byGroup.get(kb)![0]!
+        return (a0.studentName || "").localeCompare(b0.studentName || "", "he", { sensitivity: "base" })
+      })
+      return keys.flatMap((k) => byGroup.get(k)!)
+    }
+    const present = list.filter(isPresent)
+    const rest = list.filter((e) => !isPresent(e))
+    return [...sortBlock(present), ...sortBlock(rest)]
+  }, [enrollmentsForAttendanceTab, attendanceByStudent])
+
+  /** מורה רואה רק נוכחות מורה של עצמו; מנהלים — הכל */
+  const courseTeacherAttendanceList = useMemo(() => {
+    const rows = attendanceList.filter((a) => a.teacherId != null)
+    if (isAdmin) return rows
+    if (myTeacherId) return rows.filter((a) => String(a.teacherId) === String(myTeacherId))
+    return []
+  }, [attendanceList, isAdmin, myTeacherId])
+
+  /** אינדקס צבע לפי מורה — סדר אחיד עם שורות הטבלה (לפי שם מורה בעברית) */
+  const teacherAttendanceColorIndexById = useMemo(() => {
+    const ids = [...new Set(courseTeacherAttendanceList.map((a) => String(a.teacherId || "")))].filter(Boolean)
+    const decorated = ids.map((id) => ({
+      id,
+      name: teachers.find((t) => t.id === id)?.name ?? "\uFFFF",
+    }))
+    decorated.sort(
+      (x, y) =>
+        x.name.localeCompare(y.name, "he", { sensitivity: "base" }) || x.id.localeCompare(y.id),
+    )
+    const m = new Map<string, number>()
+    decorated.forEach((d, i) => m.set(d.id, i))
+    return m
+  }, [courseTeacherAttendanceList, teachers])
+
+  /** סיכום שעות הוראה מצטברות לפי מורה (רק רשומות «נוכח») — לתצוגה ליד הדפסה */
+  const teacherAttendanceHoursSummary = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const a of courseTeacherAttendanceList) {
+      if (!a.teacherId) continue
+      if (a.status !== "present" && a.status !== "PRESENT") continue
+      const add = attendanceHoursToNumber(
+        a.hours,
+        a.campSlotStart,
+        a.campSlotEnd,
+        course?.startTime,
+        course?.endTime,
+      )
+      const id = String(a.teacherId)
+      map.set(id, (map.get(id) || 0) + add)
+    }
+    return [...map.entries()]
+      .map(([teacherId, hours]) => ({
+        teacherId,
+        name: teachers.find((t) => t.id === teacherId)?.name ?? "—",
+        hours,
+      }))
+      .filter((x) => x.hours > 0)
+      .sort((a, b) => a.name.localeCompare(b.name, "he", { sensitivity: "base" }))
+  }, [courseTeacherAttendanceList, teachers, course?.startTime, course?.endTime])
+
+  /** תאריך ישן→חדש, אז שעת התחלה, אז שם מורה */
+  const sortedCourseTeacherAttendanceList = useMemo(() => {
+    const nameOf = (tid: string | null) => (tid ? teachers.find((t) => t.id === tid)?.name ?? "" : "")
+    return [...courseTeacherAttendanceList].sort((a, b) =>
+      compareTeacherAttendanceRows(
+        a as TeacherAttRow,
+        b as TeacherAttRow,
+        course?.startTime ?? null,
+        nameOf,
+      ),
+    )
+  }, [courseTeacherAttendanceList, teachers, course?.startTime])
 
   useEffect(() => {
     if (!currentUser?.id) return
@@ -1795,7 +1991,7 @@ tr:nth-child(even) td{background:#f9fafb}
                         : ""
                       w.document.write(`<div class="header">${logoHtml}<h1>${centerName || "מרכז"}</h1>${course?.name ? `<h2 style="font-size:17px;color:#1f2937;font-weight:600;margin-top:4px">${course.name}</h2>` : ""}<h2>רשימת נוכחות - ${dateStr}</h2>${slotEsc ? `<p style="margin-top:8px;font-size:14px;color:#374151">${slotEsc}</p>` : ""}</div>`)
                       w.document.write(`<table><thead><tr><th>#</th><th>שם תלמיד</th><th>קבוצה</th><th>סטטוס</th><th>חתימה</th></tr></thead><tbody>`)
-                      enrollmentsForAttendanceTab.forEach((e, idx) => {
+                      sortedEnrollmentsForAttendanceTab.forEach((e, idx) => {
                         const st = attendanceByStudent[e.studentId] || ""
                         const statusText = st === "present" || st === "PRESENT" ? tr.present : st === "absent" || st === "ABSENT" ? tr.absent : st === "sick" || st === "SICK" ? tr.sick : st === "vacation" || st === "VACATION" ? tr.vacation : "—"
                         const statusClass = st === "present" || st === "PRESENT" ? "status-present" : st === "absent" || st === "ABSENT" ? "status-absent" : st === "sick" || st === "SICK" ? "status-sick" : st === "vacation" || st === "VACATION" ? "status-vacation" : ""
@@ -1876,7 +2072,7 @@ tr:nth-child(even) td{background:#f9fafb}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {enrollmentsForAttendanceTab.length > 0 ? enrollmentsForAttendanceTab.map((enrollment) => (
+                    {sortedEnrollmentsForAttendanceTab.length > 0 ? sortedEnrollmentsForAttendanceTab.map((enrollment) => (
                       <TableRow key={enrollment.id}>
                         <TableCell className="max-w-[40%] break-words text-right font-medium sm:max-w-none">{enrollment.studentName || "—"}</TableCell>
                         <TableCell className="align-top">
@@ -1953,19 +2149,64 @@ tr:nth-child(even) td{background:#f9fafb}
         <TabsContent value="attendance-teachers" className="space-y-6" dir={isRtl ? "rtl" : "ltr"}>
           <Card>
             <CardHeader className="pb-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
                 <div className="flex items-center gap-2">
                   <div className="p-2 bg-purple-100 rounded-lg">
                     <CalendarCheck className="h-5 w-5 text-purple-600" />
                   </div>
                   <CardTitle className="text-lg">{tr.teacherAttendanceTitle}</CardTitle>
                 </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="gap-1 bg-purple-600 hover:bg-purple-700 text-white"
-                  onClick={() => {
-                    const teacherAtt = attendanceList.filter((a) => a.teacherId != null)
+                <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+                  {teacherAttendanceHoursSummary.length > 0 ? (
+                    <div
+                      className={
+                        isCampCourse
+                          ? "flex max-w-full flex-wrap items-center gap-2 rounded-xl border border-purple-200/90 bg-gradient-to-l from-fuchsia-50/90 via-purple-50/80 to-violet-50/50 px-3 py-2 shadow-sm ring-1 ring-purple-100/60"
+                          : "flex max-w-full flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2"
+                      }
+                      dir={isRtl ? "rtl" : "ltr"}
+                    >
+                      <div
+                        className={`flex items-center gap-1.5 sm:border-s sm:ps-2 ${
+                          isCampCourse ? "text-purple-900 sm:border-purple-200/70" : "text-foreground sm:border-border"
+                        }`}
+                      >
+                        <Clock className={`h-4 w-4 shrink-0 ${isCampCourse ? "text-purple-600" : "text-muted-foreground"}`} />
+                        <span
+                          className={`text-xs font-semibold leading-tight sm:text-sm ${isCampCourse ? "text-purple-900" : "text-foreground"}`}
+                        >
+                          {isCampCourse ? tr.teacherHoursSummaryCamp : tr.teacherHoursSummaryCourse}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-stretch gap-2">
+                        {teacherAttendanceHoursSummary.map((row) => {
+                          const chipIdx = teacherAttendanceColorIndexById.get(row.teacherId) ?? 0
+                          return (
+                          <div
+                            key={row.teacherId}
+                            className={`flex min-w-[7.5rem] flex-col rounded-lg border px-2.5 py-1.5 ${
+                              isCampCourse
+                                ? TEACHER_HOURS_CHIP_STYLES[chipIdx % TEACHER_HOURS_CHIP_STYLES.length]
+                                : "border-border bg-background/90 text-foreground shadow-sm"
+                            }`}
+                          >
+                            <span className="line-clamp-2 text-[11px] font-medium leading-snug opacity-90">{row.name}</span>
+                            <span className="text-base font-bold tabular-nums leading-tight">
+                              {row.hours.toFixed(1)}
+                              <span className="ms-0.5 text-xs font-semibold opacity-80">{tr.hoursShort}</span>
+                            </span>
+                          </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="gap-1 bg-purple-600 hover:bg-purple-700 text-white"
+                    onClick={() => {
+                    const teacherAtt = sortedCourseTeacherAttendanceList
                     const w = window.open("", "_blank")
                     if (!w) return
                     const logoHtml = centerLogo ? `<img src="${centerLogo}" style="max-height:60px;max-width:160px;object-fit:contain" />` : ""
@@ -1989,16 +2230,17 @@ tr:nth-child(even) td{background:#f9fafb}
                     w.document.write(`</tbody></table></body></html>`)
                     w.document.close()
                     setTimeout(() => w.print(), 300)
-                  }}
-                >
-                  <Printer className="h-4 w-4" />
-                  הדפסה
-                </Button>
+                    }}
+                  >
+                    <Printer className="h-4 w-4" />
+                    הדפסה
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
               {(() => {
-                const teacherAttendance = attendanceList.filter((a) => a.teacherId != null)
+                const teacherAttendance = sortedCourseTeacherAttendanceList
                 return teacherAttendance.length > 0 ? (
                   <div className="overflow-x-auto rounded-md border">
                     <Table className="min-w-[880px]">
@@ -2038,8 +2280,12 @@ tr:nth-child(even) td{background:#f9fafb}
                               course?.endTime,
                             )
                             const lessonDisp = String(a.campLessonTitle || "").trim() || "—"
+                            const tid = a.teacherId ? String(a.teacherId) : ""
+                            const colorIdx = tid ? teacherAttendanceColorIndexById.get(tid) ?? 0 : 0
+                            const rowAccent =
+                              TEACHER_ROW_ACCENT_STYLES[colorIdx % TEACHER_ROW_ACCENT_STYLES.length]
                             return (
-                              <TableRow key={a.id}>
+                              <TableRow key={a.id} className={rowAccent}>
                                 <TableCell className="text-right">{new Date(a.date).toLocaleDateString(localeTag)}</TableCell>
                                 <TableCell className="text-right">{teacherName}</TableCell>
                                 <TableCell className="text-right text-muted-foreground">{lessonDisp}</TableCell>
