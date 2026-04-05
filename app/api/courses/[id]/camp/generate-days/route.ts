@@ -3,7 +3,7 @@ import { requireFeatureFromRequest } from "@/lib/feature-gate"
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
 import { requirePerm } from "@/lib/require-perm"
-import { hasFullAccessRole, hasPermission } from "@/lib/permissions"
+import { campCourseTabCan, hasFullAccessRole, hasPermission } from "@/lib/permissions"
 import { ensureCampTables, isCampCourseType, listCampSessionDates } from "@/lib/camp-kaytana"
 
 type Ctx = { params: Promise<{ id: string }> }
@@ -11,7 +11,8 @@ type Ctx = { params: Promise<{ id: string }> }
 function canEditCampStructure(session: { permissions?: string[]; roleKey?: string; role: string }): boolean {
   if (hasFullAccessRole(session.roleKey) || hasFullAccessRole(session.role)) return true
   const perms = session.permissions ?? []
-  return hasPermission(perms, "courses.edit") && hasPermission(perms, "courses.tab.camp")
+  if (!hasPermission(perms, "courses.edit")) return false
+  return campCourseTabCan(perms, "campPlan", "edit", { isCampCourse: true })
 }
 
 export const POST = withTenantAuth(async (req, session, { params }: Ctx) => {

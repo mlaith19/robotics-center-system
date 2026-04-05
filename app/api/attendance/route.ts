@@ -169,22 +169,25 @@ export const GET = withTenantAuth(async (req, _session) => {
     if (courseId) {
       if (withUserJoin) {
         return dbClient`
-          SELECT a.*, c.name as "courseName", c.duration as "courseDuration", u.name as "createdByUserName"
+          SELECT a.*, c.name as "courseName", c.duration as "courseDuration",
+            COALESCE(u.name, t.name) as "createdByUserName"
           FROM "Attendance" a
           LEFT JOIN "Course" c ON a."courseId" = c.id
           LEFT JOIN "User" u ON a."createdByUserId" = u.id
+          LEFT JOIN "Teacher" t ON a."teacherId" = t.id
           WHERE a."courseId" = ${courseId}
           ORDER BY a."date" DESC, a."createdAt" DESC
         `
       }
       const rows = await dbClient`
-        SELECT a.*, c.name as "courseName", c.duration as "courseDuration"
+        SELECT a.*, c.name as "courseName", c.duration as "courseDuration", t.name as "createdByUserName"
         FROM "Attendance" a
         LEFT JOIN "Course" c ON a."courseId" = c.id
+        LEFT JOIN "Teacher" t ON a."teacherId" = t.id
         WHERE a."courseId" = ${courseId}
         ORDER BY a."date" DESC, a."createdAt" DESC
       `
-      return rows.map((r: any) => ({ ...r, createdByUserName: null }))
+      return rows as Record<string, unknown>[]
     }
     if (studentId) {
       if (withUserJoin) {

@@ -178,19 +178,28 @@ const TEACHER_HOURS_CHIP_STYLES = [
   "border-indigo-300/80 bg-gradient-to-br from-indigo-50 to-indigo-100/90 text-indigo-950 shadow-sm",
 ] as const
 
-/** פס צבע לשורה בטבלת נוכחות מורה — תואם לסדר הצבעים בכרטיסי הסיכום */
+/** פס צבע לשורה בטבלת נוכחות מורה — תואם לסדר הצבעים בכרטיסי הסיכום; ! כדי לנצח hover:bg-muted/50 של TableRow */
 const TEACHER_ROW_ACCENT_STYLES = [
-  "border-s-[3px] border-s-violet-500 bg-violet-50/45 hover:bg-violet-50/70",
-  "border-s-[3px] border-s-sky-500 bg-sky-50/45 hover:bg-sky-50/70",
-  "border-s-[3px] border-s-amber-500 bg-amber-50/45 hover:bg-amber-50/70",
-  "border-s-[3px] border-s-emerald-500 bg-emerald-50/45 hover:bg-emerald-50/70",
-  "border-s-[3px] border-s-rose-500 bg-rose-50/45 hover:bg-rose-50/70",
-  "border-s-[3px] border-s-indigo-500 bg-indigo-50/45 hover:bg-indigo-50/70",
+  "border-s-[3px] border-s-violet-500 !bg-violet-100/85 hover:!bg-violet-100 data-[state=selected]:!bg-violet-100",
+  "border-s-[3px] border-s-sky-500 !bg-sky-100/85 hover:!bg-sky-100 data-[state=selected]:!bg-sky-100",
+  "border-s-[3px] border-s-amber-500 !bg-amber-100/85 hover:!bg-amber-100 data-[state=selected]:!bg-amber-100",
+  "border-s-[3px] border-s-emerald-500 !bg-emerald-100/85 hover:!bg-emerald-100 data-[state=selected]:!bg-emerald-100",
+  "border-s-[3px] border-s-rose-500 !bg-rose-100/85 hover:!bg-rose-100 data-[state=selected]:!bg-rose-100",
+  "border-s-[3px] border-s-indigo-500 !bg-indigo-100/85 hover:!bg-indigo-100 data-[state=selected]:!bg-indigo-100",
 ] as const
 
 function attendanceDateYmdForSort(raw: string): string {
   const head = String(raw ?? "").trim().slice(0, 10)
   return /^\d{4}-\d{2}-\d{2}$/.test(head) ? head : String(raw ?? "")
+}
+
+/** תואם ל־DB (עברית «נוכח») ולערכים באנגלית */
+function isTeacherAttendancePresentStatus(status: unknown): boolean {
+  const s = String(status ?? "").trim()
+  if (!s) return false
+  if (s === "נוכח") return true
+  const low = s.toLowerCase()
+  return low === "present"
 }
 
 function slotStartDecimalForSort(
@@ -225,18 +234,23 @@ function compareTeacherAttendanceRows(
   const db = attendanceDateYmdForSort(b.date)
   const dc = da.localeCompare(db)
   if (dc !== 0) return dc
-  const ta = slotStartDecimalForSort(a.campSlotStart, courseStart)
-  const tb = slotStartDecimalForSort(b.campSlotStart, courseStart)
-  if (ta !== tb) return ta - tb
   const na = nameOf(a.teacherId)
   const nb = nameOf(b.teacherId)
   const nc = na.localeCompare(nb, "he", { sensitivity: "base" })
   if (nc !== 0) return nc
+  const ta = slotStartDecimalForSort(a.campSlotStart, courseStart)
+  const tb = slotStartDecimalForSort(b.campSlotStart, courseStart)
+  if (ta !== tb) return ta - tb
   return String(a.id).localeCompare(String(b.id))
 }
 
 import { useCurrentUser } from "@/lib/auth-context"
-import { hasPermission, hasFullAccessRole, canDeleteTeacherAttendanceRecord } from "@/lib/permissions"
+import {
+  hasPermission,
+  hasFullAccessRole,
+  canDeleteTeacherAttendanceRecord,
+  campCourseTabCan,
+} from "@/lib/permissions"
 import { getCourseStatusPresentation } from "@/lib/course-status"
 import { HEBREW_GROUP_LETTERS, isCampCourseType, listCampSessionDates } from "@/lib/camp-kaytana"
 import { CourseCampTab } from "./course-camp-tab"
@@ -364,24 +378,73 @@ export default function CourseViewPage() {
     currentUser?.role === "אדמין" ||
     currentUser?.role === "מנהל"
   const userPerms = currentUser?.permissions || []
-  const canDeleteTeacherAttendanceRow = canDeleteTeacherAttendanceRecord({
-    roleKey: currentUser?.roleKey,
-    role: currentUser?.role,
-    permissions: userPerms,
-  })
   const canEditCourses = isAdmin || hasPermission(userPerms, "courses.edit")
-  const canTabGeneral = isAdmin || hasPermission(userPerms, "courses.tab.general")
-  const canTabStudents = isAdmin || hasPermission(userPerms, "courses.tab.students")
-  const canTabPayments = isAdmin || hasPermission(userPerms, "courses.tab.payments")
-  const canTabAttendanceStudents = isAdmin || hasPermission(userPerms, "courses.tab.attendance.students")
-  const canTabAttendanceTeachers = isAdmin || hasPermission(userPerms, "courses.tab.attendance.teachers")
-  const canTabSessionsFeedback = isAdmin || hasPermission(userPerms, "courses.tab.feedback") || hasPermission(userPerms, "courses.tab.attendance.students")
-  const canTabDebtors = canTabPayments
-  const canSeeCourseFinancial = isAdmin || hasPermission(userPerms, "courses.financial")
   const isCampCourse = !!(course && isCampCourseType(course.courseType))
-  const canTabCamp = isCampCourse && (isAdmin || hasPermission(userPerms, "courses.tab.camp"))
-  /** טאב קבוצות קייטנה — אותה הרשאה כמו רשימת תלמידים */
-  const canTabCampGroups = isCampCourse && !isStudentUser && canTabStudents
+  const campTab = (tab: Parameters<typeof campCourseTabCan>[1], level: "view" | "edit" | "delete") =>
+    campCourseTabCan(userPerms, tab, level, { isCampCourse: true })
+
+  const canTabGeneral =
+    isAdmin ||
+    (isCampCourse ? campTab("general", "view") : hasPermission(userPerms, "courses.tab.general"))
+  const canTabStudents =
+    isAdmin ||
+    (isCampCourse ? campTab("students", "view") : hasPermission(userPerms, "courses.tab.students"))
+  const canTabPayments =
+    isAdmin ||
+    (isCampCourse ? campTab("payments", "view") : hasPermission(userPerms, "courses.tab.payments"))
+  const canTabAttendanceStudents =
+    isAdmin ||
+    (isCampCourse
+      ? campTab("attendanceStudents", "view")
+      : hasPermission(userPerms, "courses.tab.attendance.students"))
+  const canTabAttendanceTeachers =
+    isAdmin ||
+    (isCampCourse
+      ? campTab("attendanceTeachers", "view")
+      : hasPermission(userPerms, "courses.tab.attendance.teachers"))
+  const canTabSessionsFeedback =
+    isAdmin ||
+    (isCampCourse
+      ? campTab("feedback", "view")
+      : hasPermission(userPerms, "courses.tab.feedback") ||
+        hasPermission(userPerms, "courses.tab.attendance.students"))
+  const canTabDebtors =
+    isCampCourse ? isAdmin || campTab("debtors", "view") : canTabPayments
+  const canSeeCourseFinancial = isAdmin || hasPermission(userPerms, "courses.financial")
+  const canTabCamp = isCampCourse && (isAdmin || campTab("campPlan", "view"))
+  /** טאב קבוצות קייטנה — הרשאה נפרדת בקייטנה; אחרת נשען על טאב תלמידים */
+  const canTabCampGroups =
+    isCampCourse && !isStudentUser && (isAdmin || campTab("campGroups", "view"))
+  const canEditCourseFromGeneralTab =
+    isAdmin || (isCampCourse ? campTab("general", "edit") : canEditCourses)
+  const canEditEnrollmentCampGroup = isCampCourse ? isAdmin || campTab("campGroups", "edit") : canEditCourses
+  const canEditCampPlanTab = isCampCourse && (isAdmin || campTab("campPlan", "edit"))
+  const canEditSessionsFeedbackTab =
+    !isStudentUser &&
+    (isCampCourse ? campTab("feedback", "edit") : canTabSessionsFeedback && canEditCourses)
+  const canEditPaymentsTab =
+    isAdmin || (isCampCourse ? campTab("payments", "edit") : canTabPayments)
+  const canEditAttendanceStudentsTab =
+    isAdmin || (isCampCourse ? campTab("attendanceStudents", "edit") : canTabAttendanceStudents)
+  const canDeleteTeacherAttendanceRow =
+    isAdmin ||
+    (isCampCourse
+      ? campTab("attendanceTeachers", "delete")
+      : canDeleteTeacherAttendanceRecord({
+          roleKey: currentUser?.roleKey,
+          role: currentUser?.role,
+          permissions: userPerms,
+        }))
+
+  const canLoadCampScheduleApi = useMemo(() => {
+    if (!isCampCourse) return false
+    return (
+      isAdmin ||
+      campCourseTabCan(userPerms, "campPlan", "view", { isCampCourse: true }) ||
+      campCourseTabCan(userPerms, "attendanceStudents", "view", { isCampCourse: true })
+    )
+  }, [isCampCourse, isAdmin, userPerms])
+
   const [centerName, setCenterName] = useState("")
   const [centerLogo, setCenterLogo] = useState("")
   const [attendanceList, setAttendanceList] = useState<
@@ -544,7 +607,7 @@ export default function CourseViewPage() {
   }, [isAdmin, currentUser?.id])
 
   useEffect(() => {
-    if (!isCampCourse || !id) {
+    if (!canLoadCampScheduleApi || !id) {
       setCampScheduleMeetings([])
       return
     }
@@ -552,7 +615,7 @@ export default function CourseViewPage() {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setCampScheduleMeetings(Array.isArray(d?.meetings) ? d.meetings : []))
       .catch(() => setCampScheduleMeetings([]))
-  }, [id, isCampCourse])
+  }, [id, canLoadCampScheduleApi])
 
   /** מורה בקייטנה: לא ליפול לרשימת כל הרישומים כש־API נכשל או לפני סינון */
   const enrollmentsForAttendanceTab = useMemo(() => {
@@ -630,7 +693,7 @@ export default function CourseViewPage() {
     const map = new Map<string, number>()
     for (const a of courseTeacherAttendanceList) {
       if (!a.teacherId) continue
-      if (a.status !== "present" && a.status !== "PRESENT") continue
+      if (!isTeacherAttendancePresentStatus(a.status)) continue
       const add = attendanceHoursToNumber(
         a.hours,
         a.campSlotStart,
@@ -651,7 +714,7 @@ export default function CourseViewPage() {
       .sort((a, b) => a.name.localeCompare(b.name, "he", { sensitivity: "base" }))
   }, [courseTeacherAttendanceList, teachers, course?.startTime, course?.endTime])
 
-  /** תאריך ישן→חדש, אז שעת התחלה, אז שם מורה */
+  /** תאריך ישן→חדש, אז מורה, אז שעת התחלה, אז id */
   const sortedCourseTeacherAttendanceList = useMemo(() => {
     const nameOf = (tid: string | null) => (tid ? teachers.find((t) => t.id === tid)?.name ?? "" : "")
     return [...courseTeacherAttendanceList].sort((a, b) =>
@@ -856,7 +919,7 @@ export default function CourseViewPage() {
   }, [id, canTabSessionsFeedback])
 
   async function handleAddSession() {
-    if (!newSessionDate || !id || savingSession) return
+    if (!canEditSessionsFeedbackTab || !newSessionDate || !id || savingSession) return
     setSavingSession(true)
     try {
       const res = await fetch("/api/course-sessions", {
@@ -877,7 +940,7 @@ export default function CourseViewPage() {
   }
 
   async function handleSaveSessionFeedback(sessionId: string) {
-    if (!id || savingFeedbackBySession[sessionId]) return
+    if (!canEditSessionsFeedbackTab || !id || savingFeedbackBySession[sessionId]) return
     const byStudent = feedbackDrafts[sessionId] || {}
     const payload = Object.entries(byStudent).map(([studentId, feedbackText]) => ({ studentId, feedbackText }))
     setSavingFeedbackBySession((p) => ({ ...p, [sessionId]: true }))
@@ -914,6 +977,7 @@ export default function CourseViewPage() {
   }
 
   async function saveStudentAttendance(studentId: string, status: "present" | "absent" | "sick" | "vacation") {
+    if (!canEditAttendanceStudentsTab) return
     const prev = attendanceByStudent[studentId]
     setAttendanceByStudent((p) => ({ ...p, [studentId]: status }))
     setSavingByStudent((p) => ({ ...p, [studentId]: true }))
@@ -978,7 +1042,7 @@ export default function CourseViewPage() {
   }
 
   async function addCoursePayment() {
-    if (!payStudentId || !payAmount || Number(payAmount) <= 0) return
+    if (!canEditPaymentsTab || !payStudentId || !payAmount || Number(payAmount) <= 0) return
     setIsAddingPayment(true)
     try {
       const res = await fetch("/api/payments", {
@@ -1025,7 +1089,7 @@ export default function CourseViewPage() {
                   : "bg-blue-600 hover:bg-blue-700"
             : "bg-transparent"
         }`}
-        disabled={isSaving}
+        disabled={isSaving || !canEditAttendanceStudentsTab}
         onClick={() => saveStudentAttendance(studentId, status)}
       >
         <Icon className="h-4 w-4" />
@@ -1144,7 +1208,7 @@ export default function CourseViewPage() {
           </div>
         </div>
 
-        {!isStudentUser && canEditCourses && (
+        {!isStudentUser && canEditCourseFromGeneralTab && (
           <Link href={`/dashboard/courses/${course.id}/edit`} className="w-full shrink-0 sm:w-auto">
             <Button className="w-full gap-2 sm:w-auto">
               <Pencil className="h-4 w-4" />
@@ -1341,7 +1405,7 @@ export default function CourseViewPage() {
 
         {canTabSessionsFeedback && (
           <TabsContent value="sessions-feedback" className="space-y-4">
-            {!isStudentUser && (
+            {!isStudentUser && canEditSessionsFeedbackTab && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">{tr.newSession}</CardTitle>
@@ -1393,6 +1457,7 @@ export default function CourseViewPage() {
                             <div className="text-sm mb-1">{enr.studentName}</div>
                             <Textarea
                               rows={2}
+                              readOnly={!canEditSessionsFeedbackTab}
                               value={feedbackDrafts[s.id]?.[enr.studentId] ?? ""}
                               onChange={(e) =>
                                 setFeedbackDrafts((prev) => ({
@@ -1404,9 +1469,11 @@ export default function CourseViewPage() {
                             />
                           </div>
                         ))}
-                        <Button onClick={() => handleSaveSessionFeedback(s.id)} disabled={savingFeedbackBySession[s.id]}>
-                          {savingFeedbackBySession[s.id] ? <Loader2 className="h-4 w-4 animate-spin" /> : tr.saveFeedback}
-                        </Button>
+                        {canEditSessionsFeedbackTab ? (
+                          <Button onClick={() => handleSaveSessionFeedback(s.id)} disabled={savingFeedbackBySession[s.id]}>
+                            {savingFeedbackBySession[s.id] ? <Loader2 className="h-4 w-4 animate-spin" /> : tr.saveFeedback}
+                          </Button>
+                        ) : null}
                       </div>
                     )}
                   </CardContent>
@@ -1468,7 +1535,7 @@ export default function CourseViewPage() {
                           </TableCell>
                           {isCampCourse && (
                             <TableCell className="text-right">
-                              {canEditCourses && !isStudentUser ? (
+                              {canEditEnrollmentCampGroup && !isStudentUser ? (
                                 <Select
                                   value={enrollment.campGroupLabel || "__none__"}
                                   onValueChange={(v) =>
@@ -1683,7 +1750,7 @@ export default function CourseViewPage() {
 
         {canTabCamp && (
           <TabsContent value="camp" className="space-y-4">
-            <CourseCampTab courseId={id} canEdit={!isStudentUser && canEditCourses} />
+            <CourseCampTab courseId={id} canEdit={!isStudentUser && !!canEditCampPlanTab} />
           </TabsContent>
         )}
 
@@ -1711,6 +1778,7 @@ export default function CourseViewPage() {
                     type="button"
                     size="sm"
                     className="gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    disabled={!canEditPaymentsTab}
                     onClick={() => setIsAddPaymentOpen(true)}
                   >
                     + הוספת תשלום
@@ -2216,8 +2284,12 @@ tr:nth-child(even) td{background:#f9fafb}
                     w.document.write(`<table><thead><tr><th>#</th><th>תאריך</th><th>מורה</th><th>שיעור</th><th>משעה</th><th>עד שעה</th><th>סה"כ שעות</th><th>סטטוס</th><th>הערה</th></tr></thead><tbody>`)
                     teacherAtt.forEach((a, idx) => {
                       const teacher = teachers.find((t) => t.id === a.teacherId)
-                      const statusLabel = a.status === "present" || a.status === "PRESENT" ? "נוכח" : a.status === "absent" || a.status === "ABSENT" ? "חיסור" : a.status
-                      const cls = a.status === "present" || a.status === "PRESENT" ? "status-present" : "status-absent"
+                      const statusLabel = isTeacherAttendancePresentStatus(a.status)
+                        ? "נוכח"
+                        : a.status === "absent" || a.status === "ABSENT"
+                          ? "חיסור"
+                          : String(a.status ?? "—")
+                      const cls = isTeacherAttendancePresentStatus(a.status) ? "status-present" : "status-absent"
                       const rs = attendanceSlotTimeDisplay(a.campSlotStart)
                       const re = attendanceSlotTimeDisplay(a.campSlotEnd)
                       const useCrs = rs === "—" || re === "—"
@@ -2265,7 +2337,11 @@ tr:nth-child(even) td{background:#f9fafb}
                           return teacherAttendance.map((a) => {
                             const teacher = teachers.find((t) => t.id === a.teacherId)
                             const teacherName = teacher?.name ?? "—"
-                            const statusLabel = a.status === "present" || a.status === "PRESENT" ? tr.present : a.status === "absent" || a.status === "ABSENT" ? tr.absent : a.status
+                            const statusLabel = isTeacherAttendancePresentStatus(a.status)
+                              ? tr.present
+                              : a.status === "absent" || a.status === "ABSENT"
+                                ? tr.absent
+                                : String(a.status ?? "—")
                             const busy = deletingTeacherAttendanceId === a.id
                             const rs = attendanceSlotTimeDisplay(a.campSlotStart)
                             const re = attendanceSlotTimeDisplay(a.campSlotEnd)

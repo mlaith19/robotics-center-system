@@ -266,7 +266,8 @@ export async function resyncCampTeacherAttendanceForCourseDate(
                     "hourKind" = null,
                     "campLessonTitle" = ${lessonTitle || null},
                     "campSlotStart" = ${st || null},
-                    "campSlotEnd" = ${et || null}
+                    "campSlotEnd" = ${et || null},
+                    "createdByUserId" = COALESCE("createdByUserId", ${uid && typeof uid === "string" ? uid : null})
                 WHERE id = ${(existing[0] as { id: string }).id}
               `
             } else {
@@ -279,7 +280,7 @@ export async function resyncCampTeacherAttendanceForCourseDate(
                 VALUES (
                   ${crypto.randomUUID()}, null, ${tid}, ${courseId}, ${dateYmd}, ${presentStatus},
                   null, ${hours}, null, ${cell.id}, ${lessonTitle || null}, ${st || null}, ${et || null},
-                  null, ${nowIso}
+                  ${uid && typeof uid === "string" ? uid : null}, ${nowIso}
                 )
               `
             }
@@ -330,14 +331,14 @@ export async function resyncCampTeacherAttendanceForCourseDate(
   }
 
   for (const tid of allTeacherIds) {
+    const trowsUid = await db`SELECT "userId" FROM "Teacher" WHERE id = ${tid} LIMIT 1`
+    const uidRaw = (trowsUid[0] as { userId?: string | null } | undefined)?.userId
+    const uidForRow = uidRaw && typeof uidRaw === "string" ? uidRaw : null
+
     let hours = 0
-    if (meeting) {
-      const trows = await db`SELECT "userId" FROM "Teacher" WHERE id = ${tid} LIMIT 1`
-      const uid = (trows[0] as { userId?: string | null } | undefined)?.userId
-      if (uid && typeof uid === "string") {
-        const marked = await teacherHasMarkedAssignedCampStudent(uid, meeting, tid)
-        if (marked) hours = computeCampTeacherDayHoursFromMeeting(meeting, tid)
-      }
+    if (meeting && uidForRow) {
+      const marked = await teacherHasMarkedAssignedCampStudent(uidForRow, meeting, tid)
+      if (marked) hours = computeCampTeacherDayHoursFromMeeting(meeting, tid)
     }
 
     const existing = await db`
@@ -350,13 +351,17 @@ export async function resyncCampTeacherAttendanceForCourseDate(
       if (existing.length > 0) {
         await db`
           UPDATE "Attendance"
-          SET status = ${presentStatus}, hours = ${hours}, notes = null, "hourKind" = null
+          SET status = ${presentStatus},
+              hours = ${hours},
+              notes = null,
+              "hourKind" = null,
+              "createdByUserId" = COALESCE("createdByUserId", ${uidForRow})
           WHERE id = ${(existing[0] as { id: string }).id}
         `
       } else {
         await db`
           INSERT INTO "Attendance" (id, "studentId", "teacherId", "courseId", date, status, notes, hours, "hourKind", "createdByUserId", "createdAt")
-          VALUES (${crypto.randomUUID()}, null, ${tid}, ${courseId}, ${dateYmd}, ${presentStatus}, null, ${hours}, null, null, ${nowIso})
+          VALUES (${crypto.randomUUID()}, null, ${tid}, ${courseId}, ${dateYmd}, ${presentStatus}, null, ${hours}, null, ${uidForRow}, ${nowIso})
         `
       }
     } else if (existing.length > 0) {

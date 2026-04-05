@@ -3,7 +3,7 @@ import { requireFeatureFromRequest } from "@/lib/feature-gate"
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
 import { requirePerm } from "@/lib/require-perm"
-import { hasFullAccessRole, hasPermission } from "@/lib/permissions"
+import { campCourseTabCan, hasFullAccessRole, hasPermission } from "@/lib/permissions"
 import { ensureCampTables, HEBREW_GROUP_LETTERS, isCampCourseType, listCampSessionDates } from "@/lib/camp-kaytana"
 
 type Ctx = { params: Promise<{ id: string }> }
@@ -16,20 +16,23 @@ function isUuidLike(s: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s)
 }
 
-/** קריאת לוח קייטנה: טאב קייטנה או נוכחות תלמידים (מורים בלי טאב קייטנה עדיין צריכים את ה-JSON לטאבי שיעור) */
+/** קריאת לוח קייטנה: טאב תכנון או נוכחות תלמידים (מורים בלי טאב לוח עדיין צריכים JSON לתא) */
 function canReadCampSchedule(session: { permissions?: string[]; roleKey?: string; role: string }): boolean {
   if (hasFullAccessRole(session.roleKey) || hasFullAccessRole(session.role)) return true
   const perms = session.permissions ?? []
   if (!hasPermission(perms, "courses.view")) return false
+  const opts = { isCampCourse: true }
   return (
-    hasPermission(perms, "courses.tab.camp") || hasPermission(perms, "courses.tab.attendance.students")
+    campCourseTabCan(perms, "campPlan", "view", opts) ||
+    campCourseTabCan(perms, "attendanceStudents", "view", opts)
   )
 }
 
 function canEditCampStructure(session: { permissions?: string[]; roleKey?: string; role: string }): boolean {
   if (hasFullAccessRole(session.roleKey) || hasFullAccessRole(session.role)) return true
   const perms = session.permissions ?? []
-  return hasPermission(perms, "courses.edit") && hasPermission(perms, "courses.tab.camp")
+  if (!hasPermission(perms, "courses.edit")) return false
+  return campCourseTabCan(perms, "campPlan", "edit", { isCampCourse: true })
 }
 
 export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {

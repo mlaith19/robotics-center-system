@@ -21,6 +21,7 @@ import {
   ClipboardCheck,
   Settings,
   Users,
+  Tent,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -43,7 +44,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
-import { PERMISSION_CATEGORIES, type PermissionCategory, ROLE_PRESETS, type RoleType, getRoleById } from "@/lib/permissions"
+import {
+  PERMISSION_CATEGORIES,
+  type PermissionCategory,
+  ROLE_PRESETS,
+  type RoleType,
+  getRoleById,
+  getAllKaytanaCampPermissionIds,
+  getKaytanaCampViewEditPermissionIds,
+} from "@/lib/permissions"
 import { PageHeader } from "@/components/page-header"
 import { useLanguage } from "@/lib/i18n/context"
 
@@ -73,6 +82,7 @@ const categoryIcons: Record<string, any> = {
   settings: Settings,
   users: Users,
   myProfile: UserIcon,
+  kaytana: Tent,
 }
 
 const colorClasses: Record<string, string> = {
@@ -89,6 +99,7 @@ const colorClasses: Record<string, string> = {
   slate: "bg-slate-50 border-slate-200",
   indigo: "bg-indigo-50 border-indigo-200",
   violet: "bg-violet-50 border-violet-200",
+  teal: "bg-teal-50 border-teal-200",
 }
 
 export default function UsersPage() {
@@ -726,14 +737,42 @@ export default function UsersPage() {
               </div>
 
               <div className="space-y-4">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                   <Label className="text-lg font-semibold">הרשאות</Label>
-                  <Badge variant="outline">{selectedPermissions.length} הרשאות נבחרו</Badge>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline">{selectedPermissions.length} הרשאות נבחרו</Badge>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() =>
+                        setSelectedPermissions((prev) => [
+                          ...new Set([...prev, ...getKaytanaCampViewEditPermissionIds()]),
+                        ])
+                      }
+                    >
+                      + קייטנה: צפייה+עריכה לכל הטאבים
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() =>
+                        setSelectedPermissions((prev) => [
+                          ...new Set([...prev, ...getAllKaytanaCampPermissionIds()]),
+                        ])
+                      }
+                    >
+                      + קייטנה מלא (כולל מחיקות)
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {PERMISSION_CATEGORIES.map((category) => {
-                    const Icon = categoryIcons[category.id]
+                    const Icon = categoryIcons[category.id] || BookOpen
                     const allSelected = category.permissions.every((p) => selectedPermissions.includes(p.id))
 
                     return (

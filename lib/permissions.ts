@@ -11,6 +11,67 @@ export type Permission = {
   description: string
 }
 
+/** טאבי דף פרטי קורס כשהקורס מסוג קייטנה */
+export type CampCourseTabKey =
+  | "general"
+  | "feedback"
+  | "students"
+  | "campGroups"
+  | "campPlan"
+  | "payments"
+  | "debtors"
+  | "attendanceStudents"
+  | "attendanceTeachers"
+
+export const CAMP_COURSE_TAB_KEYS: CampCourseTabKey[] = [
+  "general",
+  "feedback",
+  "students",
+  "campGroups",
+  "campPlan",
+  "payments",
+  "debtors",
+  "attendanceStudents",
+  "attendanceTeachers",
+]
+
+const KAYTANA_TAB_LABELS: Record<CampCourseTabKey, string> = {
+  general: "טאב כללי",
+  feedback: "טאב משוב מפגשים",
+  students: "טאב ילדים משויכים",
+  campGroups: "טאב קבוצות קייטנה",
+  campPlan: "טאב תכנון קייטנה (לוח)",
+  payments: "טאב עלות ותשלומים",
+  debtors: "טאב חייבים",
+  attendanceStudents: "טאב נוכחות תלמידים",
+  attendanceTeachers: "טאב נוכחות מורים",
+}
+
+function buildKaytanaPermissionCategory(): PermissionCategory {
+  const permissions: Permission[] = []
+  for (const key of CAMP_COURSE_TAB_KEYS) {
+    const base = KAYTANA_TAB_LABELS[key]
+    permissions.push(
+      {
+        id: `courses.camp.${key}.view`,
+        name: `${base} — צפייה`,
+        description: "בקורס מסוג קייטנה: הצגת טאב זה בדף פרטי הקורס",
+      },
+      {
+        id: `courses.camp.${key}.edit`,
+        name: `${base} — עריכה`,
+        description: "בקורס קייטנה: שמירה ושינויים בתוכן הטאב",
+      },
+      {
+        id: `courses.camp.${key}.delete`,
+        name: `${base} — מחיקה`,
+        description: "בקורס קייטנה: מחיקת רשומות בטאב (כשקיימת פעולת מחיקה)",
+      },
+    )
+  }
+  return { id: "kaytana", name: "קייטנה", color: "teal", permissions }
+}
+
 export const PERMISSION_CATEGORIES: PermissionCategory[] = [
   {
     id: "courses",
@@ -23,6 +84,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       { id: "courses.edit", name: "כפתור עריכה", description: "הצגת כפתור עריכה – יצירה ועריכת קורסים" },
       { id: "courses.delete", name: "כפתור מחיקה", description: "הצגת כפתור מחיקה – מחיקת קורסים" },
       { id: "courses.tab.general", name: "טאב כללי", description: "הצגת טאב כללי בדף פרטי קורס" },
+      { id: "courses.tab.feedback", name: "טאב משוב מפגשים", description: "הצגת טאב משוב מפגשים בדף פרטי קורס" },
       { id: "courses.tab.students", name: "טאב ילדים משויכים", description: "הצגת טאב ילדים משויכים בדף פרטי קורס" },
       { id: "courses.tab.payments", name: "טאב עלות ותשלומים", description: "הצגת טאב עלות ותשלומים בדף פרטי קורס" },
       { id: "courses.tab.attendance.students", name: "טאב נוכחות תלמיד", description: "הצגת טאב נוכחות תלמידים בדף פרטי קורס" },
@@ -30,6 +92,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       { id: "courses.tab.camp", name: "טאב קייטנה", description: "הצגת טאב תכנון קייטנה (קבוצות, חדרים, משבצות ושיבוצים) בדף פרטי קורס" },
     ],
   },
+  buildKaytanaPermissionCategory(),
   {
     id: "students",
     name: "תלמידים",
@@ -186,6 +249,109 @@ export function getAllPermissions(): Permission[] {
   return PERMISSION_CATEGORIES.flatMap((cat) => cat.permissions)
 }
 
+/** כל מזהי ההרשאות המפורטות (צפייה + עריכה + מחיקה) לטאבי קייטנה — לכפתור «פרופיל מלא» בעריכת משתמש */
+export function getAllKaytanaCampPermissionIds(): string[] {
+  return CAMP_COURSE_TAB_KEYS.flatMap((key) => [
+    `courses.camp.${key}.view`,
+    `courses.camp.${key}.edit`,
+    `courses.camp.${key}.delete`,
+  ])
+}
+
+/** צפייה + עריכה בלבד לכל טאבי קייטנה */
+export function getKaytanaCampViewEditPermissionIds(): string[] {
+  return CAMP_COURSE_TAB_KEYS.flatMap((key) => [`courses.camp.${key}.view`, `courses.camp.${key}.edit`])
+}
+
+const LEGACY_CAMP_TAB_VIEW: Record<CampCourseTabKey, readonly string[]> = {
+  general: ["courses.tab.general"],
+  feedback: ["courses.tab.feedback", "courses.tab.attendance.students"],
+  students: ["courses.tab.students"],
+  campGroups: ["courses.tab.students"],
+  campPlan: ["courses.tab.camp"],
+  payments: ["courses.tab.payments"],
+  debtors: ["courses.tab.payments"],
+  attendanceStudents: ["courses.tab.attendance.students"],
+  attendanceTeachers: ["courses.tab.attendance.teachers"],
+}
+
+function legacyCampTabVisible(perms: string[], tab: CampCourseTabKey): boolean {
+  return LEGACY_CAMP_TAB_VIEW[tab].some((p) => hasPermission(perms, p))
+}
+
+function legacyCampTabEditAllowed(perms: string[], tab: CampCourseTabKey): boolean {
+  switch (tab) {
+    case "campPlan":
+      return hasPermission(perms, "courses.edit")
+    case "payments":
+    case "debtors":
+      return (
+        hasPermission(perms, "cashier.income") ||
+        hasPermission(perms, "cashier.view") ||
+        hasPermission(perms, "cashier.expense")
+      )
+    case "attendanceStudents":
+    case "attendanceTeachers":
+      return hasPermission(perms, "attendance.edit")
+    default:
+      return hasPermission(perms, "courses.edit")
+  }
+}
+
+function legacyCampTabDeleteAllowed(perms: string[], tab: CampCourseTabKey): boolean {
+  switch (tab) {
+    case "general":
+      return hasPermission(perms, "courses.delete")
+    case "feedback":
+    case "students":
+    case "campGroups":
+      return hasPermission(perms, "courses.edit")
+    case "campPlan":
+      return hasPermission(perms, "courses.edit") && hasPermission(perms, "courses.tab.camp")
+    case "payments":
+    case "debtors":
+      return hasPermission(perms, "cashier.delete") && hasPermission(perms, "courses.tab.payments")
+    case "attendanceStudents":
+      return hasPermission(perms, "attendance.edit")
+    case "attendanceTeachers":
+      return hasPermission(perms, "attendance.teacher.delete")
+    default:
+      return false
+  }
+}
+
+/**
+ * בדיקת הרשאה לטאב בדף קורס קייטנה בלבד.
+ * אם אין הרשאות `courses.camp.*` — נופל חזרה להרשאות הישנות (`courses.tab.*` וכו').
+ */
+export function campCourseTabCan(
+  userPermissions: string[],
+  tab: CampCourseTabKey,
+  level: "view" | "edit" | "delete",
+  options: { isCampCourse: boolean },
+): boolean {
+  if (!options.isCampCourse) return false
+  const perms = userPermissions ?? []
+  const pv = `courses.camp.${tab}.view`
+  const pe = `courses.camp.${tab}.edit`
+  const pd = `courses.camp.${tab}.delete`
+  const newView = hasPermission(perms, pv)
+  const newEdit = hasPermission(perms, pe)
+  const newDel = hasPermission(perms, pd)
+  if (level === "view") {
+    if (newView || newEdit || newDel) return true
+    return legacyCampTabVisible(perms, tab)
+  }
+  if (level === "edit") {
+    if (newEdit || newDel) return true
+    if (!legacyCampTabVisible(perms, tab)) return false
+    return legacyCampTabEditAllowed(perms, tab)
+  }
+  if (newDel) return true
+  if (!legacyCampTabVisible(perms, tab)) return false
+  return legacyCampTabDeleteAllowed(perms, tab)
+}
+
 export function getAllNavPermissions(): string[] {
   return PERMISSION_CATEGORIES.map((cat) => cat.permissions.find((p) => p.id.startsWith("nav."))?.id).filter(Boolean) as string[]
 }
@@ -243,7 +409,7 @@ export const ROLE_PRESETS: RolePreset[] = [
       "nav.registration", "nav.gafan", "nav.cashier", "nav.reports",
       "nav.attendance", "nav.schedule",
       "courses.view", "courses.edit",
-      "courses.tab.general", "courses.tab.students", "courses.tab.payments", "courses.tab.attendance.students", "courses.tab.attendance.teachers", "courses.tab.camp",
+      "courses.tab.general", "courses.tab.feedback", "courses.tab.students", "courses.tab.payments", "courses.tab.attendance.students", "courses.tab.attendance.teachers", "courses.tab.camp",
       "students.view", "students.edit", "students.financial",
       "students.tab.profile", "students.tab.general", "students.tab.courses", "students.tab.payments", "students.tab.attendance",
       "schools.view",
@@ -271,7 +437,7 @@ export const ROLE_PRESETS: RolePreset[] = [
     permissions: [
       "nav.courses", "nav.students", "nav.teachers",
       "nav.reports", "nav.attendance", "nav.schedule",
-      "courses.view", "courses.tab.general", "courses.tab.students", "courses.tab.attendance.students", "courses.tab.attendance.teachers", "courses.tab.camp",
+      "courses.view", "courses.tab.general", "courses.tab.feedback", "courses.tab.students", "courses.tab.attendance.students", "courses.tab.attendance.teachers", "courses.tab.camp",
       "students.view", "students.tab.profile", "students.tab.attendance",
       "teachers.view", "teachers.tab.general", "teachers.tab.courses", "teachers.tab.payments", "teachers.tab.attendance",
       "nav.myProfile",
@@ -311,7 +477,7 @@ export const ROLE_PRESETS: RolePreset[] = [
       "nav.courses", "nav.students", "nav.teachers", "nav.schools",
       "nav.gafan", "nav.reports", "nav.attendance", "nav.schedule",
       "courses.view", "courses.edit",
-      "courses.tab.general", "courses.tab.students", "courses.tab.payments", "courses.tab.attendance.students", "courses.tab.attendance.teachers", "courses.tab.camp",
+      "courses.tab.general", "courses.tab.feedback", "courses.tab.students", "courses.tab.payments", "courses.tab.attendance.students", "courses.tab.attendance.teachers", "courses.tab.camp",
       "students.view", "students.edit",
       "students.tab.profile", "students.tab.general", "students.tab.courses", "students.tab.payments", "students.tab.attendance",
       "schools.view", "schools.edit",
