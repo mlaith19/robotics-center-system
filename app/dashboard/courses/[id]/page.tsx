@@ -382,9 +382,11 @@ export default function CourseViewPage() {
 
   const campMeetingForSelectedDate = useMemo(() => {
     if (!attendanceDateForApi) return null
-    const hit = campScheduleMeetings.find(
-      (row) => String((row as { sessionDate?: string }).sessionDate || "").slice(0, 10) === attendanceDateForApi,
-    )
+    const toYmd = (v: unknown) => {
+      const head = String(v ?? "").trim().slice(0, 10)
+      return /^\d{4}-\d{2}-\d{2}$/.test(head) ? head : ""
+    }
+    const hit = campScheduleMeetings.find((row) => toYmd((row as { sessionDate?: string }).sessionDate) === attendanceDateForApi)
     return hit ?? null
   }, [campScheduleMeetings, attendanceDateForApi])
 
@@ -458,10 +460,13 @@ export default function CourseViewPage() {
       .catch(() => setCampScheduleMeetings([]))
   }, [id, isCampCourse])
 
-  const enrollmentsForAttendanceTab = useMemo(
-    () => campAttendanceEnrollments ?? enrollments,
-    [campAttendanceEnrollments, enrollments],
-  )
+  /** מורה בקייטנה: לא ליפול לרשימת כל הרישומים כש־API נכשל או לפני סינון */
+  const enrollmentsForAttendanceTab = useMemo(() => {
+    if (isCampCourse && !isAdmin && canTabAttendanceStudents) {
+      return campAttendanceEnrollments ?? []
+    }
+    return campAttendanceEnrollments ?? enrollments
+  }, [isCampCourse, isAdmin, canTabAttendanceStudents, campAttendanceEnrollments, enrollments])
 
   useEffect(() => {
     if (!currentUser?.id) return
@@ -533,10 +538,10 @@ export default function CourseViewPage() {
           const data = await res.json()
           setCampAttendanceEnrollments(Array.isArray(data) ? data : [])
         } else if (!cancelled) {
-          setCampAttendanceEnrollments(null)
+          setCampAttendanceEnrollments([])
         }
       } catch {
-        if (!cancelled) setCampAttendanceEnrollments(null)
+        if (!cancelled) setCampAttendanceEnrollments([])
       }
     })()
     return () => {

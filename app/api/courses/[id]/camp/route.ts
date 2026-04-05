@@ -16,10 +16,14 @@ function isUuidLike(s: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s)
 }
 
-function canViewCampStructure(session: { permissions?: string[]; roleKey?: string; role: string }): boolean {
+/** קריאת לוח קייטנה: טאב קייטנה או נוכחות תלמידים (מורים בלי טאב קייטנה עדיין צריכים את ה-JSON לטאבי שיעור) */
+function canReadCampSchedule(session: { permissions?: string[]; roleKey?: string; role: string }): boolean {
   if (hasFullAccessRole(session.roleKey) || hasFullAccessRole(session.role)) return true
   const perms = session.permissions ?? []
-  return hasPermission(perms, "courses.view") && hasPermission(perms, "courses.tab.camp")
+  if (!hasPermission(perms, "courses.view")) return false
+  return (
+    hasPermission(perms, "courses.tab.camp") || hasPermission(perms, "courses.tab.attendance.students")
+  )
 }
 
 function canEditCampStructure(session: { permissions?: string[]; roleKey?: string; role: string }): boolean {
@@ -31,8 +35,11 @@ function canEditCampStructure(session: { permissions?: string[]; roleKey?: strin
 export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
   const featureErr = await requireFeatureFromRequest(req, "courses", session)
   if (featureErr) return featureErr
-  if (!canViewCampStructure(session)) {
-    return Response.json({ error: "FORBIDDEN", need: "courses.tab.camp" }, { status: 403 })
+  if (!canReadCampSchedule(session)) {
+    return Response.json(
+      { error: "FORBIDDEN", need: "courses.tab.camp or courses.tab.attendance.students" },
+      { status: 403 },
+    )
   }
   const [tenant, tenantErr] = await requireTenant(req)
   if (tenantErr) return tenantErr
