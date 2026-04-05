@@ -11,7 +11,9 @@ import { hasFullAccessRole } from "@/lib/permissions"
 
 interface TeacherDashboardAggregate {
   totalAttendanceHours: number
-  totalSalaryExpenses: number
+  totalOwedToTeachers: number
+  monthlyPaidToTeachers: number
+  totalPaidViaExpenses: number
 }
 
 interface DashboardStats {
@@ -100,9 +102,12 @@ export default function DashboardPage() {
         .then(([statsData, teachersPayload]) => {
           if (statsData) setStats(statsData)
           if (teachersPayload?.aggregate) {
+            const agg = teachersPayload.aggregate
             setTeacherAggregate({
-              totalAttendanceHours: Number(teachersPayload.aggregate.totalAttendanceHours ?? 0),
-              totalSalaryExpenses: Number(teachersPayload.aggregate.totalSalaryExpenses ?? 0),
+              totalAttendanceHours: Number(agg.totalAttendanceHours ?? 0),
+              totalOwedToTeachers: Number(agg.totalOwedToTeachers ?? 0),
+              monthlyPaidToTeachers: Number(agg.monthlyPaidToTeachers ?? 0),
+              totalPaidViaExpenses: Number(agg.totalPaidViaExpenses ?? 0),
             })
           } else {
             setTeacherAggregate(null)
@@ -232,10 +237,22 @@ export default function DashboardPage() {
           <Card className="border-rose-200 bg-gradient-to-br from-rose-50 to-orange-50 p-4 dark:border-rose-900 dark:from-rose-950/40 dark:to-orange-950/30 sm:p-5">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0 flex-1 text-right">
-                <p className="text-sm font-medium text-rose-700 dark:text-rose-300">סה״כ ישולם משכורות (הוצאות)</p>
+                <p className="text-sm font-medium text-rose-700 dark:text-rose-300">יתרה לתשלום למורים (סה״כ)</p>
                 <p className="mt-1 text-2xl font-bold tabular-nums text-rose-900 dark:text-rose-100 sm:text-3xl">
                   {teacherAggregate != null
-                    ? `₪${Math.round(teacherAggregate.totalSalaryExpenses).toLocaleString("he-IL")}`
+                    ? `₪${Math.round(teacherAggregate.totalOwedToTeachers).toLocaleString("he-IL")}`
+                    : "—"}
+                </p>
+                <p className="mt-1 text-xs text-rose-800/80 dark:text-rose-200/80">
+                  שולם החודש (הוצאות):{" "}
+                  {teacherAggregate != null
+                    ? `₪${Math.round(teacherAggregate.monthlyPaidToTeachers).toLocaleString("he-IL")}`
+                    : "—"}
+                </p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  שולם מצטבר (רשום בהוצאות):{" "}
+                  {teacherAggregate != null
+                    ? `₪${Math.round(teacherAggregate.totalPaidViaExpenses).toLocaleString("he-IL")}`
                     : "—"}
                 </p>
               </div>

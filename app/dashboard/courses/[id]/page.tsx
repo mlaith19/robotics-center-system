@@ -194,6 +194,7 @@ export default function CourseViewPage() {
   const canTabAttendanceTeachers = isAdmin || hasPermission(userPerms, "courses.tab.attendance.teachers")
   const canTabSessionsFeedback = isAdmin || hasPermission(userPerms, "courses.tab.feedback") || hasPermission(userPerms, "courses.tab.attendance.students")
   const canTabDebtors = canTabPayments
+  const canSeeCourseFinancial = isAdmin || hasPermission(userPerms, "courses.financial")
   const isCampCourse = !!(course && isCampCourseType(course.courseType))
   const canTabCamp = isCampCourse && (isAdmin || hasPermission(userPerms, "courses.tab.camp"))
   const [centerName, setCenterName] = useState("")
@@ -754,10 +755,12 @@ export default function CourseViewPage() {
                   <span className="text-muted-foreground">{tr.totalStudents}:</span>
                   <span className="font-bold text-2xl text-blue-600">{enrollments.length}</span>
                 </div>
-                <div className="mt-3 flex flex-col gap-1 text-right sm:flex-row sm:flex-row-reverse sm:items-center sm:justify-between sm:gap-0">
-                  <span className="break-words text-sm text-muted-foreground sm:text-base">עלות משוערת אחרי הנחות אחים:</span>
-                  <span className="shrink-0 font-bold text-xl text-emerald-600">₪{expectedTotalByEnrollments.toLocaleString()}</span>
-                </div>
+                {canSeeCourseFinancial && (
+                  <div className="mt-3 flex flex-col gap-1 text-right sm:flex-row sm:flex-row-reverse sm:items-center sm:justify-between sm:gap-0">
+                    <span className="break-words text-sm text-muted-foreground sm:text-base">עלות משוערת אחרי הנחות אחים:</span>
+                    <span className="shrink-0 font-bold text-xl text-emerald-600">₪{expectedTotalByEnrollments.toLocaleString()}</span>
+                  </div>
+                )}
               </CardContent>
             </Card>
 

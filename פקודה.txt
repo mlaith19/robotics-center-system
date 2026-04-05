@@ -1,0 +1,21 @@
+סיימנו 🎉 הכל תקין עכשיו.
+
+מהפלט שלך:
+
+https://ml-systems.net מחזיר HTTP/2 307 -> /login ✅
+https://think.ml-systems.net מחזיר HTTP/2 307 -> /login ✅
+זה אומר:
+
+SSL תקין גם לדומיין הראשי וגם לתת-דומיין
+Nginx מפנה נכון לאפליקציה
+הפרויקט באוויר
+מה נשאר לעשות עכשיו (רק תפעולי)
+להתחבר עם משתמש תקין לכל מרכז.
+במאסטר להקים מרכזים חדשים — עכשיו DNS כבר wildcard אז זה יעבוד יותר חלק.
+לשמור לך פקודת deploy קבועה:
+cd /var/www/robotics-center && git pull && docker compose -f docker-compose.production.yml up -d --build
+אם תרצה, בצעד הבא אכין לך:
+
+deploy.sh מוכן
+backup.sh ל-DB
+ופקודת health-check אחת שבודקת גם main וגם subdomain.

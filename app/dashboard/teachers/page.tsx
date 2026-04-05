@@ -48,7 +48,9 @@ type Teacher = {
 
 type TeachersAggregate = {
   totalAttendanceHours: number
-  totalSalaryExpenses: number
+  totalOwedToTeachers: number
+  monthlyPaidToTeachers: number
+  totalPaidViaExpenses: number
 }
 
 export default function TeachersPage() {
@@ -89,7 +91,9 @@ export default function TeachersPage() {
         setTeachers(data.teachers ?? [])
         setAggregate({
           totalAttendanceHours: Number(data.aggregate.totalAttendanceHours ?? 0),
-          totalSalaryExpenses: Number(data.aggregate.totalSalaryExpenses ?? 0),
+          totalOwedToTeachers: Number(data.aggregate.totalOwedToTeachers ?? 0),
+          monthlyPaidToTeachers: Number(data.aggregate.monthlyPaidToTeachers ?? 0),
+          totalPaidViaExpenses: Number(data.aggregate.totalPaidViaExpenses ?? 0),
         })
       } else if (Array.isArray(data)) {
         setTeachers(data)
@@ -265,14 +269,22 @@ export default function TeachersPage() {
               </div>
             </div>
           </div>
-          <div className="flex min-w-[140px] flex-1 items-center gap-2 rounded-xl border border-rose-200 bg-gradient-to-br from-rose-50 to-orange-50 px-3 py-2.5 shadow-sm sm:min-w-[180px] sm:px-4 sm:py-3 dark:border-rose-900 dark:from-rose-950/40 dark:to-orange-950/30">
+          <div className="flex min-w-[200px] flex-1 items-start gap-2 rounded-xl border border-rose-200 bg-gradient-to-br from-rose-50 to-orange-50 px-3 py-2.5 shadow-sm sm:min-w-[220px] sm:px-4 sm:py-3 dark:border-rose-900 dark:from-rose-950/40 dark:to-orange-950/30">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-rose-500/20 sm:h-10 sm:w-10">
               <Wallet className="h-4 w-4 text-rose-700 dark:text-rose-300 sm:h-5 sm:w-5" />
             </div>
             <div className="min-w-0 text-right">
-              <div className="text-[11px] font-medium text-rose-800/90 dark:text-rose-200/90 sm:text-xs">סה״כ ישולם משכורות (הוצאות)</div>
+              <div className="text-[11px] font-medium text-rose-800/90 dark:text-rose-200/90 sm:text-xs">יתרה לתשלום למורים (סה״כ)</div>
               <div className="text-lg font-bold tabular-nums text-rose-900 dark:text-rose-100 sm:text-xl">
-                {loading ? "…" : aggregate != null ? `₪${Math.round(aggregate.totalSalaryExpenses).toLocaleString("he-IL")}` : "—"}
+                {loading ? "…" : aggregate != null ? `₪${Math.round(aggregate.totalOwedToTeachers).toLocaleString("he-IL")}` : "—"}
+              </div>
+              <div className="mt-0.5 text-[10px] text-rose-900/75 dark:text-rose-100/80 sm:text-[11px]">
+                חודש נוכחי (הוצאות):{" "}
+                {loading ? "…" : aggregate != null ? `₪${Math.round(aggregate.monthlyPaidToTeachers).toLocaleString("he-IL")}` : "—"}
+              </div>
+              <div className="text-[10px] text-muted-foreground sm:text-[11px]">
+                מצטבר (הוצאות):{" "}
+                {loading ? "…" : aggregate != null ? `₪${Math.round(aggregate.totalPaidViaExpenses).toLocaleString("he-IL")}` : "—"}
               </div>
             </div>
           </div>

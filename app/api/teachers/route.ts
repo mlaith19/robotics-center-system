@@ -15,7 +15,7 @@ export const GET = withTenantAuth(async (req, session) => {
   const withAggregate = searchParams.get("aggregate") === "1"
   try {
     await ensureTeacherTariffTables(db)
-    const [teachers, expenses, attendances, enrollments, tariffLinks] = await Promise.all([
+    const [teachers, expenses, attendances, enrollments, tariffLinks, monthlyTeacherPayRow] = await Promise.all([
       db`SELECT * FROM "Teacher" ORDER BY "createdAt" DESC`,
       db`SELECT "teacherId", SUM(amount) as total_paid FROM "Expense" WHERE "teacherId" IS NOT NULL GROUP BY "teacherId"`,
       db`
@@ -28,6 +28,13 @@ export const GET = withTenantAuth(async (req, session) => {
       db`
         SELECT ctt."courseId", ctt."teacherId", ctt."tariffProfileId"
         FROM "CourseTeacherTariff" ctt
+      `,
+      db`
+        SELECT COALESCE(SUM(amount::numeric), 0) AS "monthlyPaid"
+        FROM "Expense"
+        WHERE "teacherId" IS NOT NULL
+          AND date >= date_trunc('month', CURRENT_TIMESTAMP)
+          AND date < date_trunc('month', CURRENT_TIMESTAMP) + interval '1 month'
       `,
     ])
 
@@ -90,9 +97,11 @@ export const GET = withTenantAuth(async (req, session) => {
       owedMap.set(teacherId, owed)
     })
 
+    let totalOwedToTeachers = 0
     const out = (teachers as any[]).map((t) => {
       const totalPaid = paidMap.get(String(t.id)) || 0
       const totalOwed = owedMap.get(String(t.id)) || 0
+      totalOwedToTeachers += Math.max(0, Number(totalOwed) - Number(totalPaid))
       return {
         ...t,
         totalPaid,
@@ -101,12 +110,18 @@ export const GET = withTenantAuth(async (req, session) => {
       }
     })
     if (withAggregate) {
-      const totalSalaryExpenses = [...paidMap.values()].reduce((sum, v) => sum + Number(v || 0), 0)
+      const totalPaidViaExpenses = [...paidMap.values()].reduce((sum, v) => sum + Number(v || 0), 0)
+      const monthlyPaidToTeachers = Number((monthlyTeacherPayRow as { monthlyPaid?: string | number }[])[0]?.monthlyPaid ?? 0)
       return Response.json({
         teachers: out,
         aggregate: {
           totalAttendanceHours: Math.round(totalAttendanceHoursAll * 10) / 10,
-          totalSalaryExpenses,
+          /** סכום הוצאות ששויכו למורה (לא תמיד מלא אם לא נרשמו הוצאות) */
+          totalPaidViaExpenses,
+          /** סה״כ יתרה לתשלום — כמו סכום max(0, חוב־שולם) לכל מורה (לפי נוכחות ותעריף) */
+          totalOwedToTeachers: Math.round(totalOwedToTeachers * 100) / 100,
+          /** תשלומים למורים שנרשמו כהוצאה בחודש הקלנדרי הנוכחי */
+          monthlyPaidToTeachers: Math.round(monthlyPaidToTeachers * 100) / 100,
         },
       })
     }
