@@ -1,6 +1,7 @@
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
 import { getPermissionsForRole } from "@/lib/permissions"
+import { ensureStudentRegistrationInterestColumn } from "@/lib/student-registration-interest"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -24,6 +25,7 @@ export const POST = withTenantAuth(async (req, _session, { params }: Ctx) => {
   const { id: studentId } = await params
 
   try {
+    await ensureStudentRegistrationInterestColumn(db)
     const body = await req.json().catch(() => ({}))
     const requestedCourseId = typeof body.courseId === "string" ? body.courseId : null
 
@@ -60,10 +62,15 @@ export const POST = withTenantAuth(async (req, _session, { params }: Ctx) => {
       `
     }
 
+    const mergedCourseIds = [...new Set([...courseIds, courseId])]
+
     const now = new Date().toISOString()
     await db`
       UPDATE "Student"
-      SET status = 'פעיל', "updatedAt" = ${now}
+      SET status = 'פעיל',
+          "courseIds" = ${JSON.stringify(mergedCourseIds)}::jsonb,
+          "registrationInterest" = NULL,
+          "updatedAt" = ${now}
       WHERE id = ${studentId}
     `
 

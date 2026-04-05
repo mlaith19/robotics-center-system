@@ -1,11 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import useSWR from "swr"
 import { arrayFetcher } from "@/lib/swr-fetcher"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { getCourseStatusPresentation } from "@/lib/course-status"
 import {
   Dialog,
   DialogContent,
@@ -42,9 +44,37 @@ interface Teacher {
   createdAt: string
 }
 
+const DAYS_HE: Record<string, string> = {
+  sunday: "ראשון",
+  monday: "שני",
+  tuesday: "שלישי",
+  wednesday: "רביעי",
+  thursday: "חמישי",
+  friday: "שישי",
+  saturday: "שבת",
+}
+
+function formatCourseDaysList(days?: string[] | null): string {
+  if (!days?.length) return "—"
+  return days.map((d) => DAYS_HE[d.toLowerCase()] || d).join(", ")
+}
+
+function formatCourseTimeRange(start?: string | null, end?: string | null): string {
+  const s = start != null ? String(start).trim() : ""
+  const e = end != null ? String(end).trim() : ""
+  if (s && e) return `${s}–${e}`
+  return s || e || "—"
+}
+
 interface Course {
   id: string
   name: string
+  status?: string | null
+  endDate?: string | null
+  weekdays?: string[]
+  daysOfWeek?: string[]
+  startTime?: string | null
+  endTime?: string | null
 }
 
 export default function RegistrationPage() {
@@ -53,6 +83,8 @@ export default function RegistrationPage() {
   const [copiedType, setCopiedType] = useState<RegistrationType | null>(null)
   const [baseUrl, setBaseUrl] = useState("")
   const [approvingId, setApprovingId] = useState<string | null>(null)
+  /** תלמיד ללא קורס בקישור – בחירת קורס לפני אישור */
+  const [studentApproveCourseId, setStudentApproveCourseId] = useState<Record<string, string>>({})
   const { toast } = useToast()
   const router = useRouter()
 
@@ -83,6 +115,19 @@ export default function RegistrationPage() {
   const teachers = Array.isArray(rawTeachers) ? rawTeachers : []
   const courses = Array.isArray(rawCourses) ? rawCourses : []
   const courseMap = new Map(courses.map((c) => [c.id, c.name]))
+
+  const openCoursesForApprove = useMemo(() => {
+    return courses.filter((c) => {
+      const key = getCourseStatusPresentation({ status: c.status, endDate: c.endDate }).key
+      return key !== "completed" && key !== "inactive"
+    })
+  }, [courses])
+
+  const courseOptionLabel = (c: Course) => {
+    const dow = formatCourseDaysList(c.weekdays ?? c.daysOfWeek)
+    const times = formatCourseTimeRange(c.startTime, c.endTime)
+    return `${c.name} · ${dow} · ${times}`
+  }
 
   const parseCourseIds = (value: Student["courseIds"]): string[] => {
     if (Array.isArray(value)) return value.map((v) => String(v))
@@ -192,10 +237,13 @@ export default function RegistrationPage() {
 
   const handleApprove = async (registration: { id: string; type: RegistrationType; courseId: string | null; name: string }) => {
     const isStudent = registration.type === "student"
-    if (isStudent && !registration.courseId) {
+    const courseIdToSend = isStudent
+      ? registration.courseId || studentApproveCourseId[registration.id] || null
+      : null
+    if (isStudent && !courseIdToSend) {
       toast({
-        title: "לא ניתן לאשר",
-        description: "לא נמצא קורס משויך לרישום הזה",
+        title: "בחר קורס",
+        description: "יש לבחור קורס מהרשימה (שם, ימים ושעות) לפני אישור הרישום",
         variant: "destructive",
       })
       return
@@ -207,7 +255,7 @@ export default function RegistrationPage() {
       const res = await fetch(approveUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(isStudent ? { courseId: registration.courseId } : {}),
+        body: JSON.stringify(isStudent ? { courseId: courseIdToSend } : {}),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -370,13 +418,36 @@ export default function RegistrationPage() {
                       </div>
                       <div>
                         <span className="block text-xs opacity-80">קורס</span>
-                        <span className="text-foreground">
-                          {registration.type === "student"
-                            ? registration.courseId
-                              ? courseMap.get(registration.courseId) || "קורס לא נמצא"
-                              : "לא נבחר"
-                            : "—"}
-                        </span>
+                        {registration.type === "student" ? (
+                          registration.courseId ? (
+                            <span className="text-foreground">
+                              {courseMap.get(registration.courseId) || "קורס לא נמצא"}
+                            </span>
+                          ) : openCoursesForApprove.length === 0 ? (
+                            <span className="text-sm text-amber-700">אין קורסים פתוחים – צור קורס פעיל לפני אישור</span>
+                          ) : (
+                            <Select
+                              dir="rtl"
+                              value={studentApproveCourseId[registration.id] || undefined}
+                              onValueChange={(v) =>
+                                setStudentApproveCourseId((prev) => ({ ...prev, [registration.id]: v }))
+                              }
+                            >
+                              <SelectTrigger size="sm" className="mt-1 h-auto min-h-9 w-full whitespace-normal text-right py-2">
+                                <SelectValue placeholder="בחר קורס (שם · ימים · שעות)" />
+                              </SelectTrigger>
+                              <SelectContent dir="rtl" className="max-h-[min(280px,50dvh)]">
+                                {openCoursesForApprove.map((c) => (
+                                  <SelectItem key={c.id} value={c.id} className="whitespace-normal text-right">
+                                    {courseOptionLabel(c)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )
+                        ) : (
+                          <span className="text-foreground">—</span>
+                        )}
                       </div>
                       {registration.type === "student" && (
                         <div className="min-w-0">
@@ -403,7 +474,12 @@ export default function RegistrationPage() {
                       <Button
                         size="sm"
                         className="min-w-[7rem] flex-1 gap-1"
-                        disabled={approvingId === registration.id}
+                        disabled={
+                          approvingId === registration.id ||
+                          (registration.type === "student" &&
+                            !registration.courseId &&
+                            (openCoursesForApprove.length === 0 || !studentApproveCourseId[registration.id]))
+                        }
                         onClick={() => handleApprove(registration)}
                       >
                         {approvingId === registration.id ? (
@@ -420,7 +496,7 @@ export default function RegistrationPage() {
             )}
           </div>
           <div className="hidden md:block">
-          <Table className="min-w-[720px]">
+          <Table className="min-w-[960px]">
             <TableHeader>
               <TableRow>
                 <TableHead className="text-right">שם</TableHead>
@@ -463,10 +539,35 @@ export default function RegistrationPage() {
                         {registration.status}
                       </span>
                     </TableCell>
-                    <TableCell>
-                      {registration.type === "student"
-                        ? (registration.courseId ? (courseMap.get(registration.courseId) || "קורס לא נמצא") : "לא נבחר")
-                        : "-"}
+                    <TableCell className="min-w-[220px] max-w-[340px] align-top">
+                      {registration.type === "student" ? (
+                        registration.courseId ? (
+                          <span>{courseMap.get(registration.courseId) || "קורס לא נמצא"}</span>
+                        ) : openCoursesForApprove.length === 0 ? (
+                          <span className="text-sm text-amber-700">אין קורסים פתוחים</span>
+                        ) : (
+                          <Select
+                            dir="rtl"
+                            value={studentApproveCourseId[registration.id] || undefined}
+                            onValueChange={(v) =>
+                              setStudentApproveCourseId((prev) => ({ ...prev, [registration.id]: v }))
+                            }
+                          >
+                            <SelectTrigger size="sm" className="h-auto min-h-9 w-full max-w-[320px] whitespace-normal text-right py-2">
+                              <SelectValue placeholder="בחר קורס" />
+                            </SelectTrigger>
+                            <SelectContent dir="rtl" className="max-h-[min(320px,50dvh)]">
+                              {openCoursesForApprove.map((c) => (
+                                <SelectItem key={c.id} value={c.id} className="whitespace-normal text-right">
+                                  {courseOptionLabel(c)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )
+                      ) : (
+                        "—"
+                      )}
                     </TableCell>
                     <TableCell className="max-w-[200px] align-top">
                       {registration.type === "student"
@@ -487,7 +588,12 @@ export default function RegistrationPage() {
                         <Button
                           size="sm"
                           className="gap-1"
-                          disabled={approvingId === registration.id}
+                          disabled={
+                            approvingId === registration.id ||
+                            (registration.type === "student" &&
+                              !registration.courseId &&
+                              (openCoursesForApprove.length === 0 || !studentApproveCourseId[registration.id]))
+                          }
                           onClick={() => handleApprove(registration)}
                         >
                           {approvingId === registration.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
