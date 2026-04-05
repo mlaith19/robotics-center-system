@@ -11,6 +11,9 @@ import {
   loadCampMeetingDetailForSessionDate,
   resyncCampTeacherAttendanceForCourseDate,
   teacherCoversCampGroupOnMeeting,
+  teacherTeachesCellForStudentGroup,
+  ensureAttendanceCampColumns,
+  findCampMeetingCell,
 } from "@/lib/camp-attendance"
 import { ensureAttendanceHourKindColumn } from "@/lib/teacher-attendance-hour-kind"
 import { enrichTeacherAttendanceRowsWithRates } from "@/lib/teacher-tariff-profiles"
@@ -31,6 +34,7 @@ export const GET = withTenantAuth(async (req, _session) => {
   const studentId = searchParams.get("studentId")
   const teacherId = searchParams.get("teacherId")
   const date      = searchParams.get("date")
+  const campMeetingCellIdGet = (searchParams.get("campMeetingCellId") || "").trim()
 
   const runQuery = async (dbClient: ReturnType<typeof postgres>, withUserJoin: boolean) => {
     if (teacherId) {
@@ -102,6 +106,17 @@ export const GET = withTenantAuth(async (req, _session) => {
     }
     if (courseId && date) {
       if (withUserJoin) {
+        if (campMeetingCellIdGet) {
+          return dbClient`
+            SELECT a.*, c.name as "courseName", c.duration as "courseDuration", u.name as "createdByUserName"
+            FROM "Attendance" a
+            LEFT JOIN "Course" c ON a."courseId" = c.id
+            LEFT JOIN "User" u ON a."createdByUserId" = u.id
+            WHERE a."courseId" = ${courseId} AND a."date" = ${date}
+              AND a."campMeetingCellId" = ${campMeetingCellIdGet}
+            ORDER BY a."date" DESC, a."createdAt" DESC
+          `
+        }
         return dbClient`
           SELECT a.*, c.name as "courseName", c.duration as "courseDuration", u.name as "createdByUserName"
           FROM "Attendance" a
@@ -110,6 +125,17 @@ export const GET = withTenantAuth(async (req, _session) => {
           WHERE a."courseId" = ${courseId} AND a."date" = ${date}
           ORDER BY a."date" DESC, a."createdAt" DESC
         `
+      }
+      if (campMeetingCellIdGet) {
+        const rows = await dbClient`
+          SELECT a.*, c.name as "courseName", c.duration as "courseDuration"
+          FROM "Attendance" a
+          LEFT JOIN "Course" c ON a."courseId" = c.id
+          WHERE a."courseId" = ${courseId} AND a."date" = ${date}
+            AND a."campMeetingCellId" = ${campMeetingCellIdGet}
+          ORDER BY a."date" DESC, a."createdAt" DESC
+        `
+        return rows.map((r: any) => ({ ...r, createdByUserName: null }))
       }
       const rows = await dbClient`
         SELECT a.*, c.name as "courseName", c.duration as "courseDuration"
@@ -219,6 +245,7 @@ export const GET = withTenantAuth(async (req, _session) => {
   }
 
   try {
+    await ensureAttendanceCampColumns(db)
     if (teacherId) await ensureAttendanceHourKindColumn(db)
     let result = (await runQuery(db, true)) as Record<string, unknown>[]
     if (teacherId && Array.isArray(result)) {
@@ -247,9 +274,13 @@ export const POST = withTenantAuth(async (req, session) => {
   if (tenantErr) return tenantErr
   const db = tenant.db
   try {
+    await ensureAttendanceCampColumns(db)
     await ensureAttendanceHourKindColumn(db)
     const body = await req.json()
     const { studentId, teacherId, courseId, date, status, notes, note, hours } = body
+    const rawCampCell = (body as Record<string, unknown>).campMeetingCellId
+    const campMeetingCellId =
+      typeof rawCampCell === "string" && rawCampCell.trim() ? rawCampCell.trim() : null
     const hourKindStored: string | null =
       teacherId && !studentId && String((body as Record<string, unknown>).hourKind || "").toLowerCase() === "office"
         ? "office"
@@ -313,12 +344,80 @@ export const POST = withTenantAuth(async (req, session) => {
     const isCampCourse =
       !!courseRowForCamp && isCampCourseType(String(courseRowForCamp.courseType || ""))
 
+    const meetingForCamp =
+      studentId && courseId && isCampCourse && dateYmd
+        ? await loadCampMeetingDetailForSessionDate(db, courseId, dateYmd)
+        : null
+
+    let groupLabelForCamp: string | null = null
+    if (studentId && courseId && isCampCourse) {
+      const enr = await db`
+        SELECT "campGroupLabel" FROM "Enrollment" WHERE "studentId" = ${studentId} AND "courseId" = ${courseId} LIMIT 1
+      `
+      groupLabelForCamp = (enr[0] as { campGroupLabel?: string | null } | undefined)?.campGroupLabel ?? null
+    }
+
+    if (studentId && courseId && isCampCourse) {
+      if (!isAdmin) {
+        const myTeacherId = await getTeacherIdForUserId(db, session.id)
+        if (!myTeacherId) {
+          return Response.json(
+            {
+              error: "בקורס קייטנה רק מורה משובץ בלוח המפגשים יכול לרשום נוכחות",
+              code: "attendance.camp.teacher_only",
+            },
+            { status: 403 },
+          )
+        }
+        if (!meetingForCamp) {
+          return Response.json(
+            {
+              error: "אין מערכת מפגשים לתאריך זה — לא ניתן לרשום נוכחות",
+              code: "attendance.camp.no_meeting",
+            },
+            { status: 400 },
+          )
+        }
+        if (!campMeetingCellId) {
+          return Response.json(
+            {
+              error: "יש לבחור שיעור במערכת הקייטנה (טאב לפי שעה) לפני רישום נוכחות",
+              code: "attendance.camp.cell_required",
+            },
+            { status: 400 },
+          )
+        }
+        if (!teacherTeachesCellForStudentGroup(meetingForCamp, campMeetingCellId, myTeacherId, groupLabelForCamp)) {
+          return Response.json(
+            {
+              error: "אין שיבוץ שלך לתא/קבוצת התלמיד במפגש זה",
+              code: "attendance.camp.not_assigned",
+            },
+            { status: 403 },
+          )
+        }
+      } else if (campMeetingCellId && meetingForCamp) {
+        if (!findCampMeetingCell(meetingForCamp, campMeetingCellId)) {
+          return Response.json({ error: "תא שיעור לא נמצא במפגש זה" }, { status: 400 })
+        }
+      }
+    }
+
     let existing: { id: string; createdByUserId?: string | null }[] = []
     if (studentId) {
-      existing = (await db`
-        SELECT id, "createdByUserId" FROM "Attendance" 
-        WHERE "studentId" = ${studentId} AND "courseId" = ${courseId} AND "date" = ${date}
-      `) as { id: string; createdByUserId?: string | null }[]
+      if (campMeetingCellId) {
+        existing = (await db`
+          SELECT id, "createdByUserId" FROM "Attendance" 
+          WHERE "studentId" = ${studentId} AND "courseId" = ${courseId} AND "date" = ${date}
+            AND "campMeetingCellId" = ${campMeetingCellId}
+        `) as { id: string; createdByUserId?: string | null }[]
+      } else {
+        existing = (await db`
+          SELECT id, "createdByUserId" FROM "Attendance" 
+          WHERE "studentId" = ${studentId} AND "courseId" = ${courseId} AND "date" = ${date}
+            AND "campMeetingCellId" IS NULL
+        `) as { id: string; createdByUserId?: string | null }[]
+      }
     } else if (courseId) {
       existing = (await db`
         SELECT id, "createdByUserId" FROM "Attendance" 
@@ -331,55 +430,16 @@ export const POST = withTenantAuth(async (req, session) => {
       `) as { id: string; createdByUserId?: string | null }[]
     }
 
-    if (studentId && courseId && isCampCourse) {
-      const meeting = dateYmd ? await loadCampMeetingDetailForSessionDate(db, courseId, dateYmd) : null
-      const enr = await db`
-        SELECT "campGroupLabel" FROM "Enrollment" WHERE "studentId" = ${studentId} AND "courseId" = ${courseId} LIMIT 1
-      `
-      const groupLabel = (enr[0] as { campGroupLabel?: string | null } | undefined)?.campGroupLabel ?? null
-
-      if (!isAdmin) {
-        const myTeacherId = await getTeacherIdForUserId(db, session.id)
-        if (!myTeacherId) {
-          return Response.json(
-            {
-              error: "בקורס קייטנה רק מורה משובץ בלוח המפגשים יכול לרשום נוכחות",
-              code: "attendance.camp.teacher_only",
-            },
-            { status: 403 },
-          )
-        }
-        if (!meeting) {
-          return Response.json(
-            {
-              error: "אין מערכת מפגשים לתאריך זה — לא ניתן לרשום נוכחות",
-              code: "attendance.camp.no_meeting",
-            },
-            { status: 400 },
-          )
-        }
-        if (!teacherCoversCampGroupOnMeeting(meeting, myTeacherId, groupLabel)) {
-          return Response.json(
-            {
-              error: "אין שיבוץ שלך לקבוצת התלמיד במפגש זה",
-              code: "attendance.camp.not_assigned",
-            },
-            { status: 403 },
-          )
-        }
-      }
-
-      if (!isAdmin && existing.length > 0) {
-        const firstCreator = existing[0].createdByUserId
-        if (firstCreator && firstCreator !== session.id) {
-          return Response.json(
-            {
-              error: "רק המורה שרשם את הנוכחות לתלמיד זה יכול לעדכן",
-              code: "attendance.camp.locked_creator",
-            },
-            { status: 403 },
-          )
-        }
+    if (studentId && courseId && isCampCourse && !campMeetingCellId && !isAdmin && existing.length > 0) {
+      const firstCreator = existing[0].createdByUserId
+      if (firstCreator && firstCreator !== session.id) {
+        return Response.json(
+          {
+            error: "רק המורה שרשם את הנוכחות לתלמיד זה יכול לעדכן",
+            code: "attendance.camp.locked_creator",
+          },
+          { status: 403 },
+        )
       }
     }
 
@@ -407,8 +467,17 @@ export const POST = withTenantAuth(async (req, session) => {
 
     const insertCreatorUserId = studentId ? session.id : createdByUserId
     const result = await db`
-      INSERT INTO "Attendance" (id, "studentId", "teacherId", "courseId", date, status, notes, hours, "hourKind", "createdByUserId", "createdAt")
-      VALUES (${id}, ${studentId || null}, ${teacherId || null}, ${courseId || null}, ${date}, ${status}, ${noteValue}, ${hours || null}, ${hourKindStored}, ${insertCreatorUserId}, ${now})
+      INSERT INTO "Attendance" (
+        id, "studentId", "teacherId", "courseId", date, status, notes, hours, "hourKind",
+        "campMeetingCellId", "campLessonTitle", "campSlotStart", "campSlotEnd",
+        "createdByUserId", "createdAt"
+      )
+      VALUES (
+        ${id}, ${studentId || null}, ${teacherId || null}, ${courseId || null}, ${date}, ${status}, ${noteValue},
+        ${hours || null}, ${hourKindStored},
+        ${campMeetingCellId}, null, null, null,
+        ${insertCreatorUserId}, ${now}
+      )
       RETURNING *
     `
     const saved = result[0]
@@ -496,12 +565,15 @@ export const DELETE = withTenantAuth(async (req, _session) => {
       return Response.json({ success: true })
     }
     if (studentId && courseId && date) {
+      await ensureAttendanceCampColumns(db)
       const dateYmd = extractAttendanceDateYmd(date)
       const camp = await courseIsCampType(db, courseId)
-      if (camp && !isAdmin) {
+      const cellDel = (searchParams.get("campMeetingCellId") || "").trim()
+      if (camp && !isAdmin && !cellDel) {
         const row = await db`
           SELECT "createdByUserId" FROM "Attendance"
           WHERE "studentId" = ${studentId} AND "courseId" = ${courseId} AND "date" = ${date}
+            AND "campMeetingCellId" IS NULL
           LIMIT 1
         `
         const creator = (row[0] as { createdByUserId?: string | null } | undefined)?.createdByUserId
@@ -512,7 +584,19 @@ export const DELETE = withTenantAuth(async (req, _session) => {
           )
         }
       }
-      await db`DELETE FROM "Attendance" WHERE "studentId" = ${studentId} AND "courseId" = ${courseId} AND "date" = ${date}`
+      if (cellDel) {
+        await db`
+          DELETE FROM "Attendance"
+          WHERE "studentId" = ${studentId} AND "courseId" = ${courseId} AND "date" = ${date}
+            AND "campMeetingCellId" = ${cellDel}
+        `
+      } else {
+        await db`
+          DELETE FROM "Attendance"
+          WHERE "studentId" = ${studentId} AND "courseId" = ${courseId} AND "date" = ${date}
+            AND "campMeetingCellId" IS NULL
+        `
+      }
       if (camp && dateYmd) {
         const now = new Date().toISOString()
         await resyncCampTeacherAttendanceForCourseDate(db, courseId, dateYmd, now)

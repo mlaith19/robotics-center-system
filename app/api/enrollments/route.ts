@@ -8,6 +8,7 @@ import {
   getTeacherIdForUserId,
   loadCampMeetingDetailForSessionDate,
   teacherCoversCampGroupOnMeeting,
+  findCampMeetingCell,
 } from "@/lib/camp-attendance"
 
 function isMissingColumnError(e: unknown): boolean {
@@ -39,6 +40,7 @@ export const GET = withTenantAuth(async (req, session) => {
   const courseId  = searchParams.get("courseId")
   const studentId = searchParams.get("studentId")
   const forCampAttendanceDate = searchParams.get("forCampAttendanceDate")
+  const forCampMeetingCellId = (searchParams.get("forCampMeetingCellId") || "").trim()
 
   const runWithUserJoin = async () => {
     if (courseId && studentId) {
@@ -153,13 +155,26 @@ export const GET = withTenantAuth(async (req, session) => {
         if (tid) {
           const meeting = await loadCampMeetingDetailForSessionDate(db, courseId, forCampAttendanceDate)
           if (meeting) {
-            finalRows = finalRows.filter((e) =>
-              teacherCoversCampGroupOnMeeting(
-                meeting,
-                tid,
-                (e as { campGroupLabel?: string | null }).campGroupLabel,
-              ),
-            )
+            if (forCampMeetingCellId) {
+              const found = findCampMeetingCell(meeting, forCampMeetingCellId)
+              if (!found || !found.cell.teacherIds.includes(tid)) {
+                finalRows = []
+              } else {
+                const labels = new Set(found.cell.groupLabels.map((x) => String(x || "").trim()).filter(Boolean))
+                finalRows = finalRows.filter((e) => {
+                  const g = String((e as { campGroupLabel?: string | null }).campGroupLabel ?? "").trim()
+                  return g && labels.has(g)
+                })
+              }
+            } else {
+              finalRows = finalRows.filter((e) =>
+                teacherCoversCampGroupOnMeeting(
+                  meeting,
+                  tid,
+                  (e as { campGroupLabel?: string | null }).campGroupLabel,
+                ),
+              )
+            }
           }
         }
       }

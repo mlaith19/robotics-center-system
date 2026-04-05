@@ -111,6 +111,49 @@ function formatCourseSessionDateOption(ymd: string, locale: "he" | "en" | "ar"):
   return `${cal} · ${dayName}`
 }
 
+function attendanceSlotTimeDisplay(raw: unknown): string {
+  const s = String(raw ?? "").trim()
+  if (!s) return "—"
+  const hm = /^(\d{1,2}):(\d{2})/.exec(s)
+  if (hm) {
+    const h = hm[1]!.padStart(2, "0")
+    return `${h}:${hm[2]}`
+  }
+  const d = new Date(s)
+  if (!Number.isNaN(d.getTime())) {
+    return new Intl.DateTimeFormat("he-IL", { hour: "2-digit", minute: "2-digit", hour12: false }).format(d)
+  }
+  return "—"
+}
+
+function attendanceHoursFromSlots(
+  hours: unknown,
+  slotStart: unknown,
+  slotEnd: unknown,
+  courseStart: string | null | undefined,
+  courseEnd: string | null | undefined,
+): string {
+  if (hours != null && hours !== "") {
+    const n = Number(hours)
+    if (!Number.isNaN(n) && n >= 0) return n.toFixed(1)
+  }
+  const parseHM = (t: string) => {
+    const m = /^(\d{2}):(\d{2})$/.exec(t)
+    return m ? Number(m[1]) + Number(m[2]) / 60 : 0
+  }
+  let sd = attendanceSlotTimeDisplay(slotStart)
+  let ed = attendanceSlotTimeDisplay(slotEnd)
+  if (sd === "—" || ed === "—") {
+    sd = courseTimeToDisplayValue(courseStart) || "—"
+    ed = courseTimeToDisplayValue(courseEnd) || "—"
+  }
+  if (sd !== "—" && ed !== "—") {
+    const total = Math.max(0, parseHM(ed) - parseHM(sd))
+    return total > 0 ? total.toFixed(1) : "—"
+  }
+  return "—"
+}
+
 import { useCurrentUser } from "@/lib/auth-context"
 import { hasPermission, hasFullAccessRole, canDeleteTeacherAttendanceRecord } from "@/lib/permissions"
 import { getCourseStatusPresentation } from "@/lib/course-status"
@@ -175,6 +218,13 @@ export default function CourseViewPage() {
     paymentInfoPlaceholder: locale === "ar" ? "سيتم عرض معلومات التكلفة والمدفوعات هنا" : locale === "en" ? "Cost and payment details will be shown here" : "פרטי עלות ותשלומים יוצגו כאן",
     studentAttendanceTitle: locale === "ar" ? "حضور الطلاب في الدورة" : locale === "en" ? "Course Student Attendance" : "נוכחות תלמידים בקורס",
     teacherAttendanceTitle: locale === "ar" ? "حضور المعلمين في الدورة" : locale === "en" ? "Course Teacher Attendance" : "נוכחות מורים בקורס",
+    campLessonCol: locale === "ar" ? "الدرس" : locale === "en" ? "Lesson" : "שיעור",
+    campNoTeacherSlots:
+      locale === "ar"
+        ? "لا يوجد حصص مخصصة لك في جدول المخيم لهذا التاريخ."
+        : locale === "en"
+          ? "No camp slots are assigned to you on this date."
+          : "אין שיבוץ שלך בלוח המפגשים לתאריך זה.",
     date: locale === "ar" ? "التاريخ" : locale === "en" ? "Date" : "תאריך",
     note: locale === "ar" ? "ملاحظة" : locale === "en" ? "Note" : "הערה",
     attendanceStatus: locale === "ar" ? "حالة الحضور" : locale === "en" ? "Attendance Status" : "סטטוס נוכחות",
@@ -240,7 +290,22 @@ export default function CourseViewPage() {
   const canTabCampGroups = isCampCourse && !isStudentUser && canTabStudents
   const [centerName, setCenterName] = useState("")
   const [centerLogo, setCenterLogo] = useState("")
-  const [attendanceList, setAttendanceList] = useState<{ id: string; studentId: string | null; teacherId: string | null; date: string; status: string; notes?: string | null; createdByUserName?: string | null }[]>([])
+  const [attendanceList, setAttendanceList] = useState<
+    {
+      id: string
+      studentId: string | null
+      teacherId: string | null
+      date: string
+      status: string
+      notes?: string | null
+      createdByUserName?: string | null
+      campMeetingCellId?: string | null
+      campLessonTitle?: string | null
+      campSlotStart?: string | null
+      campSlotEnd?: string | null
+      hours?: number | string | null
+    }[]
+  >([])
   const [attendanceDate, setAttendanceDate] = useState(() => new Date().toISOString().split("T")[0])
   const [attendanceByStudent, setAttendanceByStudent] = useState<Record<string, string>>({})
   const [savingByStudent, setSavingByStudent] = useState<Record<string, boolean>>({})
@@ -262,6 +327,9 @@ export default function CourseViewPage() {
   const [paymentsForCourse, setPaymentsForCourse] = useState<CoursePaymentRow[]>([])
   /** רשימת תלמידים מסוננת לפי שיבוץ מורה בקייטנה (טאב נוכחות בלבד) */
   const [campAttendanceEnrollments, setCampAttendanceEnrollments] = useState<Enrollment[] | null>(null)
+  const [myTeacherId, setMyTeacherId] = useState<string | null>(null)
+  const [campScheduleMeetings, setCampScheduleMeetings] = useState<Array<Record<string, unknown>>>([])
+  const [selectedCampCellId, setSelectedCampCellId] = useState("")
   const campGroups = HEBREW_GROUP_LETTERS
 
   const campGroupTabsData = useMemo(() => {
@@ -311,6 +379,84 @@ export default function CourseViewPage() {
     if (allowedAttendanceDates.length === 0) return attendanceDate
     return allowedAttendanceDates.includes(attendanceDate) ? attendanceDate : allowedAttendanceDates[0]
   }, [allowedAttendanceDates.join("|"), attendanceDate])
+
+  const campMeetingForSelectedDate = useMemo(() => {
+    if (!attendanceDateForApi) return null
+    const hit = campScheduleMeetings.find(
+      (row) => String((row as { sessionDate?: string }).sessionDate || "").slice(0, 10) === attendanceDateForApi,
+    )
+    return hit ?? null
+  }, [campScheduleMeetings, attendanceDateForApi])
+
+  const teacherCampCells = useMemo(() => {
+    if (!campMeetingForSelectedDate || !myTeacherId || !course) return [] as { cellId: string; label: string }[]
+    const out: { cellId: string; label: string }[] = []
+    const slots = Array.isArray((campMeetingForSelectedDate as { slots?: unknown[] }).slots)
+      ? ((campMeetingForSelectedDate as { slots: unknown[] }).slots as Array<{
+          isBreak?: boolean
+          startTime?: string
+          endTime?: string
+          cells?: Array<{ id?: string; lessonTitle?: string; teacherIds?: string[] }>
+        }>)
+      : []
+    for (const slot of slots) {
+      if (slot.isBreak) continue
+      const st = String(slot.startTime || "").slice(0, 5)
+      const et = String(slot.endTime || "").slice(0, 5)
+      for (const cell of Array.isArray(slot.cells) ? slot.cells : []) {
+        const tids = Array.isArray(cell.teacherIds) ? cell.teacherIds.map((x) => String(x)) : []
+        if (!tids.includes(myTeacherId)) continue
+        const lesson = String(cell.lessonTitle || course.name || "שיעור").trim()
+        out.push({ cellId: String(cell.id || ""), label: `${lesson} · ${st}–${et}` })
+      }
+    }
+    return out.filter((c) => c.cellId)
+  }, [campMeetingForSelectedDate, myTeacherId, course])
+
+  const teacherCampAttendanceMode = Boolean(
+    isCampCourse && !isAdmin && !!myTeacherId && teacherCampCells.length > 0,
+  )
+
+  const teacherCampDayNoSlots = Boolean(
+    isCampCourse &&
+      !isAdmin &&
+      !!myTeacherId &&
+      !!campMeetingForSelectedDate &&
+      teacherCampCells.length === 0 &&
+      canTabAttendanceStudents,
+  )
+
+  useEffect(() => {
+    if (teacherCampCells.length === 0) {
+      setSelectedCampCellId("")
+      return
+    }
+    setSelectedCampCellId((prev) =>
+      teacherCampCells.some((c) => c.cellId === prev) ? prev : teacherCampCells[0]!.cellId,
+    )
+  }, [teacherCampCells])
+
+  useEffect(() => {
+    if (isAdmin || !currentUser?.id) {
+      setMyTeacherId(null)
+      return
+    }
+    fetch(`/api/teachers/by-user/${currentUser.id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setMyTeacherId(d?.id ? String(d.id) : null))
+      .catch(() => setMyTeacherId(null))
+  }, [isAdmin, currentUser?.id])
+
+  useEffect(() => {
+    if (!isCampCourse || !id) {
+      setCampScheduleMeetings([])
+      return
+    }
+    fetch(`/api/courses/${id}/camp`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setCampScheduleMeetings(Array.isArray(d?.meetings) ? d.meetings : []))
+      .catch(() => setCampScheduleMeetings([]))
+  }, [id, isCampCourse])
 
   const enrollmentsForAttendanceTab = useMemo(
     () => campAttendanceEnrollments ?? enrollments,
@@ -366,10 +512,21 @@ export default function CourseViewPage() {
       setCampAttendanceEnrollments(null)
       return
     }
+    if (teacherCampDayNoSlots) {
+      setCampAttendanceEnrollments([])
+      return
+    }
+    if (teacherCampAttendanceMode && !selectedCampCellId) {
+      setCampAttendanceEnrollments([])
+      return
+    }
     let cancelled = false
     ;(async () => {
       try {
-        const url = `/api/enrollments?courseId=${id}&forCampAttendanceDate=${encodeURIComponent(attendanceDateForApi)}`
+        let url = `/api/enrollments?courseId=${id}&forCampAttendanceDate=${encodeURIComponent(attendanceDateForApi)}`
+        if (teacherCampAttendanceMode && selectedCampCellId) {
+          url += `&forCampMeetingCellId=${encodeURIComponent(selectedCampCellId)}`
+        }
         const res = await fetch(url)
         if (cancelled) return
         if (res.ok) {
@@ -385,7 +542,17 @@ export default function CourseViewPage() {
     return () => {
       cancelled = true
     }
-  }, [id, course?.id, isCampCourse, isAdmin, canTabAttendanceStudents, attendanceDateForApi])
+  }, [
+    id,
+    course?.id,
+    isCampCourse,
+    isAdmin,
+    canTabAttendanceStudents,
+    attendanceDateForApi,
+    teacherCampAttendanceMode,
+    teacherCampDayNoSlots,
+    selectedCampCellId,
+  ])
 
   useEffect(() => {
     if ((!canTabAttendanceStudents && !canTabAttendanceTeachers) || !id) return
@@ -397,8 +564,16 @@ export default function CourseViewPage() {
 
   useEffect(() => {
     if (!canTabAttendanceStudents || !id || !attendanceDateForApi) return
-    fetch(`/api/attendance?courseId=${id}&date=${attendanceDateForApi}`)
-      .then((res) => res.ok ? res.json() : [])
+    if (teacherCampAttendanceMode && !selectedCampCellId) {
+      setAttendanceByStudent({})
+      return
+    }
+    let url = `/api/attendance?courseId=${id}&date=${attendanceDateForApi}`
+    if (teacherCampAttendanceMode && selectedCampCellId) {
+      url += `&campMeetingCellId=${encodeURIComponent(selectedCampCellId)}`
+    }
+    fetch(url)
+      .then((res) => (res.ok ? res.json() : []))
       .then((rows) => {
         const next: Record<string, string> = {}
         ;(Array.isArray(rows) ? rows : []).forEach((r: any) => {
@@ -407,7 +582,13 @@ export default function CourseViewPage() {
         setAttendanceByStudent(next)
       })
       .catch(() => setAttendanceByStudent({}))
-  }, [id, attendanceDateForApi, canTabAttendanceStudents])
+  }, [
+    id,
+    attendanceDateForApi,
+    canTabAttendanceStudents,
+    teacherCampAttendanceMode,
+    selectedCampCellId,
+  ])
 
   async function loadCoursePayments() {
     if (!canTabPayments) return
@@ -536,15 +717,19 @@ export default function CourseViewPage() {
     setAttendanceByStudent((p) => ({ ...p, [studentId]: status }))
     setSavingByStudent((p) => ({ ...p, [studentId]: true }))
     try {
+      const body: Record<string, unknown> = {
+        studentId,
+        courseId: id,
+        date: attendanceDateForApi,
+        status,
+      }
+      if (teacherCampAttendanceMode && selectedCampCellId) {
+        body.campMeetingCellId = selectedCampCellId
+      }
       const res = await fetch("/api/attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          studentId,
-          courseId: id,
-          date: attendanceDateForApi,
-          status,
-        }),
+        body: JSON.stringify(body),
       })
       if (!res.ok) {
         const errBody = await res.json().catch(() => null)
@@ -1579,6 +1764,10 @@ export default function CourseViewPage() {
                       if (!w) return
                       const logoHtml = centerLogo ? `<img src="${centerLogo}" style="max-height:60px;max-width:160px;object-fit:contain" />` : ""
                       const dateStr = new Date(attendanceDateForApi).toLocaleDateString(localeTag)
+                      const slotLine =
+                        teacherCampAttendanceMode && selectedCampCellId
+                          ? teacherCampCells.find((c) => c.cellId === selectedCampCellId)?.label || ""
+                          : ""
                       w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>רשימת נוכחות - ${course?.name || ""}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -1596,7 +1785,10 @@ tr:nth-child(even) td{background:#f9fafb}
 .status-vacation{color:#1e40af;font-weight:600}
 @media print{body{padding:20px 28px;max-width:100%}@page{margin:20mm 15mm}}
 </style></head><body>`)
-                      w.document.write(`<div class="header">${logoHtml}<h1>${centerName || "מרכז"}</h1>${course?.name ? `<h2 style="font-size:17px;color:#1f2937;font-weight:600;margin-top:4px">${course.name}</h2>` : ""}<h2>רשימת נוכחות - ${dateStr}</h2></div>`)
+                      const slotEsc = slotLine
+                        ? slotLine.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                        : ""
+                      w.document.write(`<div class="header">${logoHtml}<h1>${centerName || "מרכז"}</h1>${course?.name ? `<h2 style="font-size:17px;color:#1f2937;font-weight:600;margin-top:4px">${course.name}</h2>` : ""}<h2>רשימת נוכחות - ${dateStr}</h2>${slotEsc ? `<p style="margin-top:8px;font-size:14px;color:#374151">${slotEsc}</p>` : ""}</div>`)
                       w.document.write(`<table><thead><tr><th>#</th><th>שם תלמיד</th><th>קבוצה</th><th>סטטוס</th><th>חתימה</th></tr></thead><tbody>`)
                       enrollmentsForAttendanceTab.forEach((e, idx) => {
                         const st = attendanceByStudent[e.studentId] || ""
@@ -1614,6 +1806,31 @@ tr:nth-child(even) td{background:#f9fafb}
                   </Button>
                 </div>
               </div>
+              {teacherCampAttendanceMode && teacherCampCells.length > 0 ? (
+                <div className="mt-3 flex w-full flex-wrap gap-2 border-t border-border/60 pt-3">
+                  {teacherCampCells.map((c) => (
+                    <Button
+                      key={c.cellId}
+                      type="button"
+                      size="sm"
+                      variant={selectedCampCellId === c.cellId ? "default" : "outline"}
+                      className={
+                        selectedCampCellId === c.cellId
+                          ? "bg-purple-600 text-white hover:bg-purple-700"
+                          : "border-purple-200"
+                      }
+                      onClick={() => setSelectedCampCellId(c.cellId)}
+                    >
+                      {c.label}
+                    </Button>
+                  ))}
+                </div>
+              ) : null}
+              {teacherCampDayNoSlots ? (
+                <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  {tr.campNoTeacherSlots}
+                </p>
+              ) : null}
             </CardHeader>
             <CardContent>
               {(() => {
@@ -1669,7 +1886,7 @@ tr:nth-child(even) td{background:#f9fafb}
                     )) : (
                       <TableRow>
                         <TableCell className="text-center text-muted-foreground" colSpan={2}>
-                          {tr.noLinkedStudents}
+                          {teacherCampDayNoSlots ? tr.campNoTeacherSlots : tr.noLinkedStudents}
                         </TableCell>
                       </TableRow>
                     )}
@@ -1680,7 +1897,13 @@ tr:nth-child(even) td{background:#f9fafb}
                 const scopeIds = new Set(enrollmentsForAttendanceTab.map((e) => e.studentId))
                 const studentAttendance =
                   isCampCourse && !isAdmin
-                    ? attendanceList.filter((a) => a.studentId != null && scopeIds.has(String(a.studentId)))
+                    ? attendanceList.filter((a) => {
+                        if (a.studentId == null || !scopeIds.has(String(a.studentId))) return false
+                        if (teacherCampAttendanceMode && selectedCampCellId) {
+                          return String(a.campMeetingCellId || "") === selectedCampCellId
+                        }
+                        return true
+                      })
                     : attendanceList.filter((a) => a.studentId != null)
                 return studentAttendance.length > 0 ? (
                   <div className="overflow-x-auto rounded-md border">
@@ -1741,19 +1964,22 @@ tr:nth-child(even) td{background:#f9fafb}
                     const w = window.open("", "_blank")
                     if (!w) return
                     const logoHtml = centerLogo ? `<img src="${centerLogo}" style="max-height:60px;max-width:160px;object-fit:contain" />` : ""
-                    const startDisp = courseTimeToDisplayValue(course?.startTime) || "—"
-                    const endDisp = courseTimeToDisplayValue(course?.endTime) || "—"
-                    const parseHM = (t: string) => { const m = /^(\d{2}):(\d{2})$/.exec(t); return m ? Number(m[1]) + Number(m[2]) / 60 : 0 }
-                    const totalH = startDisp !== "—" && endDisp !== "—" ? Math.max(0, parseHM(endDisp) - parseHM(startDisp)) : 0
                     w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>נוכחות מורים - ${course?.name || ""}</title>
 <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;padding:32px 40px;color:#1f2937;max-width:900px;margin:0 auto}.header{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:20px;padding-bottom:12px;border-bottom:2px solid #3b82f6}.header h1{font-size:22px;color:#1e40af;margin-top:6px}.header h2{font-size:15px;color:#4b5563;font-weight:400;margin-top:2px}table{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px}th{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:8px 10px;text-align:center;font-weight:600}td{border:1px solid #d1d5db;padding:8px 10px;text-align:center;vertical-align:middle}tr:nth-child(even) td{background:#f9fafb}.status-present{color:#166534;font-weight:600}.status-absent{color:#991b1b;font-weight:600}@media print{body{padding:20px 28px;max-width:100%}@page{margin:20mm 15mm}}</style></head><body>`)
                     w.document.write(`<div class="header">${logoHtml}<h1>${centerName || "מרכז"}</h1>${course?.name ? `<h2 style="font-size:17px;color:#1f2937;font-weight:600;margin-top:4px">${course.name}</h2>` : ""}<h2>נוכחות מורים</h2></div>`)
-                    w.document.write(`<table><thead><tr><th>#</th><th>תאריך</th><th>מורה</th><th>משעה</th><th>עד שעה</th><th>סה"כ שעות</th><th>סטטוס</th><th>הערה</th></tr></thead><tbody>`)
+                    w.document.write(`<table><thead><tr><th>#</th><th>תאריך</th><th>מורה</th><th>שיעור</th><th>משעה</th><th>עד שעה</th><th>סה"כ שעות</th><th>סטטוס</th><th>הערה</th></tr></thead><tbody>`)
                     teacherAtt.forEach((a, idx) => {
                       const teacher = teachers.find((t) => t.id === a.teacherId)
                       const statusLabel = a.status === "present" || a.status === "PRESENT" ? "נוכח" : a.status === "absent" || a.status === "ABSENT" ? "חיסור" : a.status
                       const cls = a.status === "present" || a.status === "PRESENT" ? "status-present" : "status-absent"
-                      w.document.write(`<tr><td>${idx + 1}</td><td>${new Date(a.date).toLocaleDateString("he-IL")}</td><td>${teacher?.name || "—"}</td><td>${startDisp}</td><td>${endDisp}</td><td>${totalH > 0 ? totalH.toFixed(1) : "—"}</td><td class="${cls}">${statusLabel}</td><td>${a.notes || "—"}</td></tr>`)
+                      const rs = attendanceSlotTimeDisplay(a.campSlotStart)
+                      const re = attendanceSlotTimeDisplay(a.campSlotEnd)
+                      const useCrs = rs === "—" || re === "—"
+                      const startDisp = useCrs ? courseTimeToDisplayValue(course?.startTime) || "—" : rs
+                      const endDisp = useCrs ? courseTimeToDisplayValue(course?.endTime) || "—" : re
+                      const totalH = attendanceHoursFromSlots(a.hours, a.campSlotStart, a.campSlotEnd, course?.startTime, course?.endTime)
+                      const lessonEsc = String(a.campLessonTitle || "—").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                      w.document.write(`<tr><td>${idx + 1}</td><td>${new Date(a.date).toLocaleDateString("he-IL")}</td><td>${teacher?.name || "—"}</td><td>${lessonEsc}</td><td>${startDisp}</td><td>${endDisp}</td><td>${totalH}</td><td class="${cls}">${statusLabel}</td><td>${(a.notes || "—").replace(/&/g, "&amp;").replace(/</g, "&lt;")}</td></tr>`)
                     })
                     w.document.write(`</tbody></table></body></html>`)
                     w.document.close()
@@ -1770,11 +1996,12 @@ tr:nth-child(even) td{background:#f9fafb}
                 const teacherAttendance = attendanceList.filter((a) => a.teacherId != null)
                 return teacherAttendance.length > 0 ? (
                   <div className="overflow-x-auto rounded-md border">
-                    <Table className="min-w-[720px]">
+                    <Table className="min-w-[880px]">
                       <TableHeader>
                         <TableRow className="bg-muted/50">
                           <TableHead className="text-right">{tr.date}</TableHead>
                           <TableHead className="text-right">{tr.teachers}</TableHead>
+                          <TableHead className="text-right">{tr.campLessonCol}</TableHead>
                           <TableHead className="text-center">משעה</TableHead>
                           <TableHead className="text-center">עד שעה</TableHead>
                           <TableHead className="text-center">סה&quot;כ שעות</TableHead>
@@ -1788,22 +2015,32 @@ tr:nth-child(even) td{background:#f9fafb}
                       </TableHeader>
                       <TableBody>
                         {(() => {
-                          const startDisp = courseTimeToDisplayValue(course?.startTime) || "—"
-                          const endDisp = courseTimeToDisplayValue(course?.endTime) || "—"
-                          const parseHM = (t: string) => { const m = /^(\d{2}):(\d{2})$/.exec(t); return m ? Number(m[1]) + Number(m[2]) / 60 : 0 }
-                          const totalH = startDisp !== "—" && endDisp !== "—" ? Math.max(0, parseHM(endDisp) - parseHM(startDisp)) : 0
                           return teacherAttendance.map((a) => {
                             const teacher = teachers.find((t) => t.id === a.teacherId)
                             const teacherName = teacher?.name ?? "—"
                             const statusLabel = a.status === "present" || a.status === "PRESENT" ? tr.present : a.status === "absent" || a.status === "ABSENT" ? tr.absent : a.status
                             const busy = deletingTeacherAttendanceId === a.id
+                            const rs = attendanceSlotTimeDisplay(a.campSlotStart)
+                            const re = attendanceSlotTimeDisplay(a.campSlotEnd)
+                            const useCrs = rs === "—" || re === "—"
+                            const startDisp = useCrs ? courseTimeToDisplayValue(course?.startTime) || "—" : rs
+                            const endDisp = useCrs ? courseTimeToDisplayValue(course?.endTime) || "—" : re
+                            const hoursDisp = attendanceHoursFromSlots(
+                              a.hours,
+                              a.campSlotStart,
+                              a.campSlotEnd,
+                              course?.startTime,
+                              course?.endTime,
+                            )
+                            const lessonDisp = String(a.campLessonTitle || "").trim() || "—"
                             return (
                               <TableRow key={a.id}>
                                 <TableCell className="text-right">{new Date(a.date).toLocaleDateString(localeTag)}</TableCell>
                                 <TableCell className="text-right">{teacherName}</TableCell>
+                                <TableCell className="text-right text-muted-foreground">{lessonDisp}</TableCell>
                                 <TableCell className="text-center">{startDisp}</TableCell>
                                 <TableCell className="text-center">{endDisp}</TableCell>
-                                <TableCell className="text-center font-medium">{totalH > 0 ? totalH.toFixed(1) : "—"}</TableCell>
+                                <TableCell className="text-center font-medium">{hoursDisp}</TableCell>
                                 <TableCell className="text-right">{statusLabel}</TableCell>
                                 <TableCell className="text-right text-muted-foreground">{a.notes ?? "—"}</TableCell>
                                 <TableCell className="text-right text-muted-foreground">{a.createdByUserName || "—"}</TableCell>

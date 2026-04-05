@@ -59,6 +59,47 @@ export function teacherCoversCampGroupOnMeeting(
   return false
 }
 
+/** מורה משובץ לתא ספציפי והתלמיד בקבוצה שמלומדת בתא */
+export function findCampMeetingCell(
+  meeting: CampMeetingDetail,
+  cellId: string
+): { cell: CampMeetingSlotDetail["cells"][number]; slot: CampMeetingSlotDetail } | null {
+  for (const slot of meeting.slots) {
+    for (const cell of slot.cells) {
+      if (cell.id === cellId) return { cell, slot }
+    }
+  }
+  return null
+}
+
+export function teacherTeachesCellForStudentGroup(
+  meeting: CampMeetingDetail,
+  cellId: string,
+  teacherId: string,
+  campGroupLabel: string | null | undefined
+): boolean {
+  const found = findCampMeetingCell(meeting, cellId)
+  if (!found) return false
+  const g = normGroupLabel(campGroupLabel)
+  if (!g) return false
+  if (!found.cell.teacherIds.includes(teacherId)) return false
+  return found.cell.groupLabels.some((x) => normGroupLabel(x) === g)
+}
+
+export async function ensureAttendanceCampColumns(db: ReturnType<typeof postgres>) {
+  const safe = async (q: Promise<unknown>) => {
+    try {
+      await q
+    } catch (e) {
+      console.warn("[camp-attendance] ensure column:", e)
+    }
+  }
+  await safe(db`ALTER TABLE "Attendance" ADD COLUMN IF NOT EXISTS "campMeetingCellId" TEXT`)
+  await safe(db`ALTER TABLE "Attendance" ADD COLUMN IF NOT EXISTS "campLessonTitle" TEXT`)
+  await safe(db`ALTER TABLE "Attendance" ADD COLUMN IF NOT EXISTS "campSlotStart" TEXT`)
+  await safe(db`ALTER TABLE "Attendance" ADD COLUMN IF NOT EXISTS "campSlotEnd" TEXT`)
+}
+
 /** סיכום שעות הוראה ליום מפגש לפי משבצות שבהן המורה משובץ (לא כולל הפסקות) */
 export function computeCampTeacherDayHoursFromMeeting(meeting: CampMeetingDetail, teacherId: string): number {
   const countedSlots = new Set<string>()
@@ -153,32 +194,9 @@ export async function getTeacherIdForUserId(
   return rows.length ? String((rows[0] as { id: string }).id) : null
 }
 
-async function teacherHasMarkedAssignedCampStudent(
-  db: ReturnType<typeof postgres>,
-  courseId: string,
-  dateYmd: string,
-  teacherUserId: string,
-  meeting: CampMeetingDetail,
-  teacherId: string
-): Promise<boolean> {
-  const rows = await db`
-    SELECT e."campGroupLabel"
-    FROM "Attendance" a
-    INNER JOIN "Enrollment" e ON e."studentId" = a."studentId" AND e."courseId" = a."courseId"
-    WHERE a."courseId" = ${courseId}
-      AND a."date" = ${dateYmd}
-      AND a."studentId" IS NOT NULL
-      AND a."createdByUserId" = ${teacherUserId}
-  `
-  for (const r of rows as { campGroupLabel?: string | null }[]) {
-    if (teacherCoversCampGroupOnMeeting(meeting, teacherId, r.campGroupLabel)) return true
-  }
-  return false
-}
-
 /**
- * מסנכרן נוכחות מורים לקורס קייטנה לפי לוח המפגשים: שעות רק אם המורה רשם נוכחות לתלמידים
- * בקבוצות שהוא משובץ אליהן באותו יום.
+ * נוכחות מורה בקייטנה — שורה לכל תא שיעור: שעות אם אותו מורה רשם נוכחות לתלמיד באותו תא.
+ * (שני מורים באותו תא — לכל אחד שורה נפרדת לפי רישום שלו.)
  */
 export async function resyncCampTeacherAttendanceForCourseDate(
   db: ReturnType<typeof postgres>,
@@ -191,9 +209,95 @@ export async function resyncCampTeacherAttendanceForCourseDate(
   const courseType = String((crs[0] as { courseType?: string }).courseType || "")
   if (!isCampCourseType(courseType)) return
 
-  const meeting = await loadCampMeetingDetailForSessionDate(db, courseId, dateYmd)
-  const teacherIdsInSchedule = meeting ? collectTeacherIdsFromCampMeeting(meeting) : new Set<string>()
+  await ensureAttendanceCampColumns(db)
 
+  const meeting = await loadCampMeetingDetailForSessionDate(db, courseId, dateYmd)
+  const presentStatus = "נוכח"
+
+  const hasCellStudentMarks =
+    (
+      await db`
+    SELECT 1 FROM "Attendance"
+    WHERE "courseId" = ${courseId} AND "date" = ${dateYmd}
+      AND "studentId" IS NOT NULL AND "campMeetingCellId" IS NOT NULL
+    LIMIT 1
+  `
+    ).length > 0
+
+  if (meeting && hasCellStudentMarks) {
+    for (const slot of meeting.slots) {
+      if (slot.isBreak) continue
+      const hours = slotDurationHours(slot.startTime, slot.endTime)
+      const st = String(slot.startTime || "").trim().slice(0, 5)
+      const et = String(slot.endTime || "").trim().slice(0, 5)
+      for (const cell of slot.cells) {
+        for (const tid of cell.teacherIds) {
+          if (!tid) continue
+          const trows = await db`SELECT "userId" FROM "Teacher" WHERE id = ${tid} LIMIT 1`
+          const uid = (trows[0] as { userId?: string | null } | undefined)?.userId
+          let shouldHave = false
+          if (uid && typeof uid === "string") {
+            const marked = await db`
+              SELECT 1 FROM "Attendance" a
+              WHERE a."courseId" = ${courseId} AND a."date" = ${dateYmd}
+                AND a."campMeetingCellId" = ${cell.id}
+                AND a."studentId" IS NOT NULL
+                AND a."createdByUserId" = ${uid}
+              LIMIT 1
+            `
+            shouldHave = marked.length > 0
+          }
+
+          const existing = await db`
+            SELECT id FROM "Attendance"
+            WHERE "teacherId" = ${tid} AND "courseId" = ${courseId} AND "date" = ${dateYmd}
+              AND "campMeetingCellId" = ${cell.id}
+          `
+          const lessonTitle = String(cell.lessonTitle || "").trim()
+
+          if (shouldHave && hours > 0) {
+            if (existing.length > 0) {
+              await db`
+                UPDATE "Attendance"
+                SET status = ${presentStatus},
+                    hours = ${hours},
+                    notes = null,
+                    "hourKind" = null,
+                    "campLessonTitle" = ${lessonTitle || null},
+                    "campSlotStart" = ${st || null},
+                    "campSlotEnd" = ${et || null}
+                WHERE id = ${(existing[0] as { id: string }).id}
+              `
+            } else {
+              await db`
+                INSERT INTO "Attendance" (
+                  id, "studentId", "teacherId", "courseId", date, status, notes, hours, "hourKind",
+                  "campMeetingCellId", "campLessonTitle", "campSlotStart", "campSlotEnd",
+                  "createdByUserId", "createdAt"
+                )
+                VALUES (
+                  ${crypto.randomUUID()}, null, ${tid}, ${courseId}, ${dateYmd}, ${presentStatus},
+                  null, ${hours}, null, ${cell.id}, ${lessonTitle || null}, ${st || null}, ${et || null},
+                  null, ${nowIso}
+                )
+              `
+            }
+          } else if (existing.length > 0) {
+            await db`DELETE FROM "Attendance" WHERE id = ${(existing[0] as { id: string }).id}`
+          }
+        }
+      }
+    }
+    await db`
+      DELETE FROM "Attendance"
+      WHERE "courseId" = ${courseId} AND "date" = ${dateYmd}
+        AND "teacherId" IS NOT NULL AND "campMeetingCellId" IS NULL
+    `
+    return
+  }
+
+  /** מצב ישן: נוכחות תלמיד ליום בלי תא — שורת מורה אחת ליום */
+  const teacherIdsInSchedule = meeting ? collectTeacherIdsFromCampMeeting(meeting) : new Set<string>()
   const existingTeacherRows = await db`
     SELECT DISTINCT "teacherId" FROM "Attendance"
     WHERE "courseId" = ${courseId} AND "date" = ${dateYmd} AND "teacherId" IS NOT NULL
@@ -203,7 +307,26 @@ export async function resyncCampTeacherAttendanceForCourseDate(
     if (r.teacherId) allTeacherIds.add(String(r.teacherId))
   }
 
-  const presentStatus = "נוכח"
+  async function teacherHasMarkedAssignedCampStudent(
+    teacherUserId: string,
+    meet: CampMeetingDetail,
+    teacherId: string
+  ): Promise<boolean> {
+    const rows = await db`
+      SELECT e."campGroupLabel"
+      FROM "Attendance" a
+      INNER JOIN "Enrollment" e ON e."studentId" = a."studentId" AND e."courseId" = a."courseId"
+      WHERE a."courseId" = ${courseId}
+        AND a."date" = ${dateYmd}
+        AND a."studentId" IS NOT NULL
+        AND a."createdByUserId" = ${teacherUserId}
+        AND a."campMeetingCellId" IS NULL
+    `
+    for (const row of rows as { campGroupLabel?: string | null }[]) {
+      if (teacherCoversCampGroupOnMeeting(meet, teacherId, row.campGroupLabel)) return true
+    }
+    return false
+  }
 
   for (const tid of allTeacherIds) {
     let hours = 0
@@ -211,7 +334,7 @@ export async function resyncCampTeacherAttendanceForCourseDate(
       const trows = await db`SELECT "userId" FROM "Teacher" WHERE id = ${tid} LIMIT 1`
       const uid = (trows[0] as { userId?: string | null } | undefined)?.userId
       if (uid && typeof uid === "string") {
-        const marked = await teacherHasMarkedAssignedCampStudent(db, courseId, dateYmd, uid, meeting, tid)
+        const marked = await teacherHasMarkedAssignedCampStudent(uid, meeting, tid)
         if (marked) hours = computeCampTeacherDayHoursFromMeeting(meeting, tid)
       }
     }
@@ -219,6 +342,7 @@ export async function resyncCampTeacherAttendanceForCourseDate(
     const existing = await db`
       SELECT id FROM "Attendance"
       WHERE "teacherId" = ${tid} AND "courseId" = ${courseId} AND "date" = ${dateYmd}
+        AND "campMeetingCellId" IS NULL
     `
 
     if (hours > 0) {
