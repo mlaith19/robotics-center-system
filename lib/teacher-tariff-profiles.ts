@@ -1,4 +1,8 @@
 import type { Sql } from "postgres"
+import {
+  normalizeTeacherAttendanceHourKind,
+  type TeacherAttendanceHourKind,
+} from "@/lib/teacher-attendance-hour-kind"
 import { normalizeStudentTierRates, resolveTeacherHourlyRate } from "@/lib/teacher-pricing"
 
 export type TeacherTariffProfileRow = {
@@ -9,6 +13,7 @@ export type TeacherTariffProfileRow = {
   centerHourlyRate: number | null
   travelRate: number | null
   externalCourseRate: number | null
+  officeHourlyRate: number | null
   studentTierRates: unknown
   bonusEnabled: boolean
   bonusMinStudents: number | null
@@ -58,6 +63,13 @@ export async function ensureTeacherTariffTables(sql: Sql) {
       )
     `,
   )
+  await safe(
+    "TeacherTariffProfile officeHourlyRate",
+    sql`
+      ALTER TABLE "TeacherTariffProfile"
+      ADD COLUMN IF NOT EXISTS "officeHourlyRate" DOUBLE PRECISION
+    `,
+  )
 }
 
 export function normalizeTariffProfilePayload(body: Record<string, unknown>) {
@@ -67,6 +79,7 @@ export function normalizeTariffProfilePayload(body: Record<string, unknown>) {
   const centerHourlyRate = body.centerHourlyRate != null && body.centerHourlyRate !== "" ? Number(body.centerHourlyRate) : null
   const travelRate = body.travelRate != null && body.travelRate !== "" ? Number(body.travelRate) : null
   const externalCourseRate = body.externalCourseRate != null && body.externalCourseRate !== "" ? Number(body.externalCourseRate) : null
+  const officeHourlyRate = body.officeHourlyRate != null && body.officeHourlyRate !== "" ? Number(body.officeHourlyRate) : null
   const studentTierRates = normalizeStudentTierRates(body.studentTierRates)
   const bonusEnabled = body.bonusEnabled === true
   const bonusMinStudents =
@@ -80,6 +93,7 @@ export function normalizeTariffProfilePayload(body: Record<string, unknown>) {
     centerHourlyRate,
     travelRate,
     externalCourseRate,
+    officeHourlyRate,
     studentTierRates,
     bonusEnabled,
     bonusMinStudents,
@@ -92,7 +106,9 @@ export function rowToTariffResolveArgs(row: Record<string, unknown>) {
   return {
     pricingMethod: (row.pricingMethod as "standard" | "per_student_tier") || "standard",
     centerHourlyRate: row.centerHourlyRate != null ? Number(row.centerHourlyRate) : 0,
+    travelRate: row.travelRate != null ? Number(row.travelRate) : null,
     externalCourseRate: row.externalCourseRate != null ? Number(row.externalCourseRate) : 0,
+    officeHourlyRate: row.officeHourlyRate != null ? Number(row.officeHourlyRate) : null,
     studentTierRates: normalizeStudentTierRates(row.studentTierRates),
     bonusEnabled: row.bonusEnabled === true,
     bonusMinStudents: row.bonusMinStudents != null ? Number(row.bonusMinStudents) : null,
@@ -104,12 +120,14 @@ export function resolveHourlyRateFromTariffProfileRow(
   profileRow: Record<string, unknown>,
   location: string | null,
   enrollmentCount: number,
+  hourKind?: TeacherAttendanceHourKind | null,
 ): number {
   const args = rowToTariffResolveArgs(profileRow)
   return resolveTeacherHourlyRate({
     ...args,
     location,
     enrollmentCount,
+    hourKind: hourKind ?? "teaching",
   })
 }
 
@@ -119,20 +137,30 @@ export function resolveHourlyRateForAttendance(params: {
   teacherRow: Record<string, unknown>
   location: string | null
   enrollmentCount: number
+  hourKind?: TeacherAttendanceHourKind | null
 }): number {
+  const hourKind = params.hourKind === "office" ? "office" : "teaching"
   if (params.tariffProfileRow) {
-    return resolveHourlyRateFromTariffProfileRow(params.tariffProfileRow, params.location, params.enrollmentCount)
+    return resolveHourlyRateFromTariffProfileRow(
+      params.tariffProfileRow,
+      params.location,
+      params.enrollmentCount,
+      hourKind,
+    )
   }
   return resolveTeacherHourlyRate({
     pricingMethod: (params.teacherRow.pricingMethod as "standard" | "per_student_tier") || "standard",
     centerHourlyRate: Number(params.teacherRow.centerHourlyRate || 0),
+    travelRate: params.teacherRow.travelRate != null ? Number(params.teacherRow.travelRate) : null,
     externalCourseRate: Number(params.teacherRow.externalCourseRate || 0),
+    officeHourlyRate: params.teacherRow.officeHourlyRate != null ? Number(params.teacherRow.officeHourlyRate) : null,
     studentTierRates: normalizeStudentTierRates(params.teacherRow.studentTierRates),
     bonusEnabled: params.teacherRow.bonusEnabled === true,
     bonusMinStudents: params.teacherRow.bonusMinStudents != null ? Number(params.teacherRow.bonusMinStudents) : null,
     bonusPerHour: params.teacherRow.bonusPerHour != null ? Number(params.teacherRow.bonusPerHour) : 0,
     location: params.location,
     enrollmentCount: params.enrollmentCount,
+    hourKind,
   })
 }
 
@@ -172,6 +200,68 @@ export async function syncCourseTeacherTariffs(
     `
   }
   return { ok: true }
+}
+
+/** מחשב תעריף לשעה לכל רשומת נוכחות מורה (לדוחות ודף מורה) */
+export async function enrichTeacherAttendanceRowsWithRates(
+  sql: Sql,
+  teacherId: string,
+  rows: Record<string, unknown>[],
+): Promise<Record<string, unknown>[]> {
+  await ensureTeacherTariffTables(sql)
+  const teacherRows = await sql`SELECT * FROM "Teacher" WHERE id = ${teacherId} LIMIT 1`
+  const teacherRow = (teacherRows[0] ?? {}) as Record<string, unknown>
+  const enrollRows = await sql`
+    SELECT "courseId", COUNT(*)::int as cnt FROM "Enrollment" GROUP BY "courseId"
+  `
+  const encMap = new Map<string, number>()
+  for (const r of enrollRows as { courseId: string; cnt: string | number }[]) {
+    encMap.set(String(r.courseId), Number(r.cnt))
+  }
+  const links = await sql`
+    SELECT ctt."courseId",
+      p."pricingMethod" as "tp_pricingMethod",
+      p."centerHourlyRate" as "tp_centerHourlyRate",
+      p."travelRate" as "tp_travelRate",
+      p."externalCourseRate" as "tp_externalCourseRate",
+      p."officeHourlyRate" as "tp_officeHourlyRate",
+      p."studentTierRates" as "tp_studentTierRates",
+      p."bonusEnabled" as "tp_bonusEnabled",
+      p."bonusMinStudents" as "tp_bonusMinStudents",
+      p."bonusPerHour" as "tp_bonusPerHour"
+    FROM "CourseTeacherTariff" ctt
+    INNER JOIN "TeacherTariffProfile" p ON p.id = ctt."tariffProfileId"
+    WHERE ctt."teacherId" = ${teacherId}
+  `
+  const profileByCourse = new Map<string, Record<string, unknown>>()
+  for (const row of links as Record<string, unknown>[]) {
+    const cid = String(row.courseId || "")
+    profileByCourse.set(cid, {
+      pricingMethod: row.tp_pricingMethod,
+      centerHourlyRate: row.tp_centerHourlyRate,
+      travelRate: row.tp_travelRate,
+      externalCourseRate: row.tp_externalCourseRate,
+      officeHourlyRate: row.tp_officeHourlyRate,
+      studentTierRates: row.tp_studentTierRates,
+      bonusEnabled: row.tp_bonusEnabled,
+      bonusMinStudents: row.tp_bonusMinStudents,
+      bonusPerHour: row.tp_bonusPerHour,
+    })
+  }
+  return rows.map((r) => {
+    const cid = r.courseId ? String(r.courseId) : ""
+    const prof = cid ? profileByCourse.get(cid) ?? null : null
+    const loc = r.courseLocation != null ? String(r.courseLocation) : null
+    const hourKind = normalizeTeacherAttendanceHourKind(r.hourKind)
+    const rate = resolveHourlyRateForAttendance({
+      tariffProfileRow: prof,
+      teacherRow,
+      location: loc,
+      enrollmentCount: cid ? encMap.get(cid) ?? 0 : 0,
+      hourKind,
+    })
+    return { ...r, appliedHourlyRate: rate }
+  })
 }
 
 export async function loadCourseTeacherTariffMap(

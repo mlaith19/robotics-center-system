@@ -53,12 +53,12 @@ export const POST = withTenantAuth(async (req, session) => {
     const id = crypto.randomUUID()
     const result = await db`
       INSERT INTO "TeacherTariffProfile" (
-        id, name, description, "pricingMethod", "centerHourlyRate", "travelRate", "externalCourseRate",
+        id, name, description, "pricingMethod", "centerHourlyRate", "travelRate", "externalCourseRate", "officeHourlyRate",
         "studentTierRates", "bonusEnabled", "bonusMinStudents", "bonusPerHour", "isActive", "createdAt", "updatedAt"
       )
       VALUES (
         ${id}, ${payload.name}, ${payload.description}, ${payload.pricingMethod},
-        ${payload.centerHourlyRate}, ${payload.travelRate}, ${payload.externalCourseRate},
+        ${payload.centerHourlyRate}, ${payload.travelRate}, ${payload.externalCourseRate}, ${payload.officeHourlyRate},
         ${JSON.stringify(payload.studentTierRates)}::jsonb,
         ${payload.bonusEnabled}, ${payload.bonusMinStudents}, ${payload.bonusPerHour},
         ${payload.isActive}, NOW(), NOW()

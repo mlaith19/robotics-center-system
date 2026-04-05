@@ -76,6 +76,7 @@ interface TeacherTariffProfileRow {
   centerHourlyRate: number | null
   travelRate: number | null
   externalCourseRate: number | null
+  officeHourlyRate: number | null
   studentTierRates: { upToStudents: number; hourlyRate: number }[]
   bonusEnabled: boolean
   bonusMinStudents: number | null
@@ -160,6 +161,7 @@ export default function SettingsPage() {
     centerHourlyRate: string
     travelRate: string
     externalCourseRate: string
+    officeHourlyRate: string
     tierRates: number[]
     bonusEnabled: boolean
     bonusMinStudents: string
@@ -174,6 +176,7 @@ export default function SettingsPage() {
     centerHourlyRate: "50",
     travelRate: "0",
     externalCourseRate: "80",
+    officeHourlyRate: "",
     tierRates: Array.from({ length: 10 }, (_, i) => (i === 0 ? 32 : 0)),
     bonusEnabled: false,
     bonusMinStudents: "",
@@ -422,6 +425,7 @@ export default function SettingsPage() {
       centerHourlyRate: "50",
       travelRate: "0",
       externalCourseRate: "80",
+      officeHourlyRate: "",
       tierRates: Array.from({ length: 10 }, (_, i) => (i === 0 ? 32 : 0)),
       bonusEnabled: false,
       bonusMinStudents: "",
@@ -445,6 +449,7 @@ export default function SettingsPage() {
       centerHourlyRate: String(row.centerHourlyRate ?? ""),
       travelRate: String(row.travelRate ?? ""),
       externalCourseRate: String(row.externalCourseRate ?? ""),
+      officeHourlyRate: String(row.officeHourlyRate ?? ""),
       tierRates: tiers,
       bonusEnabled: row.bonusEnabled === true,
       bonusMinStudents: row.bonusMinStudents != null ? String(row.bonusMinStudents) : "",
@@ -470,6 +475,7 @@ export default function SettingsPage() {
         centerHourlyRate: tariffDialog.centerHourlyRate === "" ? null : Number(tariffDialog.centerHourlyRate),
         travelRate: tariffDialog.travelRate === "" ? null : Number(tariffDialog.travelRate),
         externalCourseRate: tariffDialog.externalCourseRate === "" ? null : Number(tariffDialog.externalCourseRate),
+        officeHourlyRate: tariffDialog.officeHourlyRate === "" ? null : Number(tariffDialog.officeHourlyRate),
         studentTierRates,
         bonusEnabled: tariffDialog.bonusEnabled,
         bonusMinStudents: tariffDialog.bonusEnabled && tariffDialog.bonusMinStudents !== "" ? Number(tariffDialog.bonusMinStudents) : null,
@@ -760,7 +766,7 @@ export default function SettingsPage() {
                 פרופילי תעריף למורים
               </CardTitle>
               <CardDescription className="text-right">
-                כאן מגדירים את מחירי השעה (רגיל / לפי מספר תלמידים / בונוס). בעריכת קורס תבחרו לאיזה מורה איזה פרופיל
+                כאן מגדירים את מחירי השעה (מרכז / חיצוני / נסיעות / שעת משרד, לפי מספר תלמידים, בונוס). בעריכת קורס תבחרו לאיזה מורה איזה פרופיל
                 חל — כל מורה בקורס יכולה לקבל פרופיל אחר. נדרשת הרשאת עריכת הגדרות לשינוי כאן; לשיוך בקורס נדרשת עריכת קורסים.
               </CardDescription>
             </CardHeader>
@@ -783,7 +789,7 @@ export default function SettingsPage() {
                       <div className="min-w-0 text-right">
                         <div className="font-medium">{row.name}</div>
                         <div className="text-xs text-muted-foreground">
-                          {row.pricingMethod === "per_student_tier" ? "לפי תלמידים" : "רגיל (מרכז/חיצוני)"}
+                          {row.pricingMethod === "per_student_tier" ? "לפי תלמידים" : "רגיל (מרכז/חיצוני/נסיעות/משרד)"}
                           {row.isActive ? " | פעיל" : " | לא פעיל"}
                         </div>
                       </div>
@@ -1250,36 +1256,53 @@ export default function SettingsPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="standard">רגיל: מרכז / חיצוני / נסיעות</SelectItem>
+                  <SelectItem value="standard">רגיל: מרכז / חיצוני / נסיעות + שעת משרד</SelectItem>
                   <SelectItem value="per_student_tier">לפי מספר תלמידים (במרכז)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             {tariffDialog.pricingMethod === "standard" && (
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <div className="space-y-1">
-                  <Label>שעה במרכז (₪)</Label>
-                  <Input
-                    type="number"
-                    value={tariffDialog.centerHourlyRate}
-                    onChange={(e) => setTariffDialog((d) => ({ ...d, centerHourlyRate: e.target.value }))}
-                  />
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <div className="space-y-1">
+                    <Label>שעה במרכז (₪)</Label>
+                    <Input
+                      type="number"
+                      value={tariffDialog.centerHourlyRate}
+                      onChange={(e) => setTariffDialog((d) => ({ ...d, centerHourlyRate: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>נסיעות לשעה (₪)</Label>
+                    <Input
+                      type="number"
+                      value={tariffDialog.travelRate}
+                      onChange={(e) => setTariffDialog((d) => ({ ...d, travelRate: e.target.value }))}
+                    />
+                    <p className="text-xs text-muted-foreground leading-snug">
+                      חל כשבקורס מוגדר מיקום &quot;נסיעות&quot;.
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>שעה חיצוני (₪)</Label>
+                    <Input
+                      type="number"
+                      value={tariffDialog.externalCourseRate}
+                      onChange={(e) => setTariffDialog((d) => ({ ...d, externalCourseRate: e.target.value }))}
+                    />
+                  </div>
                 </div>
                 <div className="space-y-1">
-                  <Label>נסיעות (₪)</Label>
+                  <Label>שעת משרד לשעה (₪)</Label>
                   <Input
                     type="number"
-                    value={tariffDialog.travelRate}
-                    onChange={(e) => setTariffDialog((d) => ({ ...d, travelRate: e.target.value }))}
+                    value={tariffDialog.officeHourlyRate}
+                    onChange={(e) => setTariffDialog((d) => ({ ...d, officeHourlyRate: e.target.value }))}
+                    placeholder="ריק = ללא תעריף משרד"
                   />
-                </div>
-                <div className="space-y-1">
-                  <Label>שעה חיצוני (₪)</Label>
-                  <Input
-                    type="number"
-                    value={tariffDialog.externalCourseRate}
-                    onChange={(e) => setTariffDialog((d) => ({ ...d, externalCourseRate: e.target.value }))}
-                  />
+                  <p className="text-xs text-muted-foreground leading-snug">
+                    נוכחות מורה שמסומנת כ&quot;שעת משרד&quot; תחושב לפי תעריף זה (בנפרד מהוראה בכיתה).
+                  </p>
                 </div>
               </div>
             )}

@@ -1,10 +1,12 @@
-import type postgres from "postgres"
+import postgres from "postgres"
 import { handleDbError } from "@/lib/db"
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
 import { sessionRolesGrantFullAccess } from "@/lib/permissions"
 import { normalizeCourseCalendarYmd } from "@/lib/course-db-fields"
 import { listCampSessionDates } from "@/lib/camp-kaytana"
+import { ensureAttendanceHourKindColumn } from "@/lib/teacher-attendance-hour-kind"
+import { enrichTeacherAttendanceRowsWithRates } from "@/lib/teacher-tariff-profiles"
 
 function extractAttendanceDateYmd(raw: unknown): string {
   const s = String(raw ?? "").trim()
@@ -210,12 +212,20 @@ export const GET = withTenantAuth(async (req, _session) => {
   }
 
   try {
-    const result = await runQuery(db, true)
+    if (teacherId) await ensureAttendanceHourKindColumn(db)
+    let result = (await runQuery(db, true)) as Record<string, unknown>[]
+    if (teacherId && Array.isArray(result)) {
+      result = await enrichTeacherAttendanceRowsWithRates(db, teacherId, result)
+    }
     return Response.json(result)
   } catch (err: any) {
     if (err?.code === "42703" && String(err?.message || "").includes("createdByUserId")) {
       try {
-        const result = await runQuery(db, false)
+        if (teacherId) await ensureAttendanceHourKindColumn(db)
+        let result = (await runQuery(db, false)) as Record<string, unknown>[]
+        if (teacherId && Array.isArray(result)) {
+          result = await enrichTeacherAttendanceRowsWithRates(db, teacherId, result)
+        }
         return Response.json(result)
       } catch (fallbackErr) {
         return handleDbError(fallbackErr, "GET /api/attendance")
@@ -230,8 +240,13 @@ export const POST = withTenantAuth(async (req, session) => {
   if (tenantErr) return tenantErr
   const db = tenant.db
   try {
+    await ensureAttendanceHourKindColumn(db)
     const body = await req.json()
     const { studentId, teacherId, courseId, date, status, notes, note, hours } = body
+    const hourKindStored: string | null =
+      teacherId && !studentId && String((body as Record<string, unknown>).hourKind || "").toLowerCase() === "office"
+        ? "office"
+        : null
     const isAdmin = sessionRolesGrantFullAccess(session.roleKey, session.role)
 
     if (!studentId && !teacherId) return Response.json({ error: "studentId or teacherId is required" }, { status: 400 })
@@ -306,7 +321,7 @@ export const POST = withTenantAuth(async (req, session) => {
     if (existing.length > 0) {
       const result = await db`
         UPDATE "Attendance"
-        SET status = ${status}, notes = ${noteValue}, hours = ${hours || null}, "createdByUserId" = ${createdByUserId}
+        SET status = ${status}, notes = ${noteValue}, hours = ${hours || null}, "hourKind" = ${hourKindStored}, "createdByUserId" = ${createdByUserId}
         WHERE id = ${existing[0].id}
         RETURNING *
       `
@@ -318,8 +333,8 @@ export const POST = withTenantAuth(async (req, session) => {
     }
 
     const result = await db`
-      INSERT INTO "Attendance" (id, "studentId", "teacherId", "courseId", date, status, notes, hours, "createdByUserId", "createdAt")
-      VALUES (${id}, ${studentId || null}, ${teacherId || null}, ${courseId || null}, ${date}, ${status}, ${noteValue}, ${hours || null}, ${createdByUserId}, ${now})
+      INSERT INTO "Attendance" (id, "studentId", "teacherId", "courseId", date, status, notes, hours, "hourKind", "createdByUserId", "createdAt")
+      VALUES (${id}, ${studentId || null}, ${teacherId || null}, ${courseId || null}, ${date}, ${status}, ${noteValue}, ${hours || null}, ${hourKindStored}, ${createdByUserId}, ${now})
       RETURNING *
     `
     const saved = result[0]

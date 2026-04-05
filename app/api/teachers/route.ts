@@ -3,6 +3,10 @@ import { requireFeatureFromRequest } from "@/lib/feature-gate"
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
 import { ensureProfileImageColumns, resolveProfileImageWithFallback } from "@/lib/profile-image"
+import {
+  ensureAttendanceHourKindColumn,
+  normalizeTeacherAttendanceHourKind,
+} from "@/lib/teacher-attendance-hour-kind"
 import { ensureTeacherTariffTables, resolveHourlyRateForAttendance } from "@/lib/teacher-tariff-profiles"
 
 export const GET = withTenantAuth(async (req, session) => {
@@ -19,7 +23,7 @@ export const GET = withTenantAuth(async (req, session) => {
       db`SELECT * FROM "Teacher" ORDER BY "createdAt" DESC`,
       db`SELECT "teacherId", SUM(amount) as total_paid FROM "Expense" WHERE "teacherId" IS NOT NULL GROUP BY "teacherId"`,
       db`
-        SELECT a."teacherId", a.status, a.hours, c.id as "courseId", c.location, c."startTime", c."endTime"
+        SELECT a."teacherId", a.status, a.hours, a."hourKind", c.id as "courseId", c.location, c."startTime", c."endTime"
         FROM "Attendance" a
         LEFT JOIN "Course" c ON a."courseId" = c.id
         WHERE a."teacherId" IS NOT NULL
@@ -92,6 +96,7 @@ export const GET = withTenantAuth(async (req, session) => {
         teacherRow: teacher as Record<string, unknown>,
         location: a.location ? String(a.location) : null,
         enrollmentCount: a.courseId ? enrollmentMap.get(String(a.courseId)) ?? 0 : 0,
+        hourKind: normalizeTeacherAttendanceHourKind((a as { hourKind?: unknown }).hourKind),
       })
       const owed = (owedMap.get(teacherId) || 0) + rate * hours
       owedMap.set(teacherId, owed)

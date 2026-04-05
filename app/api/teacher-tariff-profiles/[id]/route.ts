@@ -33,6 +33,7 @@ export const PATCH = withTenantAuth(async (req, session, { params }: Ctx) => {
         "centerHourlyRate" = ${payload.centerHourlyRate},
         "travelRate" = ${payload.travelRate},
         "externalCourseRate" = ${payload.externalCourseRate},
+        "officeHourlyRate" = ${payload.officeHourlyRate},
         "studentTierRates" = ${JSON.stringify(payload.studentTierRates)}::jsonb,
         "bonusEnabled" = ${payload.bonusEnabled},
         "bonusMinStudents" = ${payload.bonusMinStudents},

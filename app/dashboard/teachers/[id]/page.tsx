@@ -451,7 +451,11 @@ export default function TeacherViewPage() {
       const hours = calcAttendanceHours(a)
       const cid = a.courseId ? String(a.courseId) : ""
       const meta = cid ? courseMeta.get(cid) : undefined
-      const rate = meta?.effectiveRate ?? 0
+      const applied = a.appliedHourlyRate
+      const rate =
+        applied != null && applied !== "" && Number.isFinite(Number(applied))
+          ? Number(applied)
+          : Number(meta?.effectiveRate ?? 0)
       return sum + hours * rate
     }, 0)
   }, [filteredAttendanceForPayments, courses])
@@ -979,6 +983,12 @@ export default function TeacherViewPage() {
                         <th className="border p-2 text-center font-medium">עד שעה</th>
                         <th className="border p-2 text-center font-medium">סה&quot;כ שעות</th>
                         <th className="border p-2 text-center font-medium">סטטוס</th>
+                        {canSeeTeacherTariffUi ? (
+                          <>
+                            <th className="border p-2 text-center font-medium">סוג שעה</th>
+                            <th className="border p-2 text-center font-medium">תעריף לשעה</th>
+                          </>
+                        ) : null}
                         <th className="border p-2 text-right font-medium">הערה</th>
                         {isAdmin ? <th className="border p-2 text-center font-medium w-14">מחיקה</th> : null}
                       </tr>
@@ -1005,6 +1015,18 @@ export default function TeacherViewPage() {
                                 "bg-orange-100 text-orange-700"
                               }`}>{statusLabel}</span>
                             </td>
+                            {canSeeTeacherTariffUi ? (
+                              <>
+                                <td className="border p-2 text-center text-muted-foreground">
+                                  {String(a.hourKind || "").toLowerCase() === "office" ? "משרד" : "הוראה"}
+                                </td>
+                                <td className="border p-2 text-center font-medium tabular-nums">
+                                  {a.appliedHourlyRate != null && a.appliedHourlyRate !== ""
+                                    ? `₪${Number(a.appliedHourlyRate).toFixed(2)}`
+                                    : "—"}
+                                </td>
+                              </>
+                            ) : null}
                             <td className="border p-2 text-right text-muted-foreground">{a.notes || "—"}</td>
                             {isAdmin ? (
                               <td className="border p-2 text-center">

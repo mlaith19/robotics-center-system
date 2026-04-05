@@ -1,4 +1,5 @@
 import type { Sql } from "postgres"
+import type { TeacherAttendanceHourKind } from "@/lib/teacher-attendance-hour-kind"
 
 export type TeacherPricingMethod = "standard" | "per_student_tier"
 
@@ -32,17 +33,32 @@ function isCenterLocation(raw: string | null | undefined): boolean {
   return v === "" || v === "center" || v.includes("מרכז")
 }
 
+function isTravelLocation(raw: string | null | undefined): boolean {
+  const v = String(raw ?? "").trim().toLowerCase()
+  return v === "travel" || v.includes("נסיע")
+}
+
 export function resolveTeacherHourlyRate(params: {
   pricingMethod?: TeacherPricingMethod | null
   centerHourlyRate?: number | null
+  travelRate?: number | null
   externalCourseRate?: number | null
+  officeHourlyRate?: number | null
   studentTierRates?: StudentTierRate[] | null
   bonusEnabled?: boolean | null
   bonusMinStudents?: number | null
   bonusPerHour?: number | null
   location?: string | null
   enrollmentCount?: number | null
+  /** ברירת מחדל: הוראה; office = תעריף שעת משרד מהפרופיל (ללא בונוס לפי תלמידים) */
+  hourKind?: TeacherAttendanceHourKind | null
 }): number {
+  const hourKind: TeacherAttendanceHourKind = params.hourKind === "office" ? "office" : "teaching"
+  if (hourKind === "office") {
+    const office = Number(params.officeHourlyRate ?? 0)
+    return Math.max(0, Math.round(office * 100) / 100)
+  }
+
   const method = params.pricingMethod === "per_student_tier" ? "per_student_tier" : "standard"
   const enrollmentCount = Math.max(0, Number(params.enrollmentCount || 0))
 
@@ -56,7 +72,15 @@ export function resolveTeacherHourlyRate(params: {
       baseRate = Number(params.centerHourlyRate || 0)
     }
   } else {
-    baseRate = isCenterLocation(params.location) ? Number(params.centerHourlyRate || 0) : Number(params.externalCourseRate || 0)
+    const loc = params.location
+    if (isTravelLocation(loc)) {
+      const tr = params.travelRate
+      baseRate = tr != null && Number.isFinite(Number(tr)) ? Number(tr) : Number(params.externalCourseRate || 0)
+    } else if (isCenterLocation(loc)) {
+      baseRate = Number(params.centerHourlyRate || 0)
+    } else {
+      baseRate = Number(params.externalCourseRate || 0)
+    }
   }
 
   const bonusEnabled = params.bonusEnabled === true

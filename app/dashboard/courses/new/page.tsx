@@ -483,6 +483,7 @@ export default function NewCoursePage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="center">{l("במרכז", "At Center", "في المركز")}</SelectItem>
+                  <SelectItem value="travel">{l("נסיעות", "Travel", "تنقّل")}</SelectItem>
                   <SelectItem value="school">{l("בבית ספר", "At School", "في المدرسة")}</SelectItem>
                   <SelectItem value="online">{l("אונליין", "Online", "أونلاين")}</SelectItem>
                   <SelectItem value="other">{l("אחר", "Other", "أخرى")}</SelectItem>

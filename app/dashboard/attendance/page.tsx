@@ -61,6 +61,8 @@ export default function AttendancePage() {
   const [savingStatus, setSavingStatus] = useState<Record<string, boolean>>({})
   const [teacherStartTime, setTeacherStartTime] = useState<string>("")
   const [teacherEndTime, setTeacherEndTime] = useState<string>("")
+  /** הוראה בקורס מול שעת משרד (תעריף מ־פרופיל תעריף) */
+  const [teacherHourKind, setTeacherHourKind] = useState<"teaching" | "office">("teaching")
 
   useEffect(() => {
     if (!isAdmin) {
@@ -177,6 +179,9 @@ export default function AttendancePage() {
       
       if (isTeacherAttendance) {
         requestBody.teacherId = personId
+        if (teacherHourKind === "office") {
+          requestBody.hourKind = "office"
+        }
         // Optional manual time range for teacher attendance; stored as calculated hours
         if (teacherStartTime && teacherEndTime) {
           const startMin = parseTimeToMinutes(teacherStartTime)
@@ -455,6 +460,21 @@ export default function AttendancePage() {
                       onChange={(e) => setTeacherEndTime(e.target.value)}
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     />
+                  </div>
+                  <div className="space-y-2 sm:col-span-2 lg:col-span-4">
+                    <label className="text-sm font-medium">סוג שעה לחישוב שכר</label>
+                    <Select
+                      value={teacherHourKind}
+                      onValueChange={(v) => setTeacherHourKind(v as "teaching" | "office")}
+                    >
+                      <SelectTrigger className="h-10">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="teaching">הוראה (לפי מיקום קורס ופרופיל)</SelectItem>
+                        <SelectItem value="office">שעת משרד (תעריף מהגדרות פרופיל)</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </>
               )}
