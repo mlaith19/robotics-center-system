@@ -70,7 +70,13 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
       setGroupLetters(Array.isArray(data.groupLetters) ? data.groupLetters : [])
       setClassroomsCount(Number(data.classroomsCount || 6))
       setClassroomsDef(Array.isArray(data.classrooms) ? data.classrooms : [])
-      setMeetings(Array.isArray(data.meetings) ? data.meetings : [])
+      const rawMeetings = Array.isArray(data.meetings) ? data.meetings : []
+      setMeetings(rawMeetings)
+      setActiveMeetingId((prev) => {
+        if (rawMeetings.length === 0) return ""
+        if (prev && rawMeetings.some((m) => m.id === prev)) return prev
+        return String(rawMeetings[0]?.id || "")
+      })
       setCenterName(String(data.centerName || ""))
       setCenterLogo(String(data.centerLogo || ""))
       setCourseName(String(data.courseName || ""))
@@ -216,7 +222,12 @@ tr:nth-child(even) td{background:#f9fafb}
             הדפסת כל המפגשים
           </Button>
         </div>
-        <Tabs dir="rtl" value={activeMeetingId} onValueChange={setActiveMeetingId} className="w-full">
+        <Tabs
+          dir="rtl"
+          value={sortedMeetings.some((m) => m.id === activeMeetingId) ? activeMeetingId : sortedMeetings[0]!.id}
+          onValueChange={setActiveMeetingId}
+          className="w-full"
+        >
           <TabsList dir="rtl" className="h-auto w-full flex-wrap justify-start gap-0.5 p-1">
             {sortedMeetings.map((meeting, i) => (
               <TabsTrigger
