@@ -1,4 +1,5 @@
 import { requireFeatureFromRequest } from "@/lib/feature-gate"
+import { ensureGafanLinkColumns, normalizeGafanTeacherIds } from "@/lib/gafan-columns"
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant, ensureSessionMatchesTenant } from "@/lib/tenant/resolve-tenant"
 
@@ -11,6 +12,7 @@ export const GET = withTenantAuth(async (req, session) => {
   if (mismatch) return mismatch
   const db = tenant.db
   try {
+    await ensureGafanLinkColumns(db)
     const { searchParams } = new URL(req.url)
     const schoolId = (searchParams.get("schoolId") || "").trim()
     const result = schoolId
@@ -32,17 +34,25 @@ export const POST = withTenantAuth(async (req, session) => {
   if (mismatch) return mismatch
   const db = tenant.db
   try {
+    await ensureGafanLinkColumns(db)
     const body = await req.json()
     const name = body.name
     if (!name) return Response.json({ error: "name is required" }, { status: 400 })
 
     const id = crypto.randomUUID()
     const now = new Date().toISOString()
+    const schoolIdRaw = body.schoolId ?? body.school_id
+    const schoolId =
+      schoolIdRaw !== undefined && schoolIdRaw !== null && String(schoolIdRaw).trim()
+        ? String(schoolIdRaw).trim()
+        : null
+    const teacherIdsJson = db.json(normalizeGafanTeacherIds(body.teacherIds))
     const result = await db`
       INSERT INTO "Gafan" (
         id, name, "programNumber", "validYear", "companyName", "companyId",
         "companyAddress", "bankName", "bankCode", "branchNumber", "accountNumber",
-        "operatorName", "priceMin", "priceMax", status, "provider_type", notes, "createdAt", "updatedAt"
+        "operatorName", "priceMin", "priceMax", status, "provider_type", notes,
+        "schoolId", "teacherIds", "createdAt", "updatedAt"
       )
       VALUES (
         ${id}, ${name},
@@ -61,6 +71,7 @@ export const POST = withTenantAuth(async (req, session) => {
         ${body.status || "מתעניין"},
         ${body.providerType  || body.provider_type  || "internal"},
         ${body.notes || null},
+        ${schoolId}, ${teacherIdsJson},
         ${now}, ${now}
       )
       RETURNING *

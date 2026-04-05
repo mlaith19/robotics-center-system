@@ -129,6 +129,8 @@ CREATE TABLE IF NOT EXISTS "Gafan" (
   "status" TEXT,
   "provider_type" TEXT,
   "notes" TEXT,
+  "schoolId" TEXT,
+  "teacherIds" JSONB DEFAULT '[]'::jsonb,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

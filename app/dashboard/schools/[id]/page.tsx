@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -31,7 +31,23 @@ import {
   CalendarCheck,
   BarChart3,
   DollarSign,
+  Plus,
+  UserPlus,
 } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 interface School {
   id: string
@@ -61,7 +77,17 @@ type GafanRow = {
   programNumber?: string | null
   validYear?: string | null
   status?: string | null
+  schoolId?: string | null
+  teacherIds?: unknown
 }
+
+function parseGafanTeacherIds(row: GafanRow): string[] {
+  const t = row.teacherIds
+  if (Array.isArray(t)) return t.map((x) => String(x)).filter(Boolean)
+  return []
+}
+
+type TeacherMini = { id: string; name: string }
 
 type CourseRow = {
   id: string
@@ -146,7 +172,16 @@ export default function SchoolViewPage() {
   const [schoolEnrollments, setSchoolEnrollments] = useState<EnrollmentRow[]>([])
   const [schoolPayments, setSchoolPayments] = useState<PaymentRow[]>([])
   const [teacherAttendance, setTeacherAttendance] = useState<TeacherAttRow[]>([])
+  const [teachersMini, setTeachersMini] = useState<TeacherMini[]>([])
   const [tabDataLoading, setTabDataLoading] = useState(true)
+
+  const [gafanLinkOpen, setGafanLinkOpen] = useState(false)
+  const [gafanUnlinkedOptions, setGafanUnlinkedOptions] = useState<GafanRow[]>([])
+  const [gafanLinkPickId, setGafanLinkPickId] = useState("")
+  const [gafanLinkSaving, setGafanLinkSaving] = useState(false)
+  const [gafanTeacherProgram, setGafanTeacherProgram] = useState<GafanRow | null>(null)
+  const [gafanTeacherPickId, setGafanTeacherPickId] = useState("")
+  const [gafanTeacherSaving, setGafanTeacherSaving] = useState(false)
 
   useEffect(() => {
     if (isNewPage) return
@@ -167,43 +202,112 @@ export default function SchoolViewPage() {
     fetchSchool()
   }, [id, isNewPage])
 
-  useEffect(() => {
+  const reloadTabData = useCallback(async () => {
     if (isNewPage || !school?.id) return
-    let cancelled = false
-    setTabDataLoading(true)
     const sid = school.id
-    ;(async () => {
-      try {
-        const [gRes, cRes, eRes, pRes, aRes] = await Promise.all([
-          fetch(`/api/gafan?schoolId=${encodeURIComponent(sid)}`),
-          fetch(`/api/courses?schoolId=${encodeURIComponent(sid)}`),
-          fetch(`/api/enrollments?schoolId=${encodeURIComponent(sid)}`),
-          fetch(`/api/payments?schoolId=${encodeURIComponent(sid)}`),
-          fetch(`/api/attendance?schoolId=${encodeURIComponent(sid)}`),
-        ])
-        if (cancelled) return
-        setGafanPrograms(gRes.ok ? await gRes.json() : [])
-        setSchoolCourses(cRes.ok ? await cRes.json() : [])
-        setSchoolEnrollments(eRes.ok ? await eRes.json() : [])
-        setSchoolPayments(pRes.ok ? await pRes.json() : [])
-        const att = aRes.ok ? await aRes.json() : []
-        setTeacherAttendance(Array.isArray(att) ? att : [])
-      } catch {
-        if (!cancelled) {
-          setGafanPrograms([])
-          setSchoolCourses([])
-          setSchoolEnrollments([])
-          setSchoolPayments([])
-          setTeacherAttendance([])
-        }
-      } finally {
-        if (!cancelled) setTabDataLoading(false)
-      }
-    })()
-    return () => {
-      cancelled = true
+    setTabDataLoading(true)
+    try {
+      const [gRes, cRes, eRes, pRes, aRes, tRes] = await Promise.all([
+        fetch(`/api/gafan?schoolId=${encodeURIComponent(sid)}`),
+        fetch(`/api/courses?schoolId=${encodeURIComponent(sid)}`),
+        fetch(`/api/enrollments?schoolId=${encodeURIComponent(sid)}`),
+        fetch(`/api/payments?schoolId=${encodeURIComponent(sid)}`),
+        fetch(`/api/attendance?schoolId=${encodeURIComponent(sid)}`),
+        fetch(`/api/teachers`),
+      ])
+      setGafanPrograms(gRes.ok ? await gRes.json() : [])
+      setSchoolCourses(cRes.ok ? await cRes.json() : [])
+      setSchoolEnrollments(eRes.ok ? await eRes.json() : [])
+      setSchoolPayments(pRes.ok ? await pRes.json() : [])
+      const att = aRes.ok ? await aRes.json() : []
+      setTeacherAttendance(Array.isArray(att) ? att : [])
+      const tJson = tRes.ok ? await tRes.json() : []
+      const tArr = Array.isArray(tJson) ? tJson : []
+      setTeachersMini(
+        tArr.map((x: { id?: string; name?: string }) => ({
+          id: String(x.id ?? ""),
+          name: String(x.name ?? ""),
+        })).filter((x) => x.id),
+      )
+    } catch {
+      setGafanPrograms([])
+      setSchoolCourses([])
+      setSchoolEnrollments([])
+      setSchoolPayments([])
+      setTeacherAttendance([])
+      setTeachersMini([])
+    } finally {
+      setTabDataLoading(false)
     }
   }, [isNewPage, school?.id])
+
+  useEffect(() => {
+    void reloadTabData()
+  }, [reloadTabData])
+
+  const teacherNameById = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const t of teachersMini) m.set(t.id, t.name || t.id)
+    return m
+  }, [teachersMini])
+
+  const openGafanLinkDialog = async () => {
+    setGafanLinkOpen(true)
+    setGafanLinkPickId("")
+    try {
+      const res = await fetch(`/api/gafan`, { credentials: "include" })
+      const all = res.ok ? await res.json() : []
+      const rows = Array.isArray(all) ? all : []
+      setGafanUnlinkedOptions(rows.filter((p: GafanRow) => !p.schoolId))
+    } catch {
+      setGafanUnlinkedOptions([])
+    }
+  }
+
+  const submitGafanLink = async () => {
+    if (!school?.id || !gafanLinkPickId) return
+    setGafanLinkSaving(true)
+    try {
+      const res = await fetch(`/api/gafan/${encodeURIComponent(gafanLinkPickId)}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schoolId: school.id }),
+      })
+      if (res.ok) {
+        setGafanLinkOpen(false)
+        await reloadTabData()
+      }
+    } finally {
+      setGafanLinkSaving(false)
+    }
+  }
+
+  const submitGafanTeacher = async () => {
+    if (!gafanTeacherProgram || !gafanTeacherPickId) return
+    const cur = parseGafanTeacherIds(gafanTeacherProgram)
+    if (cur.includes(gafanTeacherPickId)) {
+      setGafanTeacherProgram(null)
+      return
+    }
+    const next = [...cur, gafanTeacherPickId]
+    setGafanTeacherSaving(true)
+    try {
+      const res = await fetch(`/api/gafan/${encodeURIComponent(gafanTeacherProgram.id)}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teacherIds: next }),
+      })
+      if (res.ok) {
+        setGafanTeacherProgram(null)
+        setGafanTeacherPickId("")
+        await reloadTabData()
+      }
+    } finally {
+      setGafanTeacherSaving(false)
+    }
+  }
 
   const debtByStudent = useMemo(() => {
     const paidByStudent = new Map<string, number>()
@@ -414,9 +518,21 @@ export default function SchoolViewPage() {
             ) : (
               <>
                 <div>
-                  <div className="mb-3 flex items-center gap-2">
-                    <Rocket className="h-5 w-5 text-rose-600" />
-                    <h3 className="text-lg font-semibold">תוכניות גפ&quot;ן משויכות</h3>
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Rocket className="h-5 w-5 text-rose-600" />
+                      <h3 className="text-lg font-semibold">תוכניות גפ&quot;ן משויכות</h3>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="gap-1"
+                      onClick={() => void openGafanLinkDialog()}
+                    >
+                      <Plus className="h-4 w-4" />
+                      שיוך תוכנית
+                    </Button>
                   </div>
                   {gafanPrograms.length === 0 ? (
                     <p className="py-6 text-center text-muted-foreground">אין תוכניות גפ&quot;ן משויכות לבית ספר זה</p>
@@ -429,27 +545,168 @@ export default function SchoolViewPage() {
                             <TableHead className="text-right">מס&apos; תוכנית</TableHead>
                             <TableHead className="text-right">שנת תוקף</TableHead>
                             <TableHead className="text-right">סטטוס</TableHead>
-                            <TableHead className="w-24 text-center">פעולות</TableHead>
+                            <TableHead className="min-w-[140px] text-right">מורים</TableHead>
+                            <TableHead className="min-w-[200px] text-center">פעולות</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {gafanPrograms.map((g) => (
-                            <TableRow key={g.id}>
-                              <TableCell className="font-medium">{g.name}</TableCell>
-                              <TableCell>{safe(g.programNumber)}</TableCell>
-                              <TableCell>{safe(g.validYear)}</TableCell>
-                              <TableCell>{safe(g.status)}</TableCell>
-                              <TableCell className="text-center">
-                                <Button variant="outline" size="sm" asChild>
-                                  <Link href={`/dashboard/gafan/${g.id}`}>צפה</Link>
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))}
+                          {gafanPrograms.map((g) => {
+                            const tids = parseGafanTeacherIds(g)
+                            const teacherLabel =
+                              tids.length === 0
+                                ? "—"
+                                : tids.map((tid) => teacherNameById.get(tid) || tid).join(", ")
+                            return (
+                              <TableRow key={g.id}>
+                                <TableCell className="font-medium">{g.name}</TableCell>
+                                <TableCell>{safe(g.programNumber)}</TableCell>
+                                <TableCell>{safe(g.validYear)}</TableCell>
+                                <TableCell>{safe(g.status)}</TableCell>
+                                <TableCell className="max-w-[220px] text-right text-sm text-muted-foreground">
+                                  {teacherLabel}
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  <div className="flex flex-wrap items-center justify-center gap-1">
+                                    <Button variant="outline" size="sm" asChild>
+                                      <Link href={`/dashboard/gafan/${g.id}`}>צפה</Link>
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="gap-1"
+                                      onClick={() => {
+                                        setGafanTeacherPickId("")
+                                        setGafanTeacherProgram(g)
+                                      }}
+                                    >
+                                      <UserPlus className="h-3.5 w-3.5" />
+                                      שיוך מורה
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })}
                         </TableBody>
                       </Table>
                     </div>
                   )}
+
+                  <Dialog open={gafanLinkOpen} onOpenChange={setGafanLinkOpen}>
+                    <DialogContent dir="rtl" className="sm:max-w-md">
+                      <DialogHeader>
+                        <DialogTitle>שיוך תוכנית גפ&quot;ן לבית הספר</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-4 py-2">
+                        <div className="space-y-2">
+                          <Label>בחר תוכנית ללא שיוך לבית ספר</Label>
+                          {gafanUnlinkedOptions.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">אין תוכניות גפ&quot;ן ללא שיוך לבית ספר.</p>
+                          ) : (
+                            <Select value={gafanLinkPickId} onValueChange={setGafanLinkPickId}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="בחר תוכנית…" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {gafanUnlinkedOptions.map((p) => (
+                                  <SelectItem key={p.id} value={p.id}>
+                                    {p.name}
+                                    {p.programNumber ? ` (${p.programNumber})` : ""}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                        </div>
+                        <Button
+                          type="button"
+                          className="w-full"
+                          disabled={!gafanLinkPickId || gafanLinkSaving || gafanUnlinkedOptions.length === 0}
+                          onClick={() => void submitGafanLink()}
+                        >
+                          {gafanLinkSaving ? (
+                            <>
+                              <Loader2 className="ms-2 h-4 w-4 animate-spin" />
+                              שומר…
+                            </>
+                          ) : (
+                            "שמור שיוך"
+                          )}
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+
+                  <Dialog
+                    open={gafanTeacherProgram !== null}
+                    onOpenChange={(open) => {
+                      if (!open) {
+                        setGafanTeacherProgram(null)
+                        setGafanTeacherPickId("")
+                      }
+                    }}
+                  >
+                    <DialogContent dir="rtl" className="sm:max-w-md">
+                      <DialogHeader>
+                        <DialogTitle>
+                          שיוך מורה לתוכנית
+                          {gafanTeacherProgram ? ` — ${gafanTeacherProgram.name}` : ""}
+                        </DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-4 py-2">
+                        <div className="space-y-2">
+                          <Label>בחר מורה</Label>
+                          {(() => {
+                            const assigned = gafanTeacherProgram ? parseGafanTeacherIds(gafanTeacherProgram) : []
+                            const pool = teachersMini.filter((t) => !assigned.includes(t.id))
+                            if (pool.length === 0) {
+                              return (
+                                <p className="text-sm text-muted-foreground">
+                                  {teachersMini.length === 0
+                                    ? "אין מורים במערכת."
+                                    : "כל המורים כבר משויכים לתוכנית זו."}
+                                </p>
+                              )
+                            }
+                            return (
+                              <Select value={gafanTeacherPickId} onValueChange={setGafanTeacherPickId}>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="בחר מורה…" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {pool.map((t) => (
+                                    <SelectItem key={t.id} value={t.id}>
+                                      {t.name || t.id}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )
+                          })()}
+                        </div>
+                        <Button
+                          type="button"
+                          className="w-full"
+                          disabled={(() => {
+                            const assigned = gafanTeacherProgram ? parseGafanTeacherIds(gafanTeacherProgram) : []
+                            const pool = teachersMini.filter((t) => !assigned.includes(t.id))
+                            return !gafanTeacherPickId || gafanTeacherSaving || pool.length === 0
+                          })()}
+                          onClick={() => void submitGafanTeacher()}
+                        >
+                          {gafanTeacherSaving ? (
+                            <>
+                              <Loader2 className="ms-2 h-4 w-4 animate-spin" />
+                              שומר…
+                            </>
+                          ) : (
+                            "הוסף מורה לתוכנית"
+                          )}
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
                 </div>
 
                 <div>
