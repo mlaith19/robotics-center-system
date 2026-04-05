@@ -330,18 +330,12 @@ export default function CourseViewPage() {
     noLinkedStudents: locale === "ar" ? "لا يوجد طلاب مرتبطون بهذه الدورة" : locale === "en" ? "No students linked to this course" : "אין תלמידים משויכים לקורס זה",
     noStudentAttendance: locale === "ar" ? "لا توجد سجلات حضور طلاب لهذه الدورة بعد." : locale === "en" ? "No student attendance records for this course yet." : "אין עדיין רשומות נוכחות תלמידים לקורס זה.",
     noTeacherAttendance: locale === "ar" ? "لا توجد سجلات حضور معلمين لهذه الدورة." : locale === "en" ? "No teacher attendance records for this course." : "אין רשומות נוכחות מורים לקורס זה.",
-    teacherHoursSummaryCamp:
+    teacherHoursGrandTotal:
       locale === "ar"
-        ? "إجمالي الساعات (مخيّم)"
+        ? "الإجمالي العام"
         : locale === "en"
-          ? "Total hours (camp)"
-          : "סה״כ שעות לפי מורה · קייטנה",
-    teacherHoursSummaryCourse:
-      locale === "ar"
-        ? "إجمالي الساعات لكل معلم"
-        : locale === "en"
-          ? "Total hours per teacher"
-          : "סה״כ שעות לפי מורה",
+          ? "General total"
+          : "סה״כ כללי",
     hoursShort: locale === "ar" ? "س" : locale === "en" ? "h" : "ש׳",
     actions: locale === "ar" ? "إجراءات" : locale === "en" ? "Actions" : "פעולות",
     deleteTeacherAttendanceConfirm:
@@ -713,6 +707,11 @@ export default function CourseViewPage() {
       .filter((x) => x.hours > 0)
       .sort((a, b) => a.name.localeCompare(b.name, "he", { sensitivity: "base" }))
   }, [courseTeacherAttendanceList, teachers, course?.startTime, course?.endTime])
+
+  const teacherAttendanceHoursGrandTotal = useMemo(
+    () => teacherAttendanceHoursSummary.reduce((sum, row) => sum + row.hours, 0),
+    [teacherAttendanceHoursSummary],
+  )
 
   /** תאריך ישן→חדש, אז מורה, אז שעת התחלה, אז id */
   const sortedCourseTeacherAttendanceList = useMemo(() => {
@@ -2235,15 +2234,25 @@ tr:nth-child(even) td{background:#f9fafb}
                       dir={isRtl ? "rtl" : "ltr"}
                     >
                       <div
-                        className={`flex items-center gap-1.5 sm:border-s sm:ps-2 ${
-                          isCampCourse ? "text-purple-900 sm:border-purple-200/70" : "text-foreground sm:border-border"
+                        className={`flex min-w-[6.5rem] flex-col gap-0.5 rounded-lg border px-2.5 py-1.5 sm:flex-row sm:items-baseline sm:gap-2 ${
+                          isCampCourse
+                            ? "border-purple-200/80 bg-white/80 text-purple-950 shadow-sm"
+                            : "border-border bg-background/90 text-foreground shadow-sm"
                         }`}
                       >
-                        <Clock className={`h-4 w-4 shrink-0 ${isCampCourse ? "text-purple-600" : "text-muted-foreground"}`} />
-                        <span
-                          className={`text-xs font-semibold leading-tight sm:text-sm ${isCampCourse ? "text-purple-900" : "text-foreground"}`}
-                        >
-                          {isCampCourse ? tr.teacherHoursSummaryCamp : tr.teacherHoursSummaryCourse}
+                        <div className="flex items-center gap-1.5">
+                          <Clock
+                            className={`h-4 w-4 shrink-0 ${isCampCourse ? "text-purple-600" : "text-muted-foreground"}`}
+                          />
+                          <span
+                            className={`text-[11px] font-semibold leading-tight sm:text-xs ${isCampCourse ? "text-purple-900" : "text-muted-foreground"}`}
+                          >
+                            {tr.teacherHoursGrandTotal}
+                          </span>
+                        </div>
+                        <span className="text-base font-bold tabular-nums leading-tight sm:ms-auto">
+                          {teacherAttendanceHoursGrandTotal.toFixed(1)}
+                          <span className="ms-0.5 text-xs font-semibold opacity-80">{tr.hoursShort}</span>
                         </span>
                       </div>
                       <div className="flex flex-wrap items-stretch gap-2">
