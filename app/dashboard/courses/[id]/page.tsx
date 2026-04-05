@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { ArrowRight, Pencil, Loader2, BookOpen, Calendar, Users, BarChart3, CalendarCheck, Check, X, Thermometer, Plane, CalendarRange, Printer } from "lucide-react"
+import { ArrowRight, Pencil, Loader2, BookOpen, Calendar, Users, BarChart3, CalendarCheck, Check, X, Thermometer, Plane, CalendarRange, Printer, Layers } from "lucide-react"
 import { courseTimeToDisplayValue, normalizeCourseCalendarYmd } from "@/lib/course-db-fields"
 import { useLanguage } from "@/lib/i18n/context"
 
@@ -128,6 +128,19 @@ export default function CourseViewPage() {
     editCourse: locale === "ar" ? "تعديل الدورة" : locale === "en" ? "Edit Course" : "ערוך קורס",
     general: locale === "ar" ? "عام" : locale === "en" ? "General" : "כללי",
     linkedStudents: locale === "ar" ? "الطلاب المرتبطون" : locale === "en" ? "Linked Students" : "ילדים משויכים",
+    campGroupsTab: locale === "ar" ? "المجموعات" : locale === "en" ? "Groups" : "קבוצות",
+    campGroupsTabTitle:
+      locale === "ar" ? "الطلاب حسب مجموعة المخيّم" : locale === "en" ? "Students by camp group" : "תלמידים לפי קבוצת קייטנה",
+    studentsInGroup:
+      locale === "ar" ? "عدد الطلاب في المجموعة" : locale === "en" ? "Students in this group" : "תלמידים בקבוצה",
+    unassignedCampGroup:
+      locale === "ar" ? "بدون مجموعة" : locale === "en" ? "Unassigned" : "ללא קבוצה",
+    noCampGroupAssignments:
+      locale === "ar"
+        ? "لا يوجد طلاب مخصصون لمجموعات بعد."
+        : locale === "en"
+          ? "No students are assigned to a camp group yet."
+          : "אין עדיין תלמידים משויכים לקבוצות. ניתן לשבץ בטאב «ילדים משויכים».",
     costPayments: locale === "ar" ? "المدفوعات" : locale === "en" ? "Payments" : "תשלומים",
     debtors: locale === "ar" ? "المدينون" : locale === "en" ? "Debtors" : "חייבים",
     studentAttendance: locale === "ar" ? "حضور الطلاب" : locale === "en" ? "Student Attendance" : "נוכחות תלמיד",
@@ -211,6 +224,8 @@ export default function CourseViewPage() {
   const canSeeCourseFinancial = isAdmin || hasPermission(userPerms, "courses.financial")
   const isCampCourse = !!(course && isCampCourseType(course.courseType))
   const canTabCamp = isCampCourse && (isAdmin || hasPermission(userPerms, "courses.tab.camp"))
+  /** טאב קבוצות קייטנה — אותה הרשאה כמו רשימת תלמידים */
+  const canTabCampGroups = isCampCourse && !isStudentUser && canTabStudents
   const [centerName, setCenterName] = useState("")
   const [centerLogo, setCenterLogo] = useState("")
   const [attendanceList, setAttendanceList] = useState<{ id: string; studentId: string | null; teacherId: string | null; date: string; status: string; notes?: string | null; createdByUserName?: string | null }[]>([])
@@ -233,6 +248,31 @@ export default function CourseViewPage() {
   const [paidStudentIds, setPaidStudentIds] = useState<string[]>([])
   const [paymentsForCourse, setPaymentsForCourse] = useState<CoursePaymentRow[]>([])
   const campGroups = HEBREW_GROUP_LETTERS
+
+  const campGroupTabsData = useMemo(() => {
+    if (!isCampCourse) return [] as { label: string; members: Enrollment[] }[]
+    const byLabel = new Map<string, Enrollment[]>()
+    for (const e of enrollments) {
+      const g = String(e.campGroupLabel || "").trim()
+      if (!g) continue
+      if (!byLabel.has(g)) byLabel.set(g, [])
+      byLabel.get(g)!.push(e)
+    }
+    const order = new Map(HEBREW_GROUP_LETTERS.map((l, i) => [l, i]))
+    return [...byLabel.keys()]
+      .sort((a, b) => (order.get(a) ?? 999) - (order.get(b) ?? 999) || a.localeCompare(b, "he"))
+      .map((label) => ({ label, members: byLabel.get(label) || [] }))
+  }, [isCampCourse, enrollments])
+
+  const campUnassignedEnrollments = useMemo(() => {
+    if (!isCampCourse) return []
+    return enrollments.filter((e) => !String(e.campGroupLabel || "").trim())
+  }, [isCampCourse, enrollments])
+
+  const campGroupsInnerDefault = useMemo(() => {
+    if (campGroupTabsData.length > 0) return campGroupTabsData[0].label
+    return "__unassigned__"
+  }, [campGroupTabsData])
 
   const allowedAttendanceDates = useMemo(() => {
     if (!course) return []
@@ -609,6 +649,7 @@ export default function CourseViewPage() {
     canTabGeneral,
     canTabSessionsFeedback,
     !isStudentUser && canTabStudents,
+    !isStudentUser && canTabCampGroups,
     canTabCamp,
     !isStudentUser && canTabPayments,
     !isStudentUser && canTabDebtors,
@@ -647,7 +688,7 @@ export default function CourseViewPage() {
       </div>
 
       {/* Tabs - לפי הרשאות טאב בכרטסת קורס */}
-      <Tabs defaultValue={canTabGeneral ? "general" : canTabSessionsFeedback ? "sessions-feedback" : !isStudentUser && canTabStudents ? "students" : canTabCamp ? "camp" : !isStudentUser && canTabPayments ? "payments" : !isStudentUser && canTabDebtors ? "debtors" : canTabAttendanceStudents ? "attendance-students" : "attendance-teachers"} className="w-full" dir={isRtl ? "rtl" : "ltr"}>
+      <Tabs defaultValue={canTabGeneral ? "general" : canTabSessionsFeedback ? "sessions-feedback" : !isStudentUser && canTabStudents ? "students" : !isStudentUser && canTabCampGroups ? "camp-groups" : canTabCamp ? "camp" : !isStudentUser && canTabPayments ? "payments" : !isStudentUser && canTabDebtors ? "debtors" : canTabAttendanceStudents ? "attendance-students" : "attendance-teachers"} className="w-full" dir={isRtl ? "rtl" : "ltr"}>
         <div className="-mx-1 overflow-x-auto px-1 pb-1 sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0">
           <TabsList
             className="mb-4 flex h-auto min-h-10 w-max min-w-full max-w-none flex-nowrap justify-start gap-1 overflow-x-auto p-[3px] sm:mb-6 md:grid md:w-full md:max-w-full md:overflow-visible"
@@ -671,6 +712,12 @@ export default function CourseViewPage() {
             {!isStudentUser && canTabStudents && (
               <TabsTrigger value="students" className="shrink-0 px-2 text-xs sm:text-sm md:min-w-0">
                 {tr.linkedStudents}
+              </TabsTrigger>
+            )}
+            {!isStudentUser && canTabCampGroups && (
+              <TabsTrigger value="camp-groups" className="shrink-0 gap-1 px-2 text-xs sm:text-sm md:min-w-0">
+                <Layers className="h-3.5 w-3.5 opacity-70" />
+                {tr.campGroupsTab}
               </TabsTrigger>
             )}
             {canTabCamp && (
@@ -993,6 +1040,178 @@ export default function CourseViewPage() {
             </CardContent>
           </Card>
         </TabsContent>
+        )}
+
+        {!isStudentUser && canTabCampGroups && (
+          <TabsContent value="camp-groups" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">{tr.campGroupsTabTitle}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {campGroupTabsData.length === 0 && campUnassignedEnrollments.length === 0 ? (
+                  <p className="py-8 text-center text-muted-foreground">{tr.noCampGroupAssignments}</p>
+                ) : (
+                  <Tabs
+                    key={campGroupsInnerDefault}
+                    defaultValue={campGroupsInnerDefault}
+                    className="w-full"
+                    dir={isRtl ? "rtl" : "ltr"}
+                  >
+                    <div className="-mx-1 overflow-x-auto px-1 pb-2 sm:mx-0 sm:px-0">
+                      <TabsList className="inline-flex h-auto min-h-9 w-max max-w-full flex-wrap justify-start gap-1 p-1">
+                        {campGroupTabsData.map(({ label, members }) => (
+                          <TabsTrigger
+                            key={label}
+                            value={label}
+                            className="gap-1.5 px-3 py-2 data-[state=active]:shadow-sm"
+                          >
+                            <span className="font-medium">
+                              {locale === "en" ? `Group ${label}` : locale === "ar" ? `مجموعة ${label}` : `קבוצה ${label}`}
+                            </span>
+                            <Badge variant="secondary" className="tabular-nums">
+                              {members.length}
+                            </Badge>
+                          </TabsTrigger>
+                        ))}
+                        {campUnassignedEnrollments.length > 0 && (
+                          <TabsTrigger
+                            value="__unassigned__"
+                            className="gap-1.5 px-3 py-2 data-[state=active]:shadow-sm"
+                          >
+                            <span className="font-medium">{tr.unassignedCampGroup}</span>
+                            <Badge variant="secondary" className="tabular-nums">
+                              {campUnassignedEnrollments.length}
+                            </Badge>
+                          </TabsTrigger>
+                        )}
+                      </TabsList>
+                    </div>
+
+                    {campGroupTabsData.map(({ label, members }) => (
+                      <TabsContent key={label} value={label} className="mt-4 space-y-3">
+                        <p className="text-sm text-muted-foreground">
+                          {tr.studentsInGroup}:{" "}
+                          <span className="font-semibold text-foreground">{members.length}</span>
+                        </p>
+                        {members.length === 0 ? (
+                          <p className="text-center text-muted-foreground py-6">—</p>
+                        ) : (
+                          <div className="overflow-x-auto rounded-md border">
+                            <Table>
+                              <TableHeader>
+                                <TableRow className="bg-muted/50">
+                                  <TableHead className="text-right">{tr.student}</TableHead>
+                                  <TableHead className="text-right">{tr.status}</TableHead>
+                                  <TableHead className="text-right">{tr.enrollmentDate}</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {members.map((enrollment) => (
+                                  <TableRow key={enrollment.id}>
+                                    <TableCell className="text-right font-medium">
+                                      <Link
+                                        href={`/dashboard/students/${enrollment.studentId}`}
+                                        className="text-primary hover:underline"
+                                      >
+                                        {enrollment.studentName ||
+                                          (locale === "en" ? "Unknown" : locale === "ar" ? "—" : "לא ידוע")}
+                                      </Link>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      <Badge
+                                        className={
+                                          enrollment.status === "active"
+                                            ? "bg-green-100 text-green-800"
+                                            : "bg-gray-100 text-gray-800"
+                                        }
+                                      >
+                                        {enrollment.status === "active"
+                                          ? locale === "en"
+                                            ? "Active"
+                                            : locale === "ar"
+                                              ? "نشط"
+                                              : "פעיל"
+                                          : enrollment.status}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-right text-muted-foreground">
+                                      {enrollment.enrollmentDate
+                                        ? new Date(enrollment.enrollmentDate).toLocaleDateString(localeTag)
+                                        : "—"}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        )}
+                      </TabsContent>
+                    ))}
+
+                    {campUnassignedEnrollments.length > 0 && (
+                      <TabsContent value="__unassigned__" className="mt-4 space-y-3">
+                        <p className="text-sm text-muted-foreground">
+                          {tr.studentsInGroup}:{" "}
+                          <span className="font-semibold text-foreground">
+                            {campUnassignedEnrollments.length}
+                          </span>
+                        </p>
+                        <div className="overflow-x-auto rounded-md border">
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="bg-muted/50">
+                                <TableHead className="text-right">{tr.student}</TableHead>
+                                <TableHead className="text-right">{tr.status}</TableHead>
+                                <TableHead className="text-right">{tr.enrollmentDate}</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {campUnassignedEnrollments.map((enrollment) => (
+                                <TableRow key={enrollment.id}>
+                                  <TableCell className="text-right font-medium">
+                                    <Link
+                                      href={`/dashboard/students/${enrollment.studentId}`}
+                                      className="text-primary hover:underline"
+                                    >
+                                      {enrollment.studentName ||
+                                        (locale === "en" ? "Unknown" : locale === "ar" ? "—" : "לא ידוע")}
+                                    </Link>
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <Badge
+                                      className={
+                                        enrollment.status === "active"
+                                          ? "bg-green-100 text-green-800"
+                                          : "bg-gray-100 text-gray-800"
+                                      }
+                                    >
+                                      {enrollment.status === "active"
+                                        ? locale === "en"
+                                          ? "Active"
+                                          : locale === "ar"
+                                            ? "نشط"
+                                            : "פעיל"
+                                        : enrollment.status}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="text-right text-muted-foreground">
+                                    {enrollment.enrollmentDate
+                                      ? new Date(enrollment.enrollmentDate).toLocaleDateString(localeTag)
+                                      : "—"}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </TabsContent>
+                    )}
+                  </Tabs>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
         )}
 
         {canTabCamp && (
