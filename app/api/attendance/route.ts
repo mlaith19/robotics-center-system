@@ -4,7 +4,14 @@ import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
 import { sessionRolesGrantFullAccess } from "@/lib/permissions"
 import { normalizeCourseCalendarYmd } from "@/lib/course-db-fields"
-import { listCampSessionDates } from "@/lib/camp-kaytana"
+import { listCampSessionDates, isCampCourseType } from "@/lib/camp-kaytana"
+import {
+  courseIsCampType,
+  getTeacherIdForUserId,
+  loadCampMeetingDetailForSessionDate,
+  resyncCampTeacherAttendanceForCourseDate,
+  teacherCoversCampGroupOnMeeting,
+} from "@/lib/camp-attendance"
 import { ensureAttendanceHourKindColumn } from "@/lib/teacher-attendance-hour-kind"
 import { enrichTeacherAttendanceRowsWithRates } from "@/lib/teacher-tariff-profiles"
 
@@ -257,10 +264,14 @@ export const POST = withTenantAuth(async (req, session) => {
       return Response.json({ error: "Only admin can create/update teacher attendance manually" }, { status: 403 })
     }
 
+    let courseRowForCamp: { courseType?: string | null } | undefined
     if (courseId) {
-      const courseExists = await db`SELECT id FROM "Course" WHERE id = ${courseId}`
+      const courseExists = await db`SELECT id, "courseType" FROM "Course" WHERE id = ${courseId}`
       if (courseExists.length === 0) return Response.json({ error: "Course not found" }, { status: 404 })
+      courseRowForCamp = courseExists[0] as { courseType?: string | null }
     }
+
+    const dateYmd = extractAttendanceDateYmd(date)
 
     if (studentId && courseId) {
       const crsRows = await db`
@@ -274,7 +285,6 @@ export const POST = withTenantAuth(async (req, session) => {
       const dow = Array.isArray(cr?.daysOfWeek) ? (cr.daysOfWeek as string[]) : []
       if (start && end && dow.length > 0) {
         const allowed = listCampSessionDates(start, end, dow)
-        const dateYmd = extractAttendanceDateYmd(date)
         if (!dateYmd || !allowed.includes(dateYmd)) {
           return Response.json(
             {
@@ -300,46 +310,114 @@ export const POST = withTenantAuth(async (req, session) => {
     const noteValue = notes || note || null
     const createdByUserId = session.id
 
-    let existing
+    const isCampCourse =
+      !!courseRowForCamp && isCampCourseType(String(courseRowForCamp.courseType || ""))
+
+    let existing: { id: string; createdByUserId?: string | null }[] = []
     if (studentId) {
-      existing = await db`
-        SELECT id FROM "Attendance" 
+      existing = (await db`
+        SELECT id, "createdByUserId" FROM "Attendance" 
         WHERE "studentId" = ${studentId} AND "courseId" = ${courseId} AND "date" = ${date}
-      `
+      `) as { id: string; createdByUserId?: string | null }[]
     } else if (courseId) {
-      existing = await db`
-        SELECT id FROM "Attendance" 
+      existing = (await db`
+        SELECT id, "createdByUserId" FROM "Attendance" 
         WHERE "teacherId" = ${teacherId} AND "courseId" = ${courseId} AND "date" = ${date}
-      `
+      `) as { id: string; createdByUserId?: string | null }[]
     } else {
-      existing = await db`
-        SELECT id FROM "Attendance" 
+      existing = (await db`
+        SELECT id, "createdByUserId" FROM "Attendance" 
         WHERE "teacherId" = ${teacherId} AND "courseId" IS NULL AND "date" = ${date}
-      `
+      `) as { id: string; createdByUserId?: string | null }[]
     }
 
+    if (studentId && courseId && isCampCourse) {
+      const meeting = dateYmd ? await loadCampMeetingDetailForSessionDate(db, courseId, dateYmd) : null
+      const enr = await db`
+        SELECT "campGroupLabel" FROM "Enrollment" WHERE "studentId" = ${studentId} AND "courseId" = ${courseId} LIMIT 1
+      `
+      const groupLabel = (enr[0] as { campGroupLabel?: string | null } | undefined)?.campGroupLabel ?? null
+
+      if (!isAdmin) {
+        const myTeacherId = await getTeacherIdForUserId(db, session.id)
+        if (!myTeacherId) {
+          return Response.json(
+            {
+              error: "בקורס קייטנה רק מורה משובץ בלוח המפגשים יכול לרשום נוכחות",
+              code: "attendance.camp.teacher_only",
+            },
+            { status: 403 },
+          )
+        }
+        if (!meeting) {
+          return Response.json(
+            {
+              error: "אין מערכת מפגשים לתאריך זה — לא ניתן לרשום נוכחות",
+              code: "attendance.camp.no_meeting",
+            },
+            { status: 400 },
+          )
+        }
+        if (!teacherCoversCampGroupOnMeeting(meeting, myTeacherId, groupLabel)) {
+          return Response.json(
+            {
+              error: "אין שיבוץ שלך לקבוצת התלמיד במפגש זה",
+              code: "attendance.camp.not_assigned",
+            },
+            { status: 403 },
+          )
+        }
+      }
+
+      if (!isAdmin && existing.length > 0) {
+        const firstCreator = existing[0].createdByUserId
+        if (firstCreator && firstCreator !== session.id) {
+          return Response.json(
+            {
+              error: "רק המורה שרשם את הנוכחות לתלמיד זה יכול לעדכן",
+              code: "attendance.camp.locked_creator",
+            },
+            { status: 403 },
+          )
+        }
+      }
+    }
+
+    const studentRowActorUserId =
+      studentId && existing.length > 0 ? existing[0].createdByUserId ?? session.id : session.id
+
     if (existing.length > 0) {
+      const rowUserId = studentId ? studentRowActorUserId : createdByUserId
       const result = await db`
         UPDATE "Attendance"
-        SET status = ${status}, notes = ${noteValue}, hours = ${hours || null}, "hourKind" = ${hourKindStored}, "createdByUserId" = ${createdByUserId}
+        SET status = ${status}, notes = ${noteValue}, hours = ${hours || null}, "hourKind" = ${hourKindStored}, "createdByUserId" = ${rowUserId}
         WHERE id = ${existing[0].id}
         RETURNING *
       `
       const saved = result[0]
-      if (studentId && courseId && (status === "present" || status === "נוכח")) {
-        await syncTeacherAttendanceForCourseDate(db, courseId, date, createdByUserId, now)
+      if (studentId && courseId) {
+        if (isCampCourse) {
+          await resyncCampTeacherAttendanceForCourseDate(db, courseId, dateYmd, now)
+        } else if (status === "present" || status === "נוכח") {
+          await syncTeacherAttendanceForCourseDate(db, courseId, date, createdByUserId, now)
+        }
       }
       return Response.json(saved)
     }
 
+    const insertCreatorUserId = studentId ? session.id : createdByUserId
     const result = await db`
       INSERT INTO "Attendance" (id, "studentId", "teacherId", "courseId", date, status, notes, hours, "hourKind", "createdByUserId", "createdAt")
-      VALUES (${id}, ${studentId || null}, ${teacherId || null}, ${courseId || null}, ${date}, ${status}, ${noteValue}, ${hours || null}, ${hourKindStored}, ${createdByUserId}, ${now})
+      VALUES (${id}, ${studentId || null}, ${teacherId || null}, ${courseId || null}, ${date}, ${status}, ${noteValue}, ${hours || null}, ${hourKindStored}, ${insertCreatorUserId}, ${now})
       RETURNING *
     `
     const saved = result[0]
-    if (studentId && courseId && (status === "present" || status === "נוכח")) {
-      await syncTeacherAttendanceForCourseDate(db, courseId, date, createdByUserId, now)
+    if (studentId && courseId) {
+      if (isCampCourse) {
+        await resyncCampTeacherAttendanceForCourseDate(db, courseId, dateYmd, now)
+      } else if (status === "present" || status === "נוכח") {
+        await syncTeacherAttendanceForCourseDate(db, courseId, date, createdByUserId, now)
+      }
     }
     return Response.json(saved, { status: 201 })
   } catch (err) {
@@ -354,6 +432,7 @@ async function syncTeacherAttendanceForCourseDate(
   createdByUserId: string | null,
   now: string
 ) {
+  if (await courseIsCampType(db, courseId)) return
   const courses = await db`SELECT "teacherIds" FROM "Course" WHERE id = ${courseId}`
   const raw = courses[0]?.teacherIds
   let teacherIds: string[] = []
@@ -392,6 +471,7 @@ export const DELETE = withTenantAuth(async (req, _session) => {
   if (tenantErr) return tenantErr
   const db = tenant.db
   try {
+    await ensureAttendanceHourKindColumn(db)
     const { searchParams } = new URL(req.url)
     const id        = searchParams.get("id")
     const studentId = searchParams.get("studentId")
@@ -412,7 +492,27 @@ export const DELETE = withTenantAuth(async (req, _session) => {
       return Response.json({ success: true })
     }
     if (studentId && courseId && date) {
+      const dateYmd = extractAttendanceDateYmd(date)
+      const camp = await courseIsCampType(db, courseId)
+      if (camp && !isAdmin) {
+        const row = await db`
+          SELECT "createdByUserId" FROM "Attendance"
+          WHERE "studentId" = ${studentId} AND "courseId" = ${courseId} AND "date" = ${date}
+          LIMIT 1
+        `
+        const creator = (row[0] as { createdByUserId?: string | null } | undefined)?.createdByUserId
+        if (creator && creator !== _session.id) {
+          return Response.json(
+            { error: "רק המורה שרשם את הנוכחות יכול למחוק", code: "attendance.camp.locked_creator" },
+            { status: 403 },
+          )
+        }
+      }
       await db`DELETE FROM "Attendance" WHERE "studentId" = ${studentId} AND "courseId" = ${courseId} AND "date" = ${date}`
+      if (camp && dateYmd) {
+        const now = new Date().toISOString()
+        await resyncCampTeacherAttendanceForCourseDate(db, courseId, dateYmd, now)
+      }
       return Response.json({ success: true })
     }
     if (teacherId && courseId && date) {

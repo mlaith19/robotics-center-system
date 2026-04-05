@@ -247,6 +247,8 @@ export default function CourseViewPage() {
   const [isAddingPayment, setIsAddingPayment] = useState(false)
   const [paidStudentIds, setPaidStudentIds] = useState<string[]>([])
   const [paymentsForCourse, setPaymentsForCourse] = useState<CoursePaymentRow[]>([])
+  /** רשימת תלמידים מסוננת לפי שיבוץ מורה בקייטנה (טאב נוכחות בלבד) */
+  const [campAttendanceEnrollments, setCampAttendanceEnrollments] = useState<Enrollment[] | null>(null)
   const campGroups = HEBREW_GROUP_LETTERS
 
   const campGroupTabsData = useMemo(() => {
@@ -297,6 +299,11 @@ export default function CourseViewPage() {
     return allowedAttendanceDates.includes(attendanceDate) ? attendanceDate : allowedAttendanceDates[0]
   }, [allowedAttendanceDates.join("|"), attendanceDate])
 
+  const enrollmentsForAttendanceTab = useMemo(
+    () => campAttendanceEnrollments ?? enrollments,
+    [campAttendanceEnrollments, enrollments],
+  )
+
   useEffect(() => {
     if (!currentUser?.id) return
     fetch(`/api/students/by-user/${currentUser.id}`)
@@ -339,6 +346,33 @@ export default function CourseViewPage() {
     }
     fetchData()
   }, [id])
+
+  useEffect(() => {
+    if (!id || !course) return
+    if (!isCampCourse || isAdmin || !canTabAttendanceStudents || !attendanceDateForApi) {
+      setCampAttendanceEnrollments(null)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const url = `/api/enrollments?courseId=${id}&forCampAttendanceDate=${encodeURIComponent(attendanceDateForApi)}`
+        const res = await fetch(url)
+        if (cancelled) return
+        if (res.ok) {
+          const data = await res.json()
+          setCampAttendanceEnrollments(Array.isArray(data) ? data : [])
+        } else if (!cancelled) {
+          setCampAttendanceEnrollments(null)
+        }
+      } catch {
+        if (!cancelled) setCampAttendanceEnrollments(null)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [id, course?.id, isCampCourse, isAdmin, canTabAttendanceStudents, attendanceDateForApi])
 
   useEffect(() => {
     if ((!canTabAttendanceStudents && !canTabAttendanceTeachers) || !id) return
@@ -499,11 +533,20 @@ export default function CourseViewPage() {
           status,
         }),
       })
-      if (!res.ok) throw new Error("Failed to save attendance")
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => null)
+        const msg =
+          errBody && typeof errBody === "object" && "error" in errBody
+            ? String((errBody as { error?: string }).error || "")
+            : ""
+        throw new Error(msg || "Failed to save attendance")
+      }
       const allRes = await fetch(`/api/attendance?courseId=${id}`)
       const allRows = allRes.ok ? await allRes.json() : []
       setAttendanceList(Array.isArray(allRows) ? allRows : [])
-    } catch {
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : ""
+      if (msg) window.alert(msg)
       setAttendanceByStudent((p) => ({ ...p, [studentId]: prev }))
     } finally {
       setSavingByStudent((p) => ({ ...p, [studentId]: false }))
@@ -1517,7 +1560,7 @@ tr:nth-child(even) td{background:#f9fafb}
 </style></head><body>`)
                       w.document.write(`<div class="header">${logoHtml}<h1>${centerName || "מרכז"}</h1>${course?.name ? `<h2 style="font-size:17px;color:#1f2937;font-weight:600;margin-top:4px">${course.name}</h2>` : ""}<h2>רשימת נוכחות - ${dateStr}</h2></div>`)
                       w.document.write(`<table><thead><tr><th>#</th><th>שם תלמיד</th><th>קבוצה</th><th>סטטוס</th><th>חתימה</th></tr></thead><tbody>`)
-                      enrollments.forEach((e, idx) => {
+                      enrollmentsForAttendanceTab.forEach((e, idx) => {
                         const st = attendanceByStudent[e.studentId] || ""
                         const statusText = st === "present" || st === "PRESENT" ? tr.present : st === "absent" || st === "ABSENT" ? tr.absent : st === "sick" || st === "SICK" ? tr.sick : st === "vacation" || st === "VACATION" ? tr.vacation : "—"
                         const statusClass = st === "present" || st === "PRESENT" ? "status-present" : st === "absent" || st === "ABSENT" ? "status-absent" : st === "sick" || st === "SICK" ? "status-sick" : st === "vacation" || st === "VACATION" ? "status-vacation" : ""
@@ -1536,12 +1579,23 @@ tr:nth-child(even) td{background:#f9fafb}
             </CardHeader>
             <CardContent>
               {(() => {
-                const vals = Object.values(attendanceByStudent)
-                const total = enrollments.length
-                const present = vals.filter((s) => s === "present" || s === "PRESENT").length
-                const absent = vals.filter((s) => s === "absent" || s === "ABSENT").length
-                const sick = vals.filter((s) => s === "sick" || s === "SICK").length
-                const vacation = vals.filter((s) => s === "vacation" || s === "VACATION").length
+                const total = enrollmentsForAttendanceTab.length
+                const present = enrollmentsForAttendanceTab.filter((e) => {
+                  const st = attendanceByStudent[e.studentId]
+                  return st === "present" || st === "PRESENT"
+                }).length
+                const absent = enrollmentsForAttendanceTab.filter((e) => {
+                  const st = attendanceByStudent[e.studentId]
+                  return st === "absent" || st === "ABSENT"
+                }).length
+                const sick = enrollmentsForAttendanceTab.filter((e) => {
+                  const st = attendanceByStudent[e.studentId]
+                  return st === "sick" || st === "SICK"
+                }).length
+                const vacation = enrollmentsForAttendanceTab.filter((e) => {
+                  const st = attendanceByStudent[e.studentId]
+                  return st === "vacation" || st === "VACATION"
+                }).length
                 const unmarked = total - present - absent - sick - vacation
                 return total > 0 ? (
                   <div className="mb-4 flex flex-wrap gap-3 text-sm">
@@ -1562,7 +1616,7 @@ tr:nth-child(even) td{background:#f9fafb}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {enrollments.length > 0 ? enrollments.map((enrollment) => (
+                    {enrollmentsForAttendanceTab.length > 0 ? enrollmentsForAttendanceTab.map((enrollment) => (
                       <TableRow key={enrollment.id}>
                         <TableCell className="max-w-[40%] break-words text-right font-medium sm:max-w-none">{enrollment.studentName || "—"}</TableCell>
                         <TableCell className="align-top">
@@ -1585,7 +1639,11 @@ tr:nth-child(even) td{background:#f9fafb}
                 </Table>
               </div>
               {(() => {
-                const studentAttendance = attendanceList.filter((a) => a.studentId != null)
+                const scopeIds = new Set(enrollmentsForAttendanceTab.map((e) => e.studentId))
+                const studentAttendance =
+                  isCampCourse && !isAdmin
+                    ? attendanceList.filter((a) => a.studentId != null && scopeIds.has(String(a.studentId)))
+                    : attendanceList.filter((a) => a.studentId != null)
                 return studentAttendance.length > 0 ? (
                   <div className="overflow-x-auto rounded-md border">
                     <Table className="min-w-[560px]">

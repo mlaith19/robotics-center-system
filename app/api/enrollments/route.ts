@@ -2,6 +2,13 @@ import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant } from "@/lib/tenant/resolve-tenant"
 import { applySiblingAndAttendancePricingToEnrollmentRows } from "@/lib/enrollment-effective-price"
 import { ensureCourseSessionPricesColumn } from "@/lib/course-session-prices"
+import { sessionRolesGrantFullAccess } from "@/lib/permissions"
+import { isCampCourseType } from "@/lib/camp-kaytana"
+import {
+  getTeacherIdForUserId,
+  loadCampMeetingDetailForSessionDate,
+  teacherCoversCampGroupOnMeeting,
+} from "@/lib/camp-attendance"
 
 function isMissingColumnError(e: unknown): boolean {
   const code = (e as { code?: string })?.code
@@ -24,13 +31,14 @@ async function ensureEnrollmentAuditColumns(db: any) {
   )
 }
 
-export const GET = withTenantAuth(async (req, _session) => {
+export const GET = withTenantAuth(async (req, session) => {
   const [tenant, tenantErr] = await requireTenant(req)
   if (tenantErr) return tenantErr
   const db = tenant.db
   const { searchParams } = new URL(req.url)
   const courseId  = searchParams.get("courseId")
   const studentId = searchParams.get("studentId")
+  const forCampAttendanceDate = searchParams.get("forCampAttendanceDate")
 
   const runWithUserJoin = async () => {
     if (courseId && studentId) {
@@ -131,7 +139,32 @@ export const GET = withTenantAuth(async (req, _session) => {
       }
     }
     const rows = result as Record<string, unknown>[]
-    const finalRows = await applySiblingAndAttendancePricingToEnrollmentRows(db, rows)
+    let finalRows = await applySiblingAndAttendancePricingToEnrollmentRows(db, rows)
+
+    if (
+      courseId &&
+      forCampAttendanceDate &&
+      /^\d{4}-\d{2}-\d{2}$/.test(forCampAttendanceDate) &&
+      !sessionRolesGrantFullAccess(session.roleKey, session.role)
+    ) {
+      const crs = await db`SELECT "courseType" FROM "Course" WHERE id = ${courseId} LIMIT 1`
+      if (crs.length && isCampCourseType(String((crs[0] as { courseType?: string }).courseType || ""))) {
+        const tid = await getTeacherIdForUserId(db, session.id)
+        if (tid) {
+          const meeting = await loadCampMeetingDetailForSessionDate(db, courseId, forCampAttendanceDate)
+          if (meeting) {
+            finalRows = finalRows.filter((e) =>
+              teacherCoversCampGroupOnMeeting(
+                meeting,
+                tid,
+                (e as { campGroupLabel?: string | null }).campGroupLabel,
+              ),
+            )
+          }
+        }
+      }
+    }
+
     return Response.json(finalRows)
   } catch (err) {
     console.error("GET /api/enrollments error:", err)
