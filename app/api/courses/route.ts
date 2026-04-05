@@ -52,10 +52,17 @@ export const GET = withTenantAuth(async (req, session) => {
       }
     }
 
-    const teacherWhere =
-      teacherScopeId != null
-        ? db`WHERE c."teacherIds" IS NOT NULL AND c."teacherIds" @> ${db.json([teacherScopeId])}`
-        : db``
+    const { searchParams } = new URL(req.url)
+    const schoolIdFilter = (searchParams.get("schoolId") || "").trim() || null
+
+    const courseWhere =
+      teacherScopeId != null && schoolIdFilter
+        ? db`WHERE c."teacherIds" IS NOT NULL AND c."teacherIds" @> ${db.json([teacherScopeId])} AND c."schoolId" = ${schoolIdFilter}`
+        : teacherScopeId != null
+          ? db`WHERE c."teacherIds" IS NOT NULL AND c."teacherIds" @> ${db.json([teacherScopeId])}`
+          : schoolIdFilter
+            ? db`WHERE c."schoolId" = ${schoolIdFilter}`
+            : db``
 
     const courses = await db`
       SELECT 
@@ -69,7 +76,7 @@ export const GET = withTenantAuth(async (req, session) => {
         FROM "Enrollment"
         GROUP BY "courseId"
       ) enrollment_stats ON c.id = enrollment_stats."courseId"
-      ${teacherWhere}
+      ${courseWhere}
       ORDER BY c."createdAt" DESC
     `
     const teachers = await db`SELECT id, name FROM "Teacher"`

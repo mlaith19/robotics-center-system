@@ -35,6 +35,24 @@ export const GET = withTenantAuth(async (req, session) => {
 
   try {
     const { searchParams } = new URL(req.url)
+    const schoolPayId = (searchParams.get("schoolId") || "").trim()
+    if (schoolPayId) {
+      const bySchool = await db`
+        SELECT p.*, s.name as "studentName", u.name as "createdByUserName"
+        FROM "Payment" p
+        LEFT JOIN "Student" s ON p."studentId" = s.id
+        LEFT JOIN "User" u ON p."createdByUserId" = u.id
+        WHERE p."studentId" IN (
+          SELECT DISTINCT e."studentId"
+          FROM "Enrollment" e
+          INNER JOIN "Course" c ON c.id = e."courseId"
+          WHERE c."schoolId" = ${schoolPayId}
+        )
+        ORDER BY p."paymentDate" DESC
+      `
+      return Response.json(bySchool)
+    }
+
     const studentId = searchParams.get("studentId")
     const startDate = searchParams.get("startDate")
     const endDate   = searchParams.get("endDate")

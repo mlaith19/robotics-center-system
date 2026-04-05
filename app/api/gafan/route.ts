@@ -11,7 +11,11 @@ export const GET = withTenantAuth(async (req, session) => {
   if (mismatch) return mismatch
   const db = tenant.db
   try {
-    const result = await db`SELECT * FROM "Gafan" ORDER BY "createdAt" DESC`
+    const { searchParams } = new URL(req.url)
+    const schoolId = (searchParams.get("schoolId") || "").trim()
+    const result = schoolId
+      ? await db`SELECT * FROM "Gafan" WHERE "schoolId" = ${schoolId} ORDER BY "createdAt" DESC`
+      : await db`SELECT * FROM "Gafan" ORDER BY "createdAt" DESC`
     return Response.json(result)
   } catch (err) {
     console.error("GET /api/gafan error:", err)

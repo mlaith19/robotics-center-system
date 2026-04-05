@@ -40,10 +40,22 @@ export const GET = withTenantAuth(async (req, session) => {
   const { searchParams } = new URL(req.url)
   const courseId  = searchParams.get("courseId")
   const studentId = searchParams.get("studentId")
+  const schoolIdParam = (searchParams.get("schoolId") || "").trim() || null
   const forCampAttendanceDate = searchParams.get("forCampAttendanceDate")
   const forCampMeetingCellId = (searchParams.get("forCampMeetingCellId") || "").trim()
 
   const runWithUserJoin = async () => {
+    if (schoolIdParam) {
+      return db`
+        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", u.name as "createdByUserName"
+        FROM "Enrollment" e
+        LEFT JOIN "Student" s ON e."studentId" = s.id
+        LEFT JOIN "Course" c ON e."courseId" = c.id
+        LEFT JOIN "User" u ON e."createdByUserId" = u.id
+        WHERE c."schoolId" = ${schoolIdParam}
+        ORDER BY e."enrollmentDate" DESC
+      `
+    }
     if (courseId && studentId) {
       return db`
         SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", u.name as "createdByUserName"
@@ -88,6 +100,16 @@ export const GET = withTenantAuth(async (req, session) => {
   }
 
   const runWithoutUserJoin = async () => {
+    if (schoolIdParam) {
+      return db`
+        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices"
+        FROM "Enrollment" e
+        LEFT JOIN "Student" s ON e."studentId" = s.id
+        LEFT JOIN "Course" c ON e."courseId" = c.id
+        WHERE c."schoolId" = ${schoolIdParam}
+        ORDER BY e."enrollmentDate" DESC
+      `
+    }
     if (courseId && studentId) {
       return db`
         SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices"

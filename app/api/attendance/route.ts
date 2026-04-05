@@ -35,8 +35,39 @@ export const GET = withTenantAuth(async (req, _session) => {
   const teacherId = searchParams.get("teacherId")
   const date      = searchParams.get("date")
   const campMeetingCellIdGet = (searchParams.get("campMeetingCellId") || "").trim()
+  const schoolIdAtt = (searchParams.get("schoolId") || "").trim()
 
   const runQuery = async (dbClient: ReturnType<typeof postgres>, withUserJoin: boolean) => {
+    if (
+      schoolIdAtt &&
+      !teacherId &&
+      !courseId &&
+      !studentId &&
+      !date
+    ) {
+      if (withUserJoin) {
+        return dbClient`
+          SELECT a.*, c.name as "courseName", c.duration as "courseDuration",
+            COALESCE(u.name, te.name) as "createdByUserName",
+            te.name as "teacherName"
+          FROM "Attendance" a
+          INNER JOIN "Course" c ON a."courseId" = c.id
+          LEFT JOIN "User" u ON a."createdByUserId" = u.id
+          LEFT JOIN "Teacher" te ON a."teacherId" = te.id
+          WHERE c."schoolId" = ${schoolIdAtt} AND a."teacherId" IS NOT NULL
+          ORDER BY a."date" DESC, a."createdAt" DESC
+        `
+      }
+      const rows = await dbClient`
+        SELECT a.*, c.name as "courseName", c.duration as "courseDuration", te.name as "createdByUserName", te.name as "teacherName"
+        FROM "Attendance" a
+        INNER JOIN "Course" c ON a."courseId" = c.id
+        LEFT JOIN "Teacher" te ON a."teacherId" = te.id
+        WHERE c."schoolId" = ${schoolIdAtt} AND a."teacherId" IS NOT NULL
+        ORDER BY a."date" DESC, a."createdAt" DESC
+      `
+      return rows as Record<string, unknown>[]
+    }
     if (teacherId) {
       if (withUserJoin) {
         return dbClient`
