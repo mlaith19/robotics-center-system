@@ -9,6 +9,7 @@ import {
   loadCampMeetingDetailForSessionDate,
   teacherCoversCampGroupOnMeeting,
   findCampMeetingCell,
+  normCampGroupLabel,
 } from "@/lib/camp-attendance"
 
 function isMissingColumnError(e: unknown): boolean {
@@ -143,39 +144,40 @@ export const GET = withTenantAuth(async (req, session) => {
     const rows = result as Record<string, unknown>[]
     let finalRows = await applySiblingAndAttendancePricingToEnrollmentRows(db, rows)
 
-    if (
-      courseId &&
-      forCampAttendanceDate &&
-      /^\d{4}-\d{2}-\d{2}$/.test(forCampAttendanceDate) &&
-      !sessionRolesGrantFullAccess(session.roleKey, session.role)
-    ) {
+    if (courseId && forCampAttendanceDate && /^\d{4}-\d{2}-\d{2}$/.test(forCampAttendanceDate)) {
       const crs = await db`SELECT "courseType" FROM "Course" WHERE id = ${courseId} LIMIT 1`
       if (crs.length && isCampCourseType(String((crs[0] as { courseType?: string }).courseType || ""))) {
+        const isPrivileged = sessionRolesGrantFullAccess(session.roleKey, session.role)
         const tid = await getTeacherIdForUserId(db, session.id)
-        if (tid) {
-          const meeting = await loadCampMeetingDetailForSessionDate(db, courseId, forCampAttendanceDate)
-          if (meeting) {
-            if (forCampMeetingCellId) {
-              const found = findCampMeetingCell(meeting, forCampMeetingCellId)
-              if (!found || !found.cell.teacherIds.includes(tid)) {
-                finalRows = []
-              } else {
-                const labels = new Set(found.cell.groupLabels.map((x) => String(x || "").trim()).filter(Boolean))
-                finalRows = finalRows.filter((e) => {
-                  const g = String((e as { campGroupLabel?: string | null }).campGroupLabel ?? "").trim()
-                  return g && labels.has(g)
-                })
-              }
+        const meeting = await loadCampMeetingDetailForSessionDate(db, courseId, forCampAttendanceDate)
+
+        if (forCampMeetingCellId) {
+          if (!meeting) {
+            finalRows = []
+          } else {
+            const found = findCampMeetingCell(meeting, forCampMeetingCellId)
+            if (!found) {
+              finalRows = []
+            } else if (!isPrivileged && (!tid || !found.cell.teacherIds.includes(tid))) {
+              finalRows = []
             } else {
-              finalRows = finalRows.filter((e) =>
-                teacherCoversCampGroupOnMeeting(
-                  meeting,
-                  tid,
-                  (e as { campGroupLabel?: string | null }).campGroupLabel,
-                ),
+              const labels = new Set(
+                found.cell.groupLabels.map((x) => normCampGroupLabel(x)).filter(Boolean),
               )
+              finalRows = finalRows.filter((e) => {
+                const g = normCampGroupLabel((e as { campGroupLabel?: string | null }).campGroupLabel)
+                return g.length > 0 && labels.has(g)
+              })
             }
           }
+        } else if (!isPrivileged && tid && meeting) {
+          finalRows = finalRows.filter((e) =>
+            teacherCoversCampGroupOnMeeting(
+              meeting,
+              tid,
+              (e as { campGroupLabel?: string | null }).campGroupLabel,
+            ),
+          )
         }
       }
     }

@@ -37,7 +37,7 @@ export function slotDurationHours(start: string, end: string): number {
   return Math.max(0, parseTimeToDecimalHours(end) - parseTimeToDecimalHours(start))
 }
 
-function normGroupLabel(g: string | null | undefined): string {
+export function normCampGroupLabel(g: string | null | undefined): string {
   return String(g ?? "").trim()
 }
 
@@ -47,13 +47,13 @@ export function teacherCoversCampGroupOnMeeting(
   teacherId: string,
   campGroupLabel: string | null | undefined
 ): boolean {
-  const g = normGroupLabel(campGroupLabel)
+  const g = normCampGroupLabel(campGroupLabel)
   if (!g) return false
   for (const slot of meeting.slots) {
     if (slot.isBreak) continue
     for (const cell of slot.cells) {
       if (!cell.teacherIds.includes(teacherId)) continue
-      if (cell.groupLabels.some((x) => normGroupLabel(x) === g)) return true
+      if (cell.groupLabels.some((x) => normCampGroupLabel(x) === g)) return true
     }
   }
   return false
@@ -80,10 +80,10 @@ export function teacherTeachesCellForStudentGroup(
 ): boolean {
   const found = findCampMeetingCell(meeting, cellId)
   if (!found) return false
-  const g = normGroupLabel(campGroupLabel)
+  const g = normCampGroupLabel(campGroupLabel)
   if (!g) return false
   if (!found.cell.teacherIds.includes(teacherId)) return false
-  return found.cell.groupLabels.some((x) => normGroupLabel(x) === g)
+  return found.cell.groupLabels.some((x) => normCampGroupLabel(x) === g)
 }
 
 export async function ensureAttendanceCampColumns(db: ReturnType<typeof postgres>) {
@@ -135,7 +135,8 @@ export async function loadCampMeetingDetailForSessionDate(
   await ensureCampTables(db)
   const mRows = await db`
     SELECT id, "sessionDate" FROM "CampMeeting"
-    WHERE "courseId" = ${courseId} AND "sessionDate" = ${sessionDateYmd}
+    WHERE "courseId" = ${courseId}
+      AND LEFT(BTRIM("sessionDate"::text), 10) = ${sessionDateYmd}
     LIMIT 1
   `
   if (!mRows.length) return null
