@@ -16,7 +16,13 @@ export const GET = withTenantAuth(async (req, session) => {
     const { searchParams } = new URL(req.url)
     const schoolId = (searchParams.get("schoolId") || "").trim()
     const result = schoolId
-      ? await db`SELECT * FROM "Gafan" WHERE "schoolId" = ${schoolId} ORDER BY "createdAt" DESC`
+      ? await db`
+          SELECT g.*, l."schoolId", COALESCE(l."teacherIds", '[]'::jsonb) as "teacherIds"
+          FROM "Gafan" g
+          INNER JOIN "GafanSchoolLink" l ON l."gafanId" = g.id
+          WHERE l."schoolId" = ${schoolId}
+          ORDER BY g."createdAt" DESC
+        `
       : await db`SELECT * FROM "Gafan" ORDER BY "createdAt" DESC`
     return Response.json(result)
   } catch (err) {
@@ -46,7 +52,8 @@ export const POST = withTenantAuth(async (req, session) => {
       schoolIdRaw !== undefined && schoolIdRaw !== null && String(schoolIdRaw).trim()
         ? String(schoolIdRaw).trim()
         : null
-    const teacherIdsJson = db.json(normalizeGafanTeacherIds(body.teacherIds))
+    const teacherIds = normalizeGafanTeacherIds(body.teacherIds)
+    const teacherIdsJson = db.json(teacherIds)
     const result = await db`
       INSERT INTO "Gafan" (
         id, name, "programNumber", "validYear", "companyName", "companyId",
@@ -76,6 +83,14 @@ export const POST = withTenantAuth(async (req, session) => {
       )
       RETURNING *
     `
+    if (schoolId) {
+      await db`
+        INSERT INTO "GafanSchoolLink" ("gafanId", "schoolId", "teacherIds", "createdAt", "updatedAt")
+        VALUES (${id}, ${schoolId}, ${teacherIdsJson}, ${now}, ${now})
+        ON CONFLICT ("gafanId", "schoolId")
+        DO UPDATE SET "teacherIds" = EXCLUDED."teacherIds", "updatedAt" = EXCLUDED."updatedAt"
+      `
+    }
     return Response.json(result[0], { status: 201 })
   } catch (err) {
     console.error("POST /api/gafan error:", err)

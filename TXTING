@@ -1,0 +1,9 @@
+Set-Location "e:\PROJECTS\robotics center system"
+git add .
+git commit -m "תיאור השינוי"
+git push origin mainSet-Location "e:\PROJECTS\robotics center system"
+git add .
+git commit -m "תיאור השינוי"
+git push origin main
+
+

@@ -135,6 +135,16 @@ CREATE TABLE IF NOT EXISTS "Gafan" (
   "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS "GafanSchoolLink" (
+  "gafanId" TEXT NOT NULL,
+  "schoolId" TEXT NOT NULL,
+  "teacherIds" JSONB DEFAULT '[]'::jsonb,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "GafanSchoolLink_pkey" PRIMARY KEY ("gafanId","schoolId")
+);
+CREATE INDEX IF NOT EXISTS "GafanSchoolLink_schoolId_idx" ON "GafanSchoolLink"("schoolId");
+
 CREATE TABLE IF NOT EXISTS "Teacher" (
   "id" TEXT NOT NULL PRIMARY KEY,
   "name" TEXT NOT NULL,

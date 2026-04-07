@@ -258,7 +258,8 @@ export default function SchoolViewPage() {
       const res = await fetch(`/api/gafan`, { credentials: "include" })
       const all = res.ok ? await res.json() : []
       const rows = Array.isArray(all) ? all : []
-      setGafanUnlinkedOptions(rows.filter((p: GafanRow) => !p.schoolId))
+      const linkedIds = new Set(gafanPrograms.map((g) => g.id))
+      setGafanUnlinkedOptions(rows.filter((p: GafanRow) => !linkedIds.has(p.id)))
     } catch {
       setGafanUnlinkedOptions([])
     }
@@ -297,7 +298,7 @@ export default function SchoolViewPage() {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ teacherIds: next }),
+        body: JSON.stringify({ schoolId: school?.id, teacherIds: next }),
       })
       if (res.ok) {
         setGafanTeacherProgram(null)
@@ -600,9 +601,9 @@ export default function SchoolViewPage() {
                       </DialogHeader>
                       <div className="space-y-4 py-2">
                         <div className="space-y-2">
-                          <Label>בחר תוכנית ללא שיוך לבית ספר</Label>
+                          <Label>בחר תוכנית לשיוך לבית ספר</Label>
                           {gafanUnlinkedOptions.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">אין תוכניות גפ&quot;ן ללא שיוך לבית ספר.</p>
+                            <p className="text-sm text-muted-foreground">כל התוכניות כבר משויכות לבית ספר זה.</p>
                           ) : (
                             <Select value={gafanLinkPickId} onValueChange={setGafanLinkPickId}>
                               <SelectTrigger>
