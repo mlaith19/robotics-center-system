@@ -17,6 +17,7 @@ export async function ensureGafanLinkColumns(db: ReturnType<typeof postgres>): P
         "gafanId" TEXT NOT NULL,
         "schoolId" TEXT NOT NULL,
         "teacherIds" JSONB DEFAULT '[]'::jsonb,
+        "workshopRows" JSONB DEFAULT '[]'::jsonb,
         "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT "GafanSchoolLink_pkey" PRIMARY KEY ("gafanId", "schoolId")
@@ -25,6 +26,11 @@ export async function ensureGafanLinkColumns(db: ReturnType<typeof postgres>): P
     await db`CREATE INDEX IF NOT EXISTS "GafanSchoolLink_schoolId_idx" ON "GafanSchoolLink"("schoolId")`
   } catch (e) {
     console.warn("[gafan] ensure link table:", e)
+  }
+  try {
+    await db`ALTER TABLE "GafanSchoolLink" ADD COLUMN IF NOT EXISTS "workshopRows" JSONB DEFAULT '[]'::jsonb`
+  } catch (e) {
+    console.warn("[gafan] ensure workshopRows column:", e)
   }
   try {
     await db`
@@ -43,4 +49,35 @@ export function normalizeGafanTeacherIds(raw: unknown): string[] {
   if (raw == null) return []
   if (Array.isArray(raw)) return raw.map((x) => String(x)).filter(Boolean)
   return []
+}
+
+export function normalizeGafanWorkshopRows(raw: unknown): Array<{
+  kind: string
+  groupsCount: number
+  studentsCount: number
+  grade: string
+  hours: number
+  price: number
+  total: number
+}> {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((r) => {
+      const row = (r ?? {}) as Record<string, unknown>
+      const groupsCount = Number(row.groupsCount ?? 1)
+      const studentsCount = Number(row.studentsCount ?? 1)
+      const hours = Number(row.hours ?? 0)
+      const price = Number(row.price ?? 0)
+      const total = Number(row.total ?? hours * price)
+      return {
+        kind: String(row.kind ?? ""),
+        groupsCount: Number.isFinite(groupsCount) && groupsCount > 0 ? groupsCount : 1,
+        studentsCount: Number.isFinite(studentsCount) && studentsCount > 0 ? studentsCount : 1,
+        grade: String(row.grade ?? ""),
+        hours: Number.isFinite(hours) && hours >= 0 ? hours : 0,
+        price: Number.isFinite(price) && price >= 0 ? price : 0,
+        total: Number.isFinite(total) && total >= 0 ? total : 0,
+      }
+    })
+    .filter((x) => x.kind || x.grade || x.hours > 0 || x.price > 0)
 }

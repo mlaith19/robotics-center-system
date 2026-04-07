@@ -1,5 +1,5 @@
 import { requireFeatureFromRequest } from "@/lib/feature-gate"
-import { ensureGafanLinkColumns, normalizeGafanTeacherIds } from "@/lib/gafan-columns"
+import { ensureGafanLinkColumns, normalizeGafanTeacherIds, normalizeGafanWorkshopRows } from "@/lib/gafan-columns"
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant, ensureSessionMatchesTenant } from "@/lib/tenant/resolve-tenant"
 
@@ -17,7 +17,8 @@ export const GET = withTenantAuth(async (req, session) => {
     const schoolId = (searchParams.get("schoolId") || "").trim()
     const result = schoolId
       ? await db`
-          SELECT g.*, l."schoolId", COALESCE(l."teacherIds", '[]'::jsonb) as "teacherIds"
+          SELECT g.*, l."schoolId", COALESCE(l."teacherIds", '[]'::jsonb) as "teacherIds",
+                 COALESCE(l."workshopRows", '[]'::jsonb) as "workshopRows"
           FROM "Gafan" g
           INNER JOIN "GafanSchoolLink" l ON l."gafanId" = g.id
           WHERE l."schoolId" = ${schoolId}
@@ -53,7 +54,9 @@ export const POST = withTenantAuth(async (req, session) => {
         ? String(schoolIdRaw).trim()
         : null
     const teacherIds = normalizeGafanTeacherIds(body.teacherIds)
+    const workshopRows = normalizeGafanWorkshopRows(body.workshopRows)
     const teacherIdsJson = db.json(teacherIds)
+    const workshopRowsJson = db.json(workshopRows)
     const result = await db`
       INSERT INTO "Gafan" (
         id, name, "programNumber", "validYear", "companyName", "companyId",
@@ -85,10 +88,13 @@ export const POST = withTenantAuth(async (req, session) => {
     `
     if (schoolId) {
       await db`
-        INSERT INTO "GafanSchoolLink" ("gafanId", "schoolId", "teacherIds", "createdAt", "updatedAt")
-        VALUES (${id}, ${schoolId}, ${teacherIdsJson}, ${now}, ${now})
+        INSERT INTO "GafanSchoolLink" ("gafanId", "schoolId", "teacherIds", "workshopRows", "createdAt", "updatedAt")
+        VALUES (${id}, ${schoolId}, ${teacherIdsJson}, ${workshopRowsJson}, ${now}, ${now})
         ON CONFLICT ("gafanId", "schoolId")
-        DO UPDATE SET "teacherIds" = EXCLUDED."teacherIds", "updatedAt" = EXCLUDED."updatedAt"
+        DO UPDATE SET
+          "teacherIds" = EXCLUDED."teacherIds",
+          "workshopRows" = EXCLUDED."workshopRows",
+          "updatedAt" = EXCLUDED."updatedAt"
       `
     }
     return Response.json(result[0], { status: 201 })

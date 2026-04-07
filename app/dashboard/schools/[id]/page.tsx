@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, Fragment } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import NewSchoolPage from "../new/page"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -26,7 +27,6 @@ import {
   Loader2,
   Users,
   CreditCard,
-  BookOpen,
   Rocket,
   CalendarCheck,
   BarChart3,
@@ -79,6 +79,7 @@ type GafanRow = {
   status?: string | null
   schoolId?: string | null
   teacherIds?: unknown
+  workshopRows?: unknown
 }
 
 function parseGafanTeacherIds(row: GafanRow): string[] {
@@ -89,11 +90,33 @@ function parseGafanTeacherIds(row: GafanRow): string[] {
 
 type TeacherMini = { id: string; name: string }
 
-type CourseRow = {
-  id: string
-  name: string
-  status?: string | null
-  enrollmentCount?: number
+type GafanWorkshopRow = {
+  kind: string
+  groupsCount: number
+  studentsCount: number
+  grade: string
+  hours: number
+  price: number
+  total: number
+}
+
+function parseGafanWorkshopRows(row: GafanRow): GafanWorkshopRow[] {
+  const rows = row.workshopRows
+  if (!Array.isArray(rows)) return []
+  return rows.map((r) => {
+    const x = (r ?? {}) as Record<string, unknown>
+    const hours = Number(x.hours ?? 0)
+    const price = Number(x.price ?? 0)
+    return {
+      kind: String(x.kind ?? ""),
+      groupsCount: Number(x.groupsCount ?? 1) || 1,
+      studentsCount: Number(x.studentsCount ?? 1) || 1,
+      grade: String(x.grade ?? ""),
+      hours: Number.isFinite(hours) ? hours : 0,
+      price: Number.isFinite(price) ? price : 0,
+      total: Number(x.total ?? hours * price) || 0,
+    }
+  })
 }
 
 type EnrollmentRow = {
@@ -168,7 +191,6 @@ export default function SchoolViewPage() {
   const [loading, setLoading] = useState(true)
 
   const [gafanPrograms, setGafanPrograms] = useState<GafanRow[]>([])
-  const [schoolCourses, setSchoolCourses] = useState<CourseRow[]>([])
   const [schoolEnrollments, setSchoolEnrollments] = useState<EnrollmentRow[]>([])
   const [schoolPayments, setSchoolPayments] = useState<PaymentRow[]>([])
   const [teacherAttendance, setTeacherAttendance] = useState<TeacherAttRow[]>([])
@@ -182,6 +204,14 @@ export default function SchoolViewPage() {
   const [gafanTeacherProgram, setGafanTeacherProgram] = useState<GafanRow | null>(null)
   const [gafanTeacherPickId, setGafanTeacherPickId] = useState("")
   const [gafanTeacherSaving, setGafanTeacherSaving] = useState(false)
+  const [workshopProgram, setWorkshopProgram] = useState<GafanRow | null>(null)
+  const [workshopKind, setWorkshopKind] = useState("סדנה כולל חומרים")
+  const [workshopGroupsCount, setWorkshopGroupsCount] = useState("1")
+  const [workshopStudentsCount, setWorkshopStudentsCount] = useState("1")
+  const [workshopGrade, setWorkshopGrade] = useState("א")
+  const [workshopHours, setWorkshopHours] = useState("1")
+  const [workshopPrice, setWorkshopPrice] = useState("0")
+  const [workshopSaving, setWorkshopSaving] = useState(false)
 
   useEffect(() => {
     if (isNewPage) return
@@ -207,16 +237,14 @@ export default function SchoolViewPage() {
     const sid = school.id
     setTabDataLoading(true)
     try {
-      const [gRes, cRes, eRes, pRes, aRes, tRes] = await Promise.all([
+      const [gRes, eRes, pRes, aRes, tRes] = await Promise.all([
         fetch(`/api/gafan?schoolId=${encodeURIComponent(sid)}`),
-        fetch(`/api/courses?schoolId=${encodeURIComponent(sid)}`),
         fetch(`/api/enrollments?schoolId=${encodeURIComponent(sid)}`),
         fetch(`/api/payments?schoolId=${encodeURIComponent(sid)}`),
         fetch(`/api/attendance?schoolId=${encodeURIComponent(sid)}`),
         fetch(`/api/teachers`),
       ])
       setGafanPrograms(gRes.ok ? await gRes.json() : [])
-      setSchoolCourses(cRes.ok ? await cRes.json() : [])
       setSchoolEnrollments(eRes.ok ? await eRes.json() : [])
       setSchoolPayments(pRes.ok ? await pRes.json() : [])
       const att = aRes.ok ? await aRes.json() : []
@@ -231,7 +259,6 @@ export default function SchoolViewPage() {
       )
     } catch {
       setGafanPrograms([])
-      setSchoolCourses([])
       setSchoolEnrollments([])
       setSchoolPayments([])
       setTeacherAttendance([])
@@ -307,6 +334,40 @@ export default function SchoolViewPage() {
       }
     } finally {
       setGafanTeacherSaving(false)
+    }
+  }
+
+  const submitWorkshopRow = async () => {
+    if (!workshopProgram || !school?.id) return
+    const current = parseGafanWorkshopRows(workshopProgram)
+    const hours = Math.max(0, Number(workshopHours || 0))
+    const price = Math.max(0, Number(workshopPrice || 0))
+    const next = [
+      ...current,
+      {
+        kind: workshopKind,
+        groupsCount: Math.max(1, Number(workshopGroupsCount || 1)),
+        studentsCount: Math.max(1, Number(workshopStudentsCount || 1)),
+        grade: workshopGrade,
+        hours,
+        price,
+        total: Math.round(hours * price * 100) / 100,
+      },
+    ]
+    setWorkshopSaving(true)
+    try {
+      const res = await fetch(`/api/gafan/${encodeURIComponent(workshopProgram.id)}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schoolId: school.id, workshopRows: next }),
+      })
+      if (res.ok) {
+        setWorkshopProgram(null)
+        await reloadTabData()
+      }
+    } finally {
+      setWorkshopSaving(false)
     }
   }
 
@@ -553,40 +614,88 @@ export default function SchoolViewPage() {
                         <TableBody>
                           {gafanPrograms.map((g) => {
                             const tids = parseGafanTeacherIds(g)
+                            const workshopRows = parseGafanWorkshopRows(g)
                             const teacherLabel =
                               tids.length === 0
                                 ? "—"
                                 : tids.map((tid) => teacherNameById.get(tid) || tid).join(", ")
                             return (
-                              <TableRow key={g.id}>
-                                <TableCell className="font-medium">{g.name}</TableCell>
-                                <TableCell>{safe(g.programNumber)}</TableCell>
-                                <TableCell>{safe(g.validYear)}</TableCell>
-                                <TableCell>{safe(g.status)}</TableCell>
-                                <TableCell className="max-w-[220px] text-right text-sm text-muted-foreground">
-                                  {teacherLabel}
-                                </TableCell>
-                                <TableCell className="text-center">
-                                  <div className="flex flex-wrap items-center justify-center gap-1">
-                                    <Button variant="outline" size="sm" asChild>
-                                      <Link href={`/dashboard/gafan/${g.id}`}>צפה</Link>
-                                    </Button>
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      className="gap-1"
-                                      onClick={() => {
-                                        setGafanTeacherPickId("")
-                                        setGafanTeacherProgram(g)
-                                      }}
-                                    >
-                                      <UserPlus className="h-3.5 w-3.5" />
-                                      שיוך מורה
-                                    </Button>
-                                  </div>
-                                </TableCell>
-                              </TableRow>
+                              <Fragment key={g.id}>
+                                <TableRow key={`${g.id}-main`}>
+                                  <TableCell className="font-medium">{g.name}</TableCell>
+                                  <TableCell>{safe(g.programNumber)}</TableCell>
+                                  <TableCell>{safe(g.validYear)}</TableCell>
+                                  <TableCell>{safe(g.status)}</TableCell>
+                                  <TableCell className="max-w-[220px] text-right text-sm text-muted-foreground">
+                                    {teacherLabel}
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    <div className="flex flex-wrap items-center justify-center gap-1">
+                                      <Button variant="outline" size="sm" asChild>
+                                        <Link href={`/dashboard/gafan/${g.id}`}>צפה</Link>
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="gap-1"
+                                        onClick={() => {
+                                          setGafanTeacherPickId("")
+                                          setGafanTeacherProgram(g)
+                                        }}
+                                      >
+                                        <UserPlus className="h-3.5 w-3.5" />
+                                        שיוך מורה
+                                      </Button>
+                                      <Button type="button" variant="outline" size="sm" onClick={() => setWorkshopProgram(g)}>
+                                        +
+                                      </Button>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                                <TableRow key={`${g.id}-details`}>
+                                  <TableCell colSpan={6}>
+                                    <div className="overflow-x-auto rounded-md border bg-slate-50/50 p-2">
+                                      <Table>
+                                        <TableHeader>
+                                          <TableRow>
+                                            <TableHead className="text-right">מס׳</TableHead>
+                                            <TableHead className="text-right">סדנה</TableHead>
+                                            <TableHead className="text-right">קבוצות כמות</TableHead>
+                                            <TableHead className="text-right">תלמידים</TableHead>
+                                            <TableHead className="text-right">שכבה</TableHead>
+                                            <TableHead className="text-right">שעות</TableHead>
+                                            <TableHead className="text-right">מחיר</TableHead>
+                                            <TableHead className="text-right">סה&quot;כ</TableHead>
+                                          </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                          {workshopRows.length === 0 ? (
+                                            <TableRow>
+                                              <TableCell colSpan={8} className="text-center text-muted-foreground">
+                                                אין שורות לתוכנית זו
+                                              </TableCell>
+                                            </TableRow>
+                                          ) : (
+                                            workshopRows.map((row, idx) => (
+                                              <TableRow key={`${g.id}-row-${idx}`}>
+                                                <TableCell>{idx + 1}</TableCell>
+                                                <TableCell>{safe(row.kind)}</TableCell>
+                                                <TableCell>{row.groupsCount}</TableCell>
+                                                <TableCell>{row.studentsCount}</TableCell>
+                                                <TableCell>{safe(row.grade)}</TableCell>
+                                                <TableCell>{row.hours}</TableCell>
+                                                <TableCell>{Number(row.price || 0)}</TableCell>
+                                                <TableCell>{Number(row.total || 0)}</TableCell>
+                                              </TableRow>
+                                            ))
+                                          )}
+                                        </TableBody>
+                                      </Table>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              </Fragment>
                             )
                           })}
                         </TableBody>
@@ -708,46 +817,59 @@ export default function SchoolViewPage() {
                       </div>
                     </DialogContent>
                   </Dialog>
+
+                  <Dialog open={workshopProgram !== null} onOpenChange={(open) => !open && setWorkshopProgram(null)}>
+                    <DialogContent dir="rtl" className="sm:max-w-lg">
+                      <DialogHeader>
+                        <DialogTitle>הוספת שורה לתוכנית</DialogTitle>
+                      </DialogHeader>
+                      <div className="grid gap-3 py-2 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label>סדנה</Label>
+                          <Select value={workshopKind} onValueChange={setWorkshopKind}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="סדנה כולל חומרים">סדנה כולל חומרים</SelectItem>
+                              <SelectItem value="סדנה ללא חומרים">סדנה ללא חומרים</SelectItem>
+                              <SelectItem value="הרצאה">הרצאה</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>קבוצות כמות</Label>
+                          <Input type="number" min={1} value={workshopGroupsCount} onChange={(e) => setWorkshopGroupsCount(e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>תלמידים</Label>
+                          <Input type="number" min={1} value={workshopStudentsCount} onChange={(e) => setWorkshopStudentsCount(e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>שכבה</Label>
+                          <Select value={workshopGrade} onValueChange={setWorkshopGrade}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {["מכינה","א","ב","ג","ד","ה","ו","ז","ח","ט","י","יא","יב"].map((g) => (
+                                <SelectItem key={g} value={g}>{g}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>שעות</Label>
+                          <Input type="number" min={0} step="0.5" value={workshopHours} onChange={(e) => setWorkshopHours(e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>מחיר</Label>
+                          <Input type="number" min={0} value={workshopPrice} onChange={(e) => setWorkshopPrice(e.target.value)} />
+                        </div>
+                      </div>
+                      <Button type="button" disabled={workshopSaving} onClick={() => void submitWorkshopRow()}>
+                        {workshopSaving ? "שומר..." : "הוסף"}
+                      </Button>
+                    </DialogContent>
+                  </Dialog>
                 </div>
 
-                <div>
-                  <div className="mb-3 flex items-center gap-2">
-                    <BookOpen className="h-5 w-5 text-blue-600" />
-                    <h3 className="text-lg font-semibold">קורסים עם שיוך לבית הספר</h3>
-                  </div>
-                  {schoolCourses.length === 0 ? (
-                    <p className="py-6 text-center text-muted-foreground">אין קורסים משויכים לבית ספר זה</p>
-                  ) : (
-                    <div className="overflow-x-auto rounded-md border">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="bg-muted/50">
-                            <TableHead className="text-right">שם קורס</TableHead>
-                            <TableHead className="text-right">סטטוס</TableHead>
-                            <TableHead className="text-center">נרשמים</TableHead>
-                            <TableHead className="w-24 text-center">פעולות</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {schoolCourses.map((c) => (
-                            <TableRow key={c.id}>
-                              <TableCell className="font-medium">{c.name}</TableCell>
-                              <TableCell>{safe(c.status)}</TableCell>
-                              <TableCell className="text-center tabular-nums">
-                                {Number(c.enrollmentCount ?? 0)}
-                              </TableCell>
-                              <TableCell className="text-center">
-                                <Button variant="outline" size="sm" asChild>
-                                  <Link href={`/dashboard/courses/${c.id}`}>צפה</Link>
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  )}
-                </div>
               </>
             )}
           </TabsContent>
