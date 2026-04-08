@@ -194,6 +194,15 @@ export const PATCH = withTenantAuth(async (req, session, { params }: Ctx) => {
       WHERE "gafanId" = ${id} AND "schoolId" = ${schoolIdPatch}
       LIMIT 1
     `
+    const isLinkOnlyAction =
+      body.teacherIds === undefined &&
+      body.addTeacherId === undefined &&
+      body.workshopRows === undefined &&
+      body.allocatedHours === undefined &&
+      body.hourRows === undefined
+    if (isLinkOnlyAction && linkRows.length > 0) {
+      return Response.json({ error: "התוכנית כבר משויכת לבית הספר" }, { status: 409 })
+    }
     const existingTeachers = normalizeGafanTeacherIds(linkRows[0]?.teacherIds)
     const existingWorkshopRows = normalizeGafanWorkshopRows(linkRows[0]?.workshopRows)
     const existingAllocatedHours = normalizeGafanAllocatedHours(linkRows[0]?.allocatedHours)

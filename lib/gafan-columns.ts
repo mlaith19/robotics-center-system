@@ -51,6 +51,18 @@ export async function ensureGafanLinkColumns(db: ReturnType<typeof postgres>): P
   } catch (e) {
     console.warn("[gafan] backfill link table:", e)
   }
+  try {
+    await db`
+      DELETE FROM "GafanSchoolLink" a
+      USING "GafanSchoolLink" b
+      WHERE a.ctid < b.ctid
+        AND a."gafanId" = b."gafanId"
+        AND a."schoolId" = b."schoolId"
+    `
+    await db`CREATE UNIQUE INDEX IF NOT EXISTS "GafanSchoolLink_gafan_school_uidx" ON "GafanSchoolLink"("gafanId", "schoolId")`
+  } catch (e) {
+    console.warn("[gafan] ensure unique link index:", e)
+  }
 }
 
 export function normalizeGafanTeacherIds(raw: unknown): string[] {

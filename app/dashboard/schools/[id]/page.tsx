@@ -206,6 +206,19 @@ function paymentTypeLabelHe(type: string | null | undefined) {
   return "—"
 }
 
+function calcHoursFromTimes(startTime: string, endTime: string): number {
+  const s = String(startTime || "")
+  const e = String(endTime || "")
+  const m1 = /^(\d{2}):(\d{2})$/.exec(s)
+  const m2 = /^(\d{2}):(\d{2})$/.exec(e)
+  if (!m1 || !m2) return 0
+  const startMin = Number(m1[1]) * 60 + Number(m1[2])
+  const endMin = Number(m2[1]) * 60 + Number(m2[2])
+  const diff = endMin - startMin
+  if (!Number.isFinite(diff) || diff <= 0) return 0
+  return Math.round((diff / 60) * 100) / 100
+}
+
 export default function SchoolViewPage() {
   const params = useParams()
   const id = params.id as string
@@ -315,6 +328,11 @@ export default function SchoolViewPage() {
     }
   }, [gafanPrograms, hoursProgramId])
 
+  useEffect(() => {
+    const auto = calcHoursFromTimes(hourStartTime, hourEndTime)
+    setHourTotal(String(auto))
+  }, [hourStartTime, hourEndTime])
+
   const openGafanLinkDialog = async () => {
     setGafanLinkOpen(true)
     setGafanLinkPickId("")
@@ -340,6 +358,9 @@ export default function SchoolViewPage() {
         body: JSON.stringify({ schoolId: school.id }),
       })
       if (res.ok) {
+        setGafanLinkOpen(false)
+        await reloadTabData()
+      } else if (res.status === 409) {
         setGafanLinkOpen(false)
         await reloadTabData()
       }
@@ -1079,7 +1100,7 @@ export default function SchoolViewPage() {
                       <Input type="date" value={hourDate} onChange={(e) => setHourDate(e.target.value)} />
                       <Input type="time" value={hourStartTime} onChange={(e) => setHourStartTime(e.target.value)} />
                       <Input type="time" value={hourEndTime} onChange={(e) => setHourEndTime(e.target.value)} />
-                      <Input type="number" min={0} step="0.25" value={hourTotal} onChange={(e) => setHourTotal(e.target.value)} />
+                      <Input type="number" min={0} step="0.25" value={hourTotal} readOnly />
                     </div>
                     <div className="flex gap-2">
                       <Button type="button" disabled={!hoursProgramId || hoursSaving} onClick={() => void saveHourRow()}>
