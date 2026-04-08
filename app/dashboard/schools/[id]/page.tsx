@@ -965,25 +965,6 @@ export default function SchoolViewPage() {
                     </DialogContent>
                   </Dialog>
 
-                  <Dialog open={hourDialogOpen} onOpenChange={setHourDialogOpen}>
-                    <DialogContent dir="rtl" className="sm:max-w-lg">
-                      <DialogHeader>
-                        <DialogTitle>{hourEditIdx == null ? "הוספת שעות" : "עריכת שעות"}</DialogTitle>
-                      </DialogHeader>
-                      <div className="grid gap-2 md:grid-cols-4">
-                        <Input type="date" value={hourDate} onChange={(e) => setHourDate(e.target.value)} />
-                        <Input type="time" value={hourStartTime} onChange={(e) => setHourStartTime(e.target.value)} />
-                        <Input type="time" value={hourEndTime} onChange={(e) => setHourEndTime(e.target.value)} />
-                        <Input type="number" min={0} step="0.25" value={hourTotal} onChange={(e) => setHourTotal(e.target.value)} />
-                      </div>
-                      <div className="flex gap-2">
-                        <Button type="button" disabled={!hoursProgramId || hoursSaving} onClick={() => void saveHourRow()}>
-                          {hourEditIdx == null ? "הוספה" : "עדכון"}
-                        </Button>
-                        <Button type="button" variant="outline" onClick={resetHourForm}>נקה</Button>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
                 </div>
 
               </>
@@ -1089,6 +1070,25 @@ export default function SchoolViewPage() {
                     )
                   })
                 )}
+                <Dialog open={hourDialogOpen} onOpenChange={setHourDialogOpen}>
+                  <DialogContent dir="rtl" className="sm:max-w-lg">
+                    <DialogHeader>
+                      <DialogTitle>{hourEditIdx == null ? "הוספת שעות" : "עריכת שעות"}</DialogTitle>
+                    </DialogHeader>
+                    <div className="grid gap-2 md:grid-cols-4">
+                      <Input type="date" value={hourDate} onChange={(e) => setHourDate(e.target.value)} />
+                      <Input type="time" value={hourStartTime} onChange={(e) => setHourStartTime(e.target.value)} />
+                      <Input type="time" value={hourEndTime} onChange={(e) => setHourEndTime(e.target.value)} />
+                      <Input type="number" min={0} step="0.25" value={hourTotal} onChange={(e) => setHourTotal(e.target.value)} />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button type="button" disabled={!hoursProgramId || hoursSaving} onClick={() => void saveHourRow()}>
+                        {hourEditIdx == null ? "הוספה" : "עדכון"}
+                      </Button>
+                      <Button type="button" variant="outline" onClick={resetHourForm}>נקה</Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </div>
             )}
           </TabsContent>
