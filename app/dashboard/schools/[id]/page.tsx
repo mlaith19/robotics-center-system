@@ -236,7 +236,7 @@ export default function SchoolViewPage() {
   const [workshopPrice, setWorkshopPrice] = useState("0")
   const [workshopSaving, setWorkshopSaving] = useState(false)
   const [hoursProgramId, setHoursProgramId] = useState("")
-  const [allocatedHoursInput, setAllocatedHoursInput] = useState("0")
+  const [hourDialogOpen, setHourDialogOpen] = useState(false)
   const [hourDate, setHourDate] = useState("")
   const [hourStartTime, setHourStartTime] = useState("")
   const [hourEndTime, setHourEndTime] = useState("")
@@ -309,25 +309,11 @@ export default function SchoolViewPage() {
     return m
   }, [teachersMini])
 
-  const hoursProgram = useMemo(
-    () => gafanPrograms.find((g) => g.id === hoursProgramId) || null,
-    [gafanPrograms, hoursProgramId],
-  )
-
   useEffect(() => {
-    if (!hoursProgramId && gafanPrograms.length > 0) setHoursProgramId(gafanPrograms[0].id)
     if (hoursProgramId && !gafanPrograms.some((g) => g.id === hoursProgramId)) {
-      setHoursProgramId(gafanPrograms[0]?.id || "")
+      setHoursProgramId("")
     }
   }, [gafanPrograms, hoursProgramId])
-
-  useEffect(() => {
-    if (!hoursProgram) {
-      setAllocatedHoursInput("0")
-      return
-    }
-    setAllocatedHoursInput(String(Number(hoursProgram.allocatedHours ?? 0)))
-  }, [hoursProgram?.id, hoursProgram?.allocatedHours])
 
   const openGafanLinkDialog = async () => {
     setGafanLinkOpen(true)
@@ -430,27 +416,10 @@ export default function SchoolViewPage() {
     setHourEditIdx(null)
   }
 
-  const saveAllocatedHours = async () => {
-    if (!hoursProgram || !school?.id) return
-    setHoursSaving(true)
-    try {
-      const res = await fetch(`/api/gafan/${encodeURIComponent(hoursProgram.id)}`, {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          schoolId: school.id,
-          allocatedHours: Math.max(0, Number(allocatedHoursInput || 0)),
-        }),
-      })
-      if (res.ok) await reloadTabData()
-    } finally {
-      setHoursSaving(false)
-    }
-  }
-
   const saveHourRow = async () => {
-    if (!hoursProgram || !school?.id) return
+    if (!hoursProgramId || !school?.id) return
+    const hoursProgram = gafanPrograms.find((g) => g.id === hoursProgramId)
+    if (!hoursProgram) return
     const rows = parseGafanHourRows(hoursProgram)
     const row: GafanHourRow = {
       date: hourDate,
@@ -471,6 +440,8 @@ export default function SchoolViewPage() {
       })
       if (res.ok) {
         resetHourForm()
+        setHourDialogOpen(false)
+        setHoursProgramId("")
         await reloadTabData()
       }
     } finally {
@@ -478,13 +449,13 @@ export default function SchoolViewPage() {
     }
   }
 
-  const deleteHourRow = async (idx: number) => {
-    if (!hoursProgram || !school?.id) return
-    const rows = parseGafanHourRows(hoursProgram)
+  const deleteHourRow = async (program: GafanRow, idx: number) => {
+    if (!school?.id) return
+    const rows = parseGafanHourRows(program)
     const next = rows.filter((_, i) => i !== idx)
     setHoursSaving(true)
     try {
-      const res = await fetch(`/api/gafan/${encodeURIComponent(hoursProgram.id)}`, {
+      const res = await fetch(`/api/gafan/${encodeURIComponent(program.id)}`, {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -993,6 +964,26 @@ export default function SchoolViewPage() {
                       </Button>
                     </DialogContent>
                   </Dialog>
+
+                  <Dialog open={hourDialogOpen} onOpenChange={setHourDialogOpen}>
+                    <DialogContent dir="rtl" className="sm:max-w-lg">
+                      <DialogHeader>
+                        <DialogTitle>{hourEditIdx == null ? "הוספת שעות" : "עריכת שעות"}</DialogTitle>
+                      </DialogHeader>
+                      <div className="grid gap-2 md:grid-cols-4">
+                        <Input type="date" value={hourDate} onChange={(e) => setHourDate(e.target.value)} />
+                        <Input type="time" value={hourStartTime} onChange={(e) => setHourStartTime(e.target.value)} />
+                        <Input type="time" value={hourEndTime} onChange={(e) => setHourEndTime(e.target.value)} />
+                        <Input type="number" min={0} step="0.25" value={hourTotal} onChange={(e) => setHourTotal(e.target.value)} />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button type="button" disabled={!hoursProgramId || hoursSaving} onClick={() => void saveHourRow()}>
+                          {hourEditIdx == null ? "הוספה" : "עדכון"}
+                        </Button>
+                        <Button type="button" variant="outline" onClick={resetHourForm}>נקה</Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
                 </div>
 
               </>
@@ -1012,99 +1003,91 @@ export default function SchoolViewPage() {
                     <p>אין תוכניות גפ&quot;ן משויכות לבית הספר</p>
                   </div>
                 ) : (
-                  <>
-                    <div className="grid gap-3 md:grid-cols-3">
-                      <div className="space-y-2 md:col-span-1">
-                        <Label>תוכנית</Label>
-                        <Select value={hoursProgramId} onValueChange={setHoursProgramId}>
-                          <SelectTrigger><SelectValue placeholder="בחר תוכנית" /></SelectTrigger>
-                          <SelectContent>
-                            {gafanPrograms.map((g) => (
-                              <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>שעות מוקצה לתוכנית</Label>
-                        <div className="flex gap-2">
-                          <Input type="number" min={0} value={allocatedHoursInput} onChange={(e) => setAllocatedHoursInput(e.target.value)} />
-                          <Button type="button" variant="outline" disabled={!hoursProgram || hoursSaving} onClick={() => void saveAllocatedHours()}>
-                            שמור
+                  gafanPrograms.map((program) => {
+                    const workshopRows = parseGafanWorkshopRows(program)
+                    const allocated = workshopRows.reduce((s, r) => s + Number(r.hours || 0), 0)
+                    const hourRows = parseGafanHourRows(program)
+                    const used = hourRows.reduce((s, r) => s + Number(r.totalHours || 0), 0)
+                    const balance = allocated - used
+                    return (
+                      <div key={program.id} className="space-y-3 rounded-lg border p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="font-semibold">{program.name}</div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => {
+                              setHoursProgramId(program.id)
+                              resetHourForm()
+                              setHourDialogOpen(true)
+                            }}
+                          >
+                            הוספה
                           </Button>
                         </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>יתרת שעות</Label>
-                        <div className="rounded-md border bg-muted/30 px-3 py-2 font-medium">
-                          {(() => {
-                            const allocated = Number(hoursProgram?.allocatedHours ?? 0)
-                            const used = parseGafanHourRows(hoursProgram || { id: "", name: "" }).reduce((s, r) => s + Number(r.totalHours || 0), 0)
-                            return (allocated - used).toFixed(2)
-                          })()}
+                        <div className="grid gap-2 md:grid-cols-2">
+                          <div className="rounded-md border bg-muted/30 px-3 py-2">
+                            שעות מוקצה לתוכנית: <strong>{allocated.toFixed(2)}</strong>
+                          </div>
+                          <div className="rounded-md border bg-muted/30 px-3 py-2">
+                            יתרת שעות: <strong>{balance.toFixed(2)}</strong>
+                          </div>
+                        </div>
+                        <div className="overflow-x-auto rounded-md border">
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="bg-muted/50">
+                                <TableHead className="text-right">תאריך</TableHead>
+                                <TableHead className="text-right">שעת התחלה</TableHead>
+                                <TableHead className="text-right">שעת סיום</TableHead>
+                                <TableHead className="text-right">סה&quot;כ שעות</TableHead>
+                                <TableHead className="text-center">פעולות</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {hourRows.length === 0 ? (
+                                <TableRow>
+                                  <TableCell colSpan={5} className="text-center text-muted-foreground">אין נתוני שעות</TableCell>
+                                </TableRow>
+                              ) : (
+                                hourRows.map((r, idx) => (
+                                  <TableRow key={`${program.id}-hr-${idx}`}>
+                                    <TableCell>{safe(r.date)}</TableCell>
+                                    <TableCell>{safe(r.startTime)}</TableCell>
+                                    <TableCell>{safe(r.endTime)}</TableCell>
+                                    <TableCell>{Number(r.totalHours || 0)}</TableCell>
+                                    <TableCell className="text-center">
+                                      <div className="flex items-center justify-center gap-1">
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => {
+                                            setHoursProgramId(program.id)
+                                            setHourDate(r.date)
+                                            setHourStartTime(r.startTime)
+                                            setHourEndTime(r.endTime)
+                                            setHourTotal(String(r.totalHours))
+                                            setHourEditIdx(idx)
+                                            setHourDialogOpen(true)
+                                          }}
+                                        >
+                                          עריכה
+                                        </Button>
+                                        <Button type="button" variant="outline" size="sm" onClick={() => void deleteHourRow(program, idx)}>
+                                          מחיקה
+                                        </Button>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                ))
+                              )}
+                            </TableBody>
+                          </Table>
                         </div>
                       </div>
-                    </div>
-
-                    <div className="rounded-md border p-3">
-                      <div className="mb-3 grid gap-2 md:grid-cols-6">
-                        <Input type="date" value={hourDate} onChange={(e) => setHourDate(e.target.value)} />
-                        <Input type="time" value={hourStartTime} onChange={(e) => setHourStartTime(e.target.value)} />
-                        <Input type="time" value={hourEndTime} onChange={(e) => setHourEndTime(e.target.value)} />
-                        <Input type="number" min={0} step="0.25" value={hourTotal} onChange={(e) => setHourTotal(e.target.value)} />
-                        <Button type="button" disabled={!hoursProgram || hoursSaving} onClick={() => void saveHourRow()}>
-                          {hourEditIdx == null ? "הוספה" : "עדכון"}
-                        </Button>
-                        <Button type="button" variant="outline" onClick={resetHourForm}>נקה</Button>
-                      </div>
-
-                      <div className="overflow-x-auto rounded-md border">
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="bg-muted/50">
-                              <TableHead className="text-right">תאריך</TableHead>
-                              <TableHead className="text-right">שעת התחלה</TableHead>
-                              <TableHead className="text-right">שעת סיום</TableHead>
-                              <TableHead className="text-right">סה&quot;כ שעות</TableHead>
-                              <TableHead className="text-center">פעולות</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {(() => {
-                              const rows = parseGafanHourRows(hoursProgram || { id: "", name: "" })
-                              if (rows.length === 0) {
-                                return (
-                                  <TableRow>
-                                    <TableCell colSpan={5} className="text-center text-muted-foreground">אין נתוני שעות</TableCell>
-                                  </TableRow>
-                                )
-                              }
-                              return rows.map((r, idx) => (
-                                <TableRow key={`hr-${idx}`}>
-                                  <TableCell>{safe(r.date)}</TableCell>
-                                  <TableCell>{safe(r.startTime)}</TableCell>
-                                  <TableCell>{safe(r.endTime)}</TableCell>
-                                  <TableCell>{Number(r.totalHours || 0)}</TableCell>
-                                  <TableCell className="text-center">
-                                    <div className="flex items-center justify-center gap-1">
-                                      <Button type="button" variant="outline" size="sm" onClick={() => {
-                                        setHourDate(r.date)
-                                        setHourStartTime(r.startTime)
-                                        setHourEndTime(r.endTime)
-                                        setHourTotal(String(r.totalHours))
-                                        setHourEditIdx(idx)
-                                      }}>עריכה</Button>
-                                      <Button type="button" variant="outline" size="sm" onClick={() => void deleteHourRow(idx)}>מחיקה</Button>
-                                    </div>
-                                  </TableCell>
-                                </TableRow>
-                              ))
-                            })()}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </div>
-                  </>
+                    )
+                  })
                 )}
               </div>
             )}
