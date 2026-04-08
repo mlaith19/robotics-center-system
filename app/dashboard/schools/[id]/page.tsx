@@ -392,6 +392,22 @@ export default function SchoolViewPage() {
     }
   }
 
+  const deleteGafanCard = async (program: GafanRow) => {
+    if (!school?.id) return
+    setGafanLinkSaving(true)
+    try {
+      const res = await fetch(`/api/gafan/${encodeURIComponent(program.id)}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schoolId: school.id, linkId: program.linkId, unlink: true }),
+      })
+      if (res.ok) await reloadTabData()
+    } finally {
+      setGafanLinkSaving(false)
+    }
+  }
+
   const submitWorkshopRow = async () => {
     if (!workshopProgram || !school?.id) return
     const current = parseGafanWorkshopRows(workshopProgram)
@@ -761,9 +777,30 @@ export default function SchoolViewPage() {
                                         <UserPlus className="h-3.5 w-3.5" />
                                         שיוך מורה
                                       </Button>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        setHoursProgramId(g.id)
+                                        resetHourForm()
+                                        setHourDialogOpen(true)
+                                      }}
+                                    >
+                                      עריכת כרטסת
+                                    </Button>
                                       <Button type="button" variant="outline" size="sm" onClick={() => setWorkshopProgram(g)}>
                                         +
                                       </Button>
+                                    <Button
+                                      type="button"
+                                      variant="destructive"
+                                      size="sm"
+                                      disabled={gafanLinkSaving}
+                                      onClick={() => void deleteGafanCard(g)}
+                                    >
+                                      מחיקה
+                                    </Button>
                                     </div>
                                   </TableCell>
                                 </TableRow>
