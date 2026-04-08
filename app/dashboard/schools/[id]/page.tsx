@@ -340,8 +340,7 @@ export default function SchoolViewPage() {
       const res = await fetch(`/api/gafan`, { credentials: "include" })
       const all = res.ok ? await res.json() : []
       const rows = Array.isArray(all) ? all : []
-      const linkedIds = new Set(gafanPrograms.map((g) => g.id))
-      setGafanUnlinkedOptions(rows.filter((p: GafanRow) => !linkedIds.has(p.id)))
+      setGafanUnlinkedOptions(rows)
     } catch {
       setGafanUnlinkedOptions([])
     }
@@ -358,9 +357,6 @@ export default function SchoolViewPage() {
         body: JSON.stringify({ schoolId: school.id }),
       })
       if (res.ok) {
-        setGafanLinkOpen(false)
-        await reloadTabData()
-      } else if (res.status === 409) {
         setGafanLinkOpen(false)
         await reloadTabData()
       }
@@ -827,7 +823,7 @@ export default function SchoolViewPage() {
                       </DialogHeader>
                       <div className="space-y-4 py-2">
                         <div className="space-y-2">
-                          <Label>בחר תוכנית לשיוך לבית ספר</Label>
+                          <Label>בחר תוכנית לשיוך לבית ספר (ניתן לבחור גם תוכנית קיימת)</Label>
                           {gafanUnlinkedOptions.length === 0 ? (
                             <p className="text-sm text-muted-foreground">כל התוכניות כבר משויכות לבית ספר זה.</p>
                           ) : (

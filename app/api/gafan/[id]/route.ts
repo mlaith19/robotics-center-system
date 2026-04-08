@@ -201,7 +201,7 @@ export const PATCH = withTenantAuth(async (req, session, { params }: Ctx) => {
       body.allocatedHours === undefined &&
       body.hourRows === undefined
     if (isLinkOnlyAction && linkRows.length > 0) {
-      return Response.json({ error: "התוכנית כבר משויכת לבית הספר" }, { status: 409 })
+      return Response.json({ success: true, alreadyLinked: true })
     }
     const existingTeachers = normalizeGafanTeacherIds(linkRows[0]?.teacherIds)
     const existingWorkshopRows = normalizeGafanWorkshopRows(linkRows[0]?.workshopRows)
