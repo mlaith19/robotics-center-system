@@ -140,6 +140,8 @@ CREATE TABLE IF NOT EXISTS "GafanSchoolLink" (
   "schoolId" TEXT NOT NULL,
   "teacherIds" JSONB DEFAULT '[]'::jsonb,
   "workshopRows" JSONB DEFAULT '[]'::jsonb,
+  "allocatedHours" NUMERIC DEFAULT 0,
+  "hourRows" JSONB DEFAULT '[]'::jsonb,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "GafanSchoolLink_pkey" PRIMARY KEY ("gafanId","schoolId")

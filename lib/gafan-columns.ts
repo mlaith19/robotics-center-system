@@ -18,6 +18,8 @@ export async function ensureGafanLinkColumns(db: ReturnType<typeof postgres>): P
         "schoolId" TEXT NOT NULL,
         "teacherIds" JSONB DEFAULT '[]'::jsonb,
         "workshopRows" JSONB DEFAULT '[]'::jsonb,
+        "allocatedHours" NUMERIC DEFAULT 0,
+        "hourRows" JSONB DEFAULT '[]'::jsonb,
         "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT "GafanSchoolLink_pkey" PRIMARY KEY ("gafanId", "schoolId")
@@ -31,6 +33,12 @@ export async function ensureGafanLinkColumns(db: ReturnType<typeof postgres>): P
     await db`ALTER TABLE "GafanSchoolLink" ADD COLUMN IF NOT EXISTS "workshopRows" JSONB DEFAULT '[]'::jsonb`
   } catch (e) {
     console.warn("[gafan] ensure workshopRows column:", e)
+  }
+  try {
+    await db`ALTER TABLE "GafanSchoolLink" ADD COLUMN IF NOT EXISTS "allocatedHours" NUMERIC DEFAULT 0`
+    await db`ALTER TABLE "GafanSchoolLink" ADD COLUMN IF NOT EXISTS "hourRows" JSONB DEFAULT '[]'::jsonb`
+  } catch (e) {
+    console.warn("[gafan] ensure hour columns:", e)
   }
   try {
     await db`
@@ -80,4 +88,33 @@ export function normalizeGafanWorkshopRows(raw: unknown): Array<{
       }
     })
     .filter((x) => x.kind || x.grade || x.hours > 0 || x.price > 0)
+}
+
+export function normalizeGafanAllocatedHours(raw: unknown): number {
+  const n = Number(raw ?? 0)
+  return Number.isFinite(n) && n >= 0 ? n : 0
+}
+
+export function normalizeGafanHourRows(raw: unknown): Array<{
+  date: string
+  startTime: string
+  endTime: string
+  totalHours: number
+}> {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((r) => {
+      const row = (r ?? {}) as Record<string, unknown>
+      const date = String(row.date ?? "")
+      const startTime = String(row.startTime ?? "")
+      const endTime = String(row.endTime ?? "")
+      const totalHours = Number(row.totalHours ?? 0)
+      return {
+        date,
+        startTime,
+        endTime,
+        totalHours: Number.isFinite(totalHours) && totalHours >= 0 ? totalHours : 0,
+      }
+    })
+    .filter((x) => x.date || x.startTime || x.endTime || x.totalHours > 0)
 }

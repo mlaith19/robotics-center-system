@@ -80,6 +80,8 @@ type GafanRow = {
   schoolId?: string | null
   teacherIds?: unknown
   workshopRows?: unknown
+  allocatedHours?: number | string | null
+  hourRows?: unknown
 }
 
 function parseGafanTeacherIds(row: GafanRow): string[] {
@@ -147,6 +149,27 @@ type TeacherAttRow = {
   hours?: number | string | null
 }
 
+type GafanHourRow = {
+  date: string
+  startTime: string
+  endTime: string
+  totalHours: number
+}
+
+function parseGafanHourRows(row: GafanRow): GafanHourRow[] {
+  const rows = row.hourRows
+  if (!Array.isArray(rows)) return []
+  return rows.map((r) => {
+    const x = (r ?? {}) as Record<string, unknown>
+    return {
+      date: String(x.date ?? ""),
+      startTime: String(x.startTime ?? ""),
+      endTime: String(x.endTime ?? ""),
+      totalHours: Number(x.totalHours ?? 0) || 0,
+    }
+  })
+}
+
 function safe(v: unknown) {
   if (v === null || v === undefined || v === "") return "—"
   return String(v)
@@ -212,6 +235,14 @@ export default function SchoolViewPage() {
   const [workshopHours, setWorkshopHours] = useState("1")
   const [workshopPrice, setWorkshopPrice] = useState("0")
   const [workshopSaving, setWorkshopSaving] = useState(false)
+  const [hoursProgramId, setHoursProgramId] = useState("")
+  const [allocatedHoursInput, setAllocatedHoursInput] = useState("0")
+  const [hourDate, setHourDate] = useState("")
+  const [hourStartTime, setHourStartTime] = useState("")
+  const [hourEndTime, setHourEndTime] = useState("")
+  const [hourTotal, setHourTotal] = useState("0")
+  const [hourEditIdx, setHourEditIdx] = useState<number | null>(null)
+  const [hoursSaving, setHoursSaving] = useState(false)
 
   useEffect(() => {
     if (isNewPage) return
@@ -277,6 +308,26 @@ export default function SchoolViewPage() {
     for (const t of teachersMini) m.set(t.id, t.name || t.id)
     return m
   }, [teachersMini])
+
+  const hoursProgram = useMemo(
+    () => gafanPrograms.find((g) => g.id === hoursProgramId) || null,
+    [gafanPrograms, hoursProgramId],
+  )
+
+  useEffect(() => {
+    if (!hoursProgramId && gafanPrograms.length > 0) setHoursProgramId(gafanPrograms[0].id)
+    if (hoursProgramId && !gafanPrograms.some((g) => g.id === hoursProgramId)) {
+      setHoursProgramId(gafanPrograms[0]?.id || "")
+    }
+  }, [gafanPrograms, hoursProgramId])
+
+  useEffect(() => {
+    if (!hoursProgram) {
+      setAllocatedHoursInput("0")
+      return
+    }
+    setAllocatedHoursInput(String(Number(hoursProgram.allocatedHours ?? 0)))
+  }, [hoursProgram?.id, hoursProgram?.allocatedHours])
 
   const openGafanLinkDialog = async () => {
     setGafanLinkOpen(true)
@@ -371,6 +422,80 @@ export default function SchoolViewPage() {
     }
   }
 
+  const resetHourForm = () => {
+    setHourDate("")
+    setHourStartTime("")
+    setHourEndTime("")
+    setHourTotal("0")
+    setHourEditIdx(null)
+  }
+
+  const saveAllocatedHours = async () => {
+    if (!hoursProgram || !school?.id) return
+    setHoursSaving(true)
+    try {
+      const res = await fetch(`/api/gafan/${encodeURIComponent(hoursProgram.id)}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          schoolId: school.id,
+          allocatedHours: Math.max(0, Number(allocatedHoursInput || 0)),
+        }),
+      })
+      if (res.ok) await reloadTabData()
+    } finally {
+      setHoursSaving(false)
+    }
+  }
+
+  const saveHourRow = async () => {
+    if (!hoursProgram || !school?.id) return
+    const rows = parseGafanHourRows(hoursProgram)
+    const row: GafanHourRow = {
+      date: hourDate,
+      startTime: hourStartTime,
+      endTime: hourEndTime,
+      totalHours: Math.max(0, Number(hourTotal || 0)),
+    }
+    const next = [...rows]
+    if (hourEditIdx == null) next.push(row)
+    else next[hourEditIdx] = row
+    setHoursSaving(true)
+    try {
+      const res = await fetch(`/api/gafan/${encodeURIComponent(hoursProgram.id)}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schoolId: school.id, hourRows: next }),
+      })
+      if (res.ok) {
+        resetHourForm()
+        await reloadTabData()
+      }
+    } finally {
+      setHoursSaving(false)
+    }
+  }
+
+  const deleteHourRow = async (idx: number) => {
+    if (!hoursProgram || !school?.id) return
+    const rows = parseGafanHourRows(hoursProgram)
+    const next = rows.filter((_, i) => i !== idx)
+    setHoursSaving(true)
+    try {
+      const res = await fetch(`/api/gafan/${encodeURIComponent(hoursProgram.id)}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schoolId: school.id, hourRows: next }),
+      })
+      if (res.ok) await reloadTabData()
+    } finally {
+      setHoursSaving(false)
+    }
+  }
+
   const debtByStudent = useMemo(() => {
     const paidByStudent = new Map<string, number>()
     for (const p of schoolPayments) {
@@ -458,7 +583,7 @@ export default function SchoolViewPage() {
                 value="teacher-attendance"
                 className="rounded-none px-3 py-2.5 text-xs data-[state=active]:bg-background sm:text-sm"
               >
-                נוכחות מורים
+                נוכחות
               </TabsTrigger>
               <TabsTrigger
                 value="debtors"
@@ -879,39 +1004,108 @@ export default function SchoolViewPage() {
               <div className="flex justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
-            ) : teacherAttendance.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
-                <CalendarCheck className="mb-4 h-12 w-12 opacity-50" />
-                <p>אין רשומות נוכחות מורים בקורסים של בית ספר זה</p>
-              </div>
             ) : (
-              <div className="overflow-x-auto rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      <TableHead className="text-right">תאריך</TableHead>
-                      <TableHead className="text-right">קורס</TableHead>
-                      <TableHead className="text-right">מורה</TableHead>
-                      <TableHead className="text-right">סטטוס</TableHead>
-                      <TableHead className="text-center">שעות</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {teacherAttendance.map((row) => (
-                      <TableRow key={row.id}>
-                        <TableCell className="text-right">
-                          {row.date ? new Date(row.date).toLocaleDateString("he-IL") : "—"}
-                        </TableCell>
-                        <TableCell className="text-right">{safe(row.courseName)}</TableCell>
-                        <TableCell className="text-right">{safe(row.teacherName)}</TableCell>
-                        <TableCell className="text-right">{safe(row.status)}</TableCell>
-                        <TableCell className="text-center tabular-nums">
-                          {row.hours != null && row.hours !== "" ? String(row.hours) : "—"}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+              <div className="space-y-4">
+                {gafanPrograms.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
+                    <CalendarCheck className="mb-4 h-12 w-12 opacity-50" />
+                    <p>אין תוכניות גפ&quot;ן משויכות לבית הספר</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <div className="space-y-2 md:col-span-1">
+                        <Label>תוכנית</Label>
+                        <Select value={hoursProgramId} onValueChange={setHoursProgramId}>
+                          <SelectTrigger><SelectValue placeholder="בחר תוכנית" /></SelectTrigger>
+                          <SelectContent>
+                            {gafanPrograms.map((g) => (
+                              <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>שעות מוקצה לתוכנית</Label>
+                        <div className="flex gap-2">
+                          <Input type="number" min={0} value={allocatedHoursInput} onChange={(e) => setAllocatedHoursInput(e.target.value)} />
+                          <Button type="button" variant="outline" disabled={!hoursProgram || hoursSaving} onClick={() => void saveAllocatedHours()}>
+                            שמור
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>יתרת שעות</Label>
+                        <div className="rounded-md border bg-muted/30 px-3 py-2 font-medium">
+                          {(() => {
+                            const allocated = Number(hoursProgram?.allocatedHours ?? 0)
+                            const used = parseGafanHourRows(hoursProgram || { id: "", name: "" }).reduce((s, r) => s + Number(r.totalHours || 0), 0)
+                            return (allocated - used).toFixed(2)
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-md border p-3">
+                      <div className="mb-3 grid gap-2 md:grid-cols-6">
+                        <Input type="date" value={hourDate} onChange={(e) => setHourDate(e.target.value)} />
+                        <Input type="time" value={hourStartTime} onChange={(e) => setHourStartTime(e.target.value)} />
+                        <Input type="time" value={hourEndTime} onChange={(e) => setHourEndTime(e.target.value)} />
+                        <Input type="number" min={0} step="0.25" value={hourTotal} onChange={(e) => setHourTotal(e.target.value)} />
+                        <Button type="button" disabled={!hoursProgram || hoursSaving} onClick={() => void saveHourRow()}>
+                          {hourEditIdx == null ? "הוספה" : "עדכון"}
+                        </Button>
+                        <Button type="button" variant="outline" onClick={resetHourForm}>נקה</Button>
+                      </div>
+
+                      <div className="overflow-x-auto rounded-md border">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-muted/50">
+                              <TableHead className="text-right">תאריך</TableHead>
+                              <TableHead className="text-right">שעת התחלה</TableHead>
+                              <TableHead className="text-right">שעת סיום</TableHead>
+                              <TableHead className="text-right">סה&quot;כ שעות</TableHead>
+                              <TableHead className="text-center">פעולות</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {(() => {
+                              const rows = parseGafanHourRows(hoursProgram || { id: "", name: "" })
+                              if (rows.length === 0) {
+                                return (
+                                  <TableRow>
+                                    <TableCell colSpan={5} className="text-center text-muted-foreground">אין נתוני שעות</TableCell>
+                                  </TableRow>
+                                )
+                              }
+                              return rows.map((r, idx) => (
+                                <TableRow key={`hr-${idx}`}>
+                                  <TableCell>{safe(r.date)}</TableCell>
+                                  <TableCell>{safe(r.startTime)}</TableCell>
+                                  <TableCell>{safe(r.endTime)}</TableCell>
+                                  <TableCell>{Number(r.totalHours || 0)}</TableCell>
+                                  <TableCell className="text-center">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <Button type="button" variant="outline" size="sm" onClick={() => {
+                                        setHourDate(r.date)
+                                        setHourStartTime(r.startTime)
+                                        setHourEndTime(r.endTime)
+                                        setHourTotal(String(r.totalHours))
+                                        setHourEditIdx(idx)
+                                      }}>עריכה</Button>
+                                      <Button type="button" variant="outline" size="sm" onClick={() => void deleteHourRow(idx)}>מחיקה</Button>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                            })()}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </TabsContent>

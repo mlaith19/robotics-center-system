@@ -1,5 +1,11 @@
 import { requireFeatureFromRequest } from "@/lib/feature-gate"
-import { ensureGafanLinkColumns, normalizeGafanTeacherIds, normalizeGafanWorkshopRows } from "@/lib/gafan-columns"
+import {
+  ensureGafanLinkColumns,
+  normalizeGafanTeacherIds,
+  normalizeGafanWorkshopRows,
+  normalizeGafanAllocatedHours,
+  normalizeGafanHourRows,
+} from "@/lib/gafan-columns"
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant, ensureSessionMatchesTenant } from "@/lib/tenant/resolve-tenant"
 
@@ -36,7 +42,9 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
     if (result.length === 0) return Response.json({ error: "Gafan program not found" }, { status: 404 })
     const links = await db`
       SELECT l."schoolId", s.name as "schoolName", COALESCE(l."teacherIds", '[]'::jsonb) as "teacherIds",
-             COALESCE(l."workshopRows", '[]'::jsonb) as "workshopRows"
+             COALESCE(l."workshopRows", '[]'::jsonb) as "workshopRows",
+             COALESCE(l."allocatedHours", 0) as "allocatedHours",
+             COALESCE(l."hourRows", '[]'::jsonb) as "hourRows"
       FROM "GafanSchoolLink" l
       LEFT JOIN "School" s ON s.id = l."schoolId"
       WHERE l."gafanId" = ${id}
@@ -50,6 +58,8 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
       schoolName: first?.schoolName ?? null,
       teacherIds: first?.teacherIds ?? result[0].teacherIds ?? [],
       workshopRows: first?.workshopRows ?? [],
+      allocatedHours: first?.allocatedHours ?? 0,
+      hourRows: first?.hourRows ?? [],
     })
   } catch (err) {
     console.error("GET /api/gafan/[id] error:", err)
@@ -104,14 +114,21 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
     if (result.length === 0) return Response.json({ error: "Gafan program not found" }, { status: 404 })
     if (schoolIdPut) {
       const workshopRows = normalizeGafanWorkshopRows(body.workshopRows)
+      const allocatedHours = normalizeGafanAllocatedHours(body.allocatedHours)
+      const hourRows = normalizeGafanHourRows(body.hourRows)
       const workshopRowsJson = db.json(workshopRows)
+      const hourRowsJson = db.json(hourRows)
       await db`
-        INSERT INTO "GafanSchoolLink" ("gafanId", "schoolId", "teacherIds", "workshopRows", "createdAt", "updatedAt")
-        VALUES (${id}, ${schoolIdPut}, ${teacherIdsJson}, ${workshopRowsJson}, ${now}, ${now})
+        INSERT INTO "GafanSchoolLink" (
+          "gafanId", "schoolId", "teacherIds", "workshopRows", "allocatedHours", "hourRows", "createdAt", "updatedAt"
+        )
+        VALUES (${id}, ${schoolIdPut}, ${teacherIdsJson}, ${workshopRowsJson}, ${allocatedHours}, ${hourRowsJson}, ${now}, ${now})
         ON CONFLICT ("gafanId", "schoolId")
         DO UPDATE SET
           "teacherIds" = EXCLUDED."teacherIds",
           "workshopRows" = EXCLUDED."workshopRows",
+          "allocatedHours" = EXCLUDED."allocatedHours",
+          "hourRows" = EXCLUDED."hourRows",
           "updatedAt" = EXCLUDED."updatedAt"
       `
     }
@@ -170,13 +187,17 @@ export const PATCH = withTenantAuth(async (req, session, { params }: Ctx) => {
 
     const linkRows = await db`
       SELECT COALESCE("teacherIds", '[]'::jsonb) as "teacherIds",
-             COALESCE("workshopRows", '[]'::jsonb) as "workshopRows"
+             COALESCE("workshopRows", '[]'::jsonb) as "workshopRows",
+             COALESCE("allocatedHours", 0) as "allocatedHours",
+             COALESCE("hourRows", '[]'::jsonb) as "hourRows"
       FROM "GafanSchoolLink"
       WHERE "gafanId" = ${id} AND "schoolId" = ${schoolIdPatch}
       LIMIT 1
     `
     const existingTeachers = normalizeGafanTeacherIds(linkRows[0]?.teacherIds)
     const existingWorkshopRows = normalizeGafanWorkshopRows(linkRows[0]?.workshopRows)
+    const existingAllocatedHours = normalizeGafanAllocatedHours(linkRows[0]?.allocatedHours)
+    const existingHourRows = normalizeGafanHourRows(linkRows[0]?.hourRows)
     let nextTeacherIds = Object.prototype.hasOwnProperty.call(body, "teacherIds")
       ? normalizeGafanTeacherIds(body.teacherIds)
       : existingTeachers
@@ -188,21 +209,34 @@ export const PATCH = withTenantAuth(async (req, session, { params }: Ctx) => {
     const nextWorkshopRows = Object.prototype.hasOwnProperty.call(body, "workshopRows")
       ? normalizeGafanWorkshopRows(body.workshopRows)
       : existingWorkshopRows
+    const nextAllocatedHours = Object.prototype.hasOwnProperty.call(body, "allocatedHours")
+      ? normalizeGafanAllocatedHours(body.allocatedHours)
+      : existingAllocatedHours
+    const nextHourRows = Object.prototype.hasOwnProperty.call(body, "hourRows")
+      ? normalizeGafanHourRows(body.hourRows)
+      : existingHourRows
     const workshopRowsJson = db.json(nextWorkshopRows)
+    const hourRowsJson = db.json(nextHourRows)
 
     await db`
-      INSERT INTO "GafanSchoolLink" ("gafanId", "schoolId", "teacherIds", "workshopRows", "createdAt", "updatedAt")
-      VALUES (${id}, ${schoolIdPatch}, ${teacherIdsJson}, ${workshopRowsJson}, ${now}, ${now})
+      INSERT INTO "GafanSchoolLink" (
+        "gafanId", "schoolId", "teacherIds", "workshopRows", "allocatedHours", "hourRows", "createdAt", "updatedAt"
+      )
+      VALUES (${id}, ${schoolIdPatch}, ${teacherIdsJson}, ${workshopRowsJson}, ${nextAllocatedHours}, ${hourRowsJson}, ${now}, ${now})
       ON CONFLICT ("gafanId", "schoolId")
       DO UPDATE SET
         "teacherIds" = EXCLUDED."teacherIds",
         "workshopRows" = EXCLUDED."workshopRows",
+        "allocatedHours" = EXCLUDED."allocatedHours",
+        "hourRows" = EXCLUDED."hourRows",
         "updatedAt" = EXCLUDED."updatedAt"
     `
 
     const links = await db`
       SELECT l."schoolId", s.name as "schoolName", COALESCE(l."teacherIds", '[]'::jsonb) as "teacherIds",
-             COALESCE(l."workshopRows", '[]'::jsonb) as "workshopRows"
+             COALESCE(l."workshopRows", '[]'::jsonb) as "workshopRows",
+             COALESCE(l."allocatedHours", 0) as "allocatedHours",
+             COALESCE(l."hourRows", '[]'::jsonb) as "hourRows"
       FROM "GafanSchoolLink" l
       LEFT JOIN "School" s ON s.id = l."schoolId"
       WHERE l."gafanId" = ${id}
@@ -216,6 +250,8 @@ export const PATCH = withTenantAuth(async (req, session, { params }: Ctx) => {
       schoolName: first?.schoolName ?? null,
       teacherIds: first?.teacherIds ?? ex.teacherIds ?? [],
       workshopRows: first?.workshopRows ?? [],
+      allocatedHours: first?.allocatedHours ?? 0,
+      hourRows: first?.hourRows ?? [],
     })
   } catch (err) {
     console.error("PATCH /api/gafan/[id] error:", err)
