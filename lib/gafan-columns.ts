@@ -14,6 +14,7 @@ export async function ensureGafanLinkColumns(db: ReturnType<typeof postgres>): P
   try {
     await db`
       CREATE TABLE IF NOT EXISTS "GafanSchoolLink" (
+        "id" TEXT,
         "gafanId" TEXT NOT NULL,
         "schoolId" TEXT NOT NULL,
         "teacherIds" JSONB DEFAULT '[]'::jsonb,
@@ -37,6 +38,7 @@ export async function ensureGafanLinkColumns(db: ReturnType<typeof postgres>): P
   try {
     await db`ALTER TABLE "GafanSchoolLink" ADD COLUMN IF NOT EXISTS "allocatedHours" NUMERIC DEFAULT 0`
     await db`ALTER TABLE "GafanSchoolLink" ADD COLUMN IF NOT EXISTS "hourRows" JSONB DEFAULT '[]'::jsonb`
+    await db`ALTER TABLE "GafanSchoolLink" ADD COLUMN IF NOT EXISTS "id" TEXT`
   } catch (e) {
     console.warn("[gafan] ensure hour columns:", e)
   }
@@ -53,15 +55,15 @@ export async function ensureGafanLinkColumns(db: ReturnType<typeof postgres>): P
   }
   try {
     await db`
-      DELETE FROM "GafanSchoolLink" a
-      USING "GafanSchoolLink" b
-      WHERE a.ctid < b.ctid
-        AND a."gafanId" = b."gafanId"
-        AND a."schoolId" = b."schoolId"
+      UPDATE "GafanSchoolLink"
+      SET "id" = md5(random()::text || clock_timestamp()::text || COALESCE("gafanId",'') || COALESCE("schoolId",''))
+      WHERE "id" IS NULL OR btrim("id") = ''
     `
-    await db`CREATE UNIQUE INDEX IF NOT EXISTS "GafanSchoolLink_gafan_school_uidx" ON "GafanSchoolLink"("gafanId", "schoolId")`
+    await db`ALTER TABLE "GafanSchoolLink" DROP CONSTRAINT IF EXISTS "GafanSchoolLink_pkey"`
+    await db`DROP INDEX IF EXISTS "GafanSchoolLink_gafan_school_uidx"`
+    await db`CREATE UNIQUE INDEX IF NOT EXISTS "GafanSchoolLink_id_uidx" ON "GafanSchoolLink"("id")`
   } catch (e) {
-    console.warn("[gafan] ensure unique link index:", e)
+    console.warn("[gafan] ensure link ids:", e)
   }
 }
 

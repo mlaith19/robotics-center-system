@@ -23,7 +23,7 @@ export const GET = withTenantAuth(async (req, session) => {
     const schoolId = (searchParams.get("schoolId") || "").trim()
     const result = schoolId
       ? await db`
-          SELECT g.*, l."schoolId", COALESCE(l."teacherIds", '[]'::jsonb) as "teacherIds",
+          SELECT g.*, l."id" as "linkId", l."schoolId", COALESCE(l."teacherIds", '[]'::jsonb) as "teacherIds",
                  COALESCE(l."workshopRows", '[]'::jsonb) as "workshopRows",
                  COALESCE(l."allocatedHours", 0) as "allocatedHours",
                  COALESCE(l."hourRows", '[]'::jsonb) as "hourRows"

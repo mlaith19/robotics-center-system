@@ -41,7 +41,7 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
     const result = await db`SELECT * FROM "Gafan" WHERE id = ${id}`
     if (result.length === 0) return Response.json({ error: "Gafan program not found" }, { status: 404 })
     const links = await db`
-      SELECT l."schoolId", s.name as "schoolName", COALESCE(l."teacherIds", '[]'::jsonb) as "teacherIds",
+      SELECT l."id" as "linkId", l."schoolId", s.name as "schoolName", COALESCE(l."teacherIds", '[]'::jsonb) as "teacherIds",
              COALESCE(l."workshopRows", '[]'::jsonb) as "workshopRows",
              COALESCE(l."allocatedHours", 0) as "allocatedHours",
              COALESCE(l."hourRows", '[]'::jsonb) as "hourRows"
@@ -55,6 +55,7 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
       ...result[0],
       links,
       schoolId: first?.schoolId ?? result[0].schoolId ?? null,
+      linkId: first?.linkId ?? null,
       schoolName: first?.schoolName ?? null,
       teacherIds: first?.teacherIds ?? result[0].teacherIds ?? [],
       workshopRows: first?.workshopRows ?? [],
@@ -178,22 +179,41 @@ export const PATCH = withTenantAuth(async (req, session, { params }: Ctx) => {
     const ex = existingRows[0] as Record<string, unknown>
     const now = new Date().toISOString()
     const schoolIdPatch = pickSchoolId(body, ex)
+    const linkIdPatch =
+      body.linkId !== undefined && body.linkId !== null && String(body.linkId).trim()
+        ? String(body.linkId).trim()
+        : ""
     if (!schoolIdPatch) return Response.json({ error: "נדרש schoolId תקין" }, { status: 400 })
 
     if (body.unlink === true) {
-      await db`DELETE FROM "GafanSchoolLink" WHERE "gafanId" = ${id} AND "schoolId" = ${schoolIdPatch}`
+      if (linkIdPatch) {
+        await db`DELETE FROM "GafanSchoolLink" WHERE "id" = ${linkIdPatch} AND "gafanId" = ${id} AND "schoolId" = ${schoolIdPatch}`
+      } else {
+        await db`DELETE FROM "GafanSchoolLink" WHERE "gafanId" = ${id} AND "schoolId" = ${schoolIdPatch}`
+      }
       return Response.json({ success: true })
     }
 
-    const linkRows = await db`
-      SELECT COALESCE("teacherIds", '[]'::jsonb) as "teacherIds",
-             COALESCE("workshopRows", '[]'::jsonb) as "workshopRows",
-             COALESCE("allocatedHours", 0) as "allocatedHours",
-             COALESCE("hourRows", '[]'::jsonb) as "hourRows"
-      FROM "GafanSchoolLink"
-      WHERE "gafanId" = ${id} AND "schoolId" = ${schoolIdPatch}
-      LIMIT 1
-    `
+    const linkRows = linkIdPatch
+      ? await db`
+          SELECT "id", COALESCE("teacherIds", '[]'::jsonb) as "teacherIds",
+                 COALESCE("workshopRows", '[]'::jsonb) as "workshopRows",
+                 COALESCE("allocatedHours", 0) as "allocatedHours",
+                 COALESCE("hourRows", '[]'::jsonb) as "hourRows"
+          FROM "GafanSchoolLink"
+          WHERE "id" = ${linkIdPatch} AND "gafanId" = ${id} AND "schoolId" = ${schoolIdPatch}
+          LIMIT 1
+        `
+      : await db`
+          SELECT "id", COALESCE("teacherIds", '[]'::jsonb) as "teacherIds",
+                 COALESCE("workshopRows", '[]'::jsonb) as "workshopRows",
+                 COALESCE("allocatedHours", 0) as "allocatedHours",
+                 COALESCE("hourRows", '[]'::jsonb) as "hourRows"
+          FROM "GafanSchoolLink"
+          WHERE "gafanId" = ${id} AND "schoolId" = ${schoolIdPatch}
+          ORDER BY "createdAt" ASC
+          LIMIT 1
+        `
     const isLinkOnlyAction =
       body.teacherIds === undefined &&
       body.addTeacherId === undefined &&
@@ -201,7 +221,25 @@ export const PATCH = withTenantAuth(async (req, session, { params }: Ctx) => {
       body.allocatedHours === undefined &&
       body.hourRows === undefined
     if (isLinkOnlyAction && linkRows.length > 0) {
-      return Response.json({ success: true, alreadyLinked: true })
+      const newLinkId = crypto.randomUUID()
+      await db`
+        INSERT INTO "GafanSchoolLink" (
+          "id", "gafanId", "schoolId", "teacherIds", "workshopRows", "allocatedHours", "hourRows", "createdAt", "updatedAt"
+        )
+        VALUES (
+          ${newLinkId}, ${id}, ${schoolIdPatch}, ${db.json([])}, ${db.json([])}, ${0}, ${db.json([])}, ${now}, ${now}
+        )
+      `
+      const created = await db`
+        SELECT g.*, l."id" as "linkId", l."schoolId", s.name as "schoolName", COALESCE(l."teacherIds", '[]'::jsonb) as "teacherIds",
+               COALESCE(l."workshopRows", '[]'::jsonb) as "workshopRows", COALESCE(l."allocatedHours", 0) as "allocatedHours",
+               COALESCE(l."hourRows", '[]'::jsonb) as "hourRows"
+        FROM "Gafan" g
+        INNER JOIN "GafanSchoolLink" l ON l."gafanId" = g.id
+        LEFT JOIN "School" s ON s.id = l."schoolId"
+        WHERE g.id = ${id} AND l."id" = ${newLinkId}
+      `
+      return Response.json(created[0] ?? { success: true, linkId: newLinkId })
     }
     const existingTeachers = normalizeGafanTeacherIds(linkRows[0]?.teacherIds)
     const existingWorkshopRows = normalizeGafanWorkshopRows(linkRows[0]?.workshopRows)
@@ -227,22 +265,30 @@ export const PATCH = withTenantAuth(async (req, session, { params }: Ctx) => {
     const workshopRowsJson = db.json(nextWorkshopRows)
     const hourRowsJson = db.json(nextHourRows)
 
-    await db`
-      INSERT INTO "GafanSchoolLink" (
-        "gafanId", "schoolId", "teacherIds", "workshopRows", "allocatedHours", "hourRows", "createdAt", "updatedAt"
-      )
-      VALUES (${id}, ${schoolIdPatch}, ${teacherIdsJson}, ${workshopRowsJson}, ${nextAllocatedHours}, ${hourRowsJson}, ${now}, ${now})
-      ON CONFLICT ("gafanId", "schoolId")
-      DO UPDATE SET
-        "teacherIds" = EXCLUDED."teacherIds",
-        "workshopRows" = EXCLUDED."workshopRows",
-        "allocatedHours" = EXCLUDED."allocatedHours",
-        "hourRows" = EXCLUDED."hourRows",
-        "updatedAt" = EXCLUDED."updatedAt"
-    `
+    if (linkRows.length > 0) {
+      const targetId = String((linkRows[0] as Record<string, unknown>).id || "")
+      await db`
+        UPDATE "GafanSchoolLink"
+        SET
+          "teacherIds" = ${teacherIdsJson},
+          "workshopRows" = ${workshopRowsJson},
+          "allocatedHours" = ${nextAllocatedHours},
+          "hourRows" = ${hourRowsJson},
+          "updatedAt" = ${now}
+        WHERE "id" = ${targetId} AND "gafanId" = ${id} AND "schoolId" = ${schoolIdPatch}
+      `
+    } else {
+      const newLinkId = crypto.randomUUID()
+      await db`
+        INSERT INTO "GafanSchoolLink" (
+          "id", "gafanId", "schoolId", "teacherIds", "workshopRows", "allocatedHours", "hourRows", "createdAt", "updatedAt"
+        )
+        VALUES (${newLinkId}, ${id}, ${schoolIdPatch}, ${teacherIdsJson}, ${workshopRowsJson}, ${nextAllocatedHours}, ${hourRowsJson}, ${now}, ${now})
+      `
+    }
 
     const links = await db`
-      SELECT l."schoolId", s.name as "schoolName", COALESCE(l."teacherIds", '[]'::jsonb) as "teacherIds",
+      SELECT l."id" as "linkId", l."schoolId", s.name as "schoolName", COALESCE(l."teacherIds", '[]'::jsonb) as "teacherIds",
              COALESCE(l."workshopRows", '[]'::jsonb) as "workshopRows",
              COALESCE(l."allocatedHours", 0) as "allocatedHours",
              COALESCE(l."hourRows", '[]'::jsonb) as "hourRows"
@@ -255,6 +301,7 @@ export const PATCH = withTenantAuth(async (req, session, { params }: Ctx) => {
     return Response.json({
       ...ex,
       links,
+      linkId: first?.linkId ?? null,
       schoolId: first?.schoolId ?? ex.schoolId ?? null,
       schoolName: first?.schoolName ?? null,
       teacherIds: first?.teacherIds ?? ex.teacherIds ?? [],

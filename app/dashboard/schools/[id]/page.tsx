@@ -73,6 +73,7 @@ interface School {
 
 type GafanRow = {
   id: string
+  linkId?: string | null
   name: string
   programNumber?: string | null
   validYear?: string | null
@@ -379,7 +380,7 @@ export default function SchoolViewPage() {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ schoolId: school?.id, teacherIds: next }),
+        body: JSON.stringify({ schoolId: school?.id, linkId: gafanTeacherProgram.linkId, teacherIds: next }),
       })
       if (res.ok) {
         setGafanTeacherProgram(null)
@@ -414,7 +415,7 @@ export default function SchoolViewPage() {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ schoolId: school.id, workshopRows: next }),
+        body: JSON.stringify({ schoolId: school.id, linkId: workshopProgram.linkId, workshopRows: next }),
       })
       if (res.ok) {
         setWorkshopProgram(null)
@@ -453,7 +454,7 @@ export default function SchoolViewPage() {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ schoolId: school.id, hourRows: next }),
+        body: JSON.stringify({ schoolId: school.id, linkId: hoursProgram.linkId, hourRows: next }),
       })
       if (res.ok) {
         resetHourForm()
@@ -476,7 +477,7 @@ export default function SchoolViewPage() {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ schoolId: school.id, hourRows: next }),
+        body: JSON.stringify({ schoolId: school.id, linkId: program.linkId, hourRows: next }),
       })
       if (res.ok) await reloadTabData()
     } finally {
