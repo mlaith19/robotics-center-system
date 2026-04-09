@@ -1155,6 +1155,8 @@ export default function CourseViewPage() {
       }
     })
     .filter((r) => r.balance > 0.009)
+  const debtRowsTotalDue = debtRows.reduce((sum, r) => sum + r.totalDue, 0)
+  const debtRowsTotalPaid = debtRows.reduce((sum, r) => sum + r.paid, 0)
   const totalDebtAmount = debtRows.reduce((sum, r) => sum + r.balance, 0)
 
   const courseTeachers = teachers.filter(t => 
@@ -1920,6 +1922,12 @@ export default function CourseViewPage() {
                   </CardTitle>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  <Badge className="bg-gradient-to-r from-indigo-600 to-blue-600 text-white hover:from-indigo-700 hover:to-blue-700 text-xs sm:text-sm font-semibold shadow-sm">
+                    סה&quot;כ לתשלום: ₪{debtRowsTotalDue.toLocaleString()}
+                  </Badge>
+                  <Badge className="bg-gradient-to-r from-emerald-600 to-green-600 text-white hover:from-emerald-700 hover:to-green-700 text-xs sm:text-sm font-semibold shadow-sm">
+                    שולם: ₪{debtRowsTotalPaid.toLocaleString()}
+                  </Badge>
                   <Badge className="bg-gradient-to-r from-rose-600 to-red-600 text-white hover:from-rose-700 hover:to-red-700 text-xs sm:text-sm font-semibold shadow-sm">
                     סה&quot;כ חוב: ₪{totalDebtAmount.toLocaleString()}
                   </Badge>
