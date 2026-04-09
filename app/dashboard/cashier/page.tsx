@@ -1575,7 +1575,6 @@ export default function CashierPage() {
                                 <span className="rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">סכום במעטפה: ₪{targetEnv.toLocaleString()}</span>
                               </div>
                               <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
-                                <span className="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 font-semibold text-indigo-700">סכום כותרת: ₪{targetEnv.toLocaleString()}</span>
                                 <span className="rounded-md border border-cyan-200 bg-cyan-50 px-2 py-0.5 font-semibold text-cyan-700">סכום בטבלה: ₪{rowsSumEnv.toLocaleString()}</span>
                                 <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700">הכנסות: ₪{incomeEnv.toLocaleString()}</span>
                                 <span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-0.5 font-semibold text-rose-700">הוצאות: ₪{expenseEnv.toLocaleString()}</span>
