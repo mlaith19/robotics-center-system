@@ -1201,7 +1201,7 @@ export default function CourseViewPage() {
     .filter((r) => r.balance > 0.009)
   const debtRowsTotalDue = debtRowsAll.reduce((sum, r) => sum + r.totalDue, 0)
   const debtRowsTotalPaid = debtRowsAll.reduce((sum, r) => sum + r.paid, 0)
-  const totalDebtAmount = debtRows.reduce((sum, r) => sum + r.balance, 0)
+  const totalDebtAmount = Math.max(0, debtRowsTotalDue - debtRowsTotalPaid)
 
   const courseTeachers = teachers.filter(t => 
     course.teacherIds && course.teacherIds.includes(t.id)
