@@ -157,7 +157,7 @@ export default function CashierPage() {
   const [bankBranch, setBankBranch] = useState("")
   const [accountNumber, setAccountNumber] = useState("")
   const [envelopeMonthKey, setEnvelopeMonthKey] = useState(new Date().toISOString().slice(0, 10))
-  const [envelopeMonthFilter, setEnvelopeMonthFilter] = useState(new Date().toISOString().slice(0, 7))
+  const [envelopeMonthFilter, setEnvelopeMonthFilter] = useState(new Date().toISOString().slice(5, 7))
   const [envelopeTargetAmount, setEnvelopeTargetAmount] = useState("")
   const [isAddingEnvelope, setIsAddingEnvelope] = useState(false)
   const [envelopeRowDate, setEnvelopeRowDate] = useState(new Date().toISOString().slice(0, 10))
@@ -426,7 +426,7 @@ export default function CashierPage() {
     }
   }
 
-  const filteredEnvelopesByMonth = envelopes.filter((e) => String(e.monthKey || "").slice(0, 7) === envelopeMonthFilter)
+  const filteredEnvelopesByMonth = envelopes.filter((e) => String(e.monthKey || "").slice(5, 7) === envelopeMonthFilter)
   const filteredEnvelopesTargetSum = filteredEnvelopesByMonth.reduce((s, e) => s + Number(e.targetAmount || 0), 0)
 
   const filterByTimePeriod = <T extends { date?: string; paymentDate?: string }>(items: T[]): T[] => {
@@ -1294,12 +1294,26 @@ export default function CashierPage() {
                   <div className="rounded-md border bg-muted/30 px-2 py-1 text-sm font-semibold">
                     ₪{filteredEnvelopesTargetSum.toLocaleString()}
                   </div>
-                  <Input
-                    type="month"
-                    className="w-[170px]"
-                    value={envelopeMonthFilter}
-                    onChange={(e) => setEnvelopeMonthFilter(e.target.value)}
-                  />
+                  <Label className="text-sm">חודש:</Label>
+                  <Select value={envelopeMonthFilter} onValueChange={setEnvelopeMonthFilter}>
+                    <SelectTrigger className="w-[110px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="01">01</SelectItem>
+                      <SelectItem value="02">02</SelectItem>
+                      <SelectItem value="03">03</SelectItem>
+                      <SelectItem value="04">04</SelectItem>
+                      <SelectItem value="05">05</SelectItem>
+                      <SelectItem value="06">06</SelectItem>
+                      <SelectItem value="07">07</SelectItem>
+                      <SelectItem value="08">08</SelectItem>
+                      <SelectItem value="09">09</SelectItem>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="11">11</SelectItem>
+                      <SelectItem value="12">12</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </CardHeader>
@@ -1348,22 +1362,24 @@ export default function CashierPage() {
                           </div>
                         </CardHeader>
                         <CardContent className="space-y-3 px-3 sm:px-6">
-                          <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
-                            <Input type="date" value={activeEnvelopeId === env.id ? envelopeRowDate : ""} onChange={(e) => { setActiveEnvelopeId(env.id); setEnvelopeRowDate(e.target.value) }} />
-                            <Input type="number" min={0} placeholder="סכום" value={activeEnvelopeId === env.id ? envelopeRowAmount : ""} onChange={(e) => { setActiveEnvelopeId(env.id); setEnvelopeRowAmount(e.target.value) }} />
-                            <Select value={activeEnvelopeId === env.id ? envelopeRowType : "expense"} onValueChange={(v: "income" | "expense") => { setActiveEnvelopeId(env.id); setEnvelopeRowType(v) }}>
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="income">הכנסה</SelectItem>
-                                <SelectItem value="expense">הוצאה</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <Input placeholder="שם" value={activeEnvelopeId === env.id ? envelopeRowName : ""} onChange={(e) => { setActiveEnvelopeId(env.id); setEnvelopeRowName(e.target.value) }} />
-                            <Input placeholder="הערות" value={activeEnvelopeId === env.id ? envelopeRowNotes : ""} onChange={(e) => { setActiveEnvelopeId(env.id); setEnvelopeRowNotes(e.target.value) }} />
-                            <Button className="md:col-span-2" disabled={isSavingEnvelopeRow} onClick={() => addEnvelopeRow(env)}>
-                              {isSavingEnvelopeRow && activeEnvelopeId === env.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                              הוסף שורה
-                            </Button>
+                          <div className="overflow-x-auto">
+                            <div className="flex min-w-[940px] items-center gap-2">
+                              <Input className="w-[160px]" type="date" value={activeEnvelopeId === env.id ? envelopeRowDate : ""} onChange={(e) => { setActiveEnvelopeId(env.id); setEnvelopeRowDate(e.target.value) }} />
+                              <Input className="w-[130px]" type="number" min={0} placeholder="סכום" value={activeEnvelopeId === env.id ? envelopeRowAmount : ""} onChange={(e) => { setActiveEnvelopeId(env.id); setEnvelopeRowAmount(e.target.value) }} />
+                              <Select value={activeEnvelopeId === env.id ? envelopeRowType : "expense"} onValueChange={(v: "income" | "expense") => { setActiveEnvelopeId(env.id); setEnvelopeRowType(v) }}>
+                                <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="income">הכנסה</SelectItem>
+                                  <SelectItem value="expense">הוצאה</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <Input className="w-[180px]" placeholder="שם" value={activeEnvelopeId === env.id ? envelopeRowName : ""} onChange={(e) => { setActiveEnvelopeId(env.id); setEnvelopeRowName(e.target.value) }} />
+                              <Input className="w-[220px]" placeholder="הערות" value={activeEnvelopeId === env.id ? envelopeRowNotes : ""} onChange={(e) => { setActiveEnvelopeId(env.id); setEnvelopeRowNotes(e.target.value) }} />
+                              <Button className="w-[120px]" disabled={isSavingEnvelopeRow} onClick={() => addEnvelopeRow(env)}>
+                                {isSavingEnvelopeRow && activeEnvelopeId === env.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                הוסף שורה
+                              </Button>
+                            </div>
                           </div>
                           <div className="overflow-x-auto rounded-md border">
                             <Table>
