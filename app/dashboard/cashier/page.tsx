@@ -70,6 +70,9 @@ interface Enrollment {
 interface EnvelopeRow {
   date: string
   amount: number
+  type?: "income" | "expense"
+  name?: string
+  notes?: string
 }
 
 interface EnvelopeBudget {
@@ -153,11 +156,15 @@ export default function CashierPage() {
   const [bankName, setBankName] = useState("")
   const [bankBranch, setBankBranch] = useState("")
   const [accountNumber, setAccountNumber] = useState("")
-  const [envelopeMonthKey, setEnvelopeMonthKey] = useState(new Date().toISOString().slice(0, 7))
+  const [envelopeMonthKey, setEnvelopeMonthKey] = useState(new Date().toISOString().slice(0, 10))
+  const [envelopeMonthFilter, setEnvelopeMonthFilter] = useState(new Date().toISOString().slice(0, 7))
   const [envelopeTargetAmount, setEnvelopeTargetAmount] = useState("")
   const [isAddingEnvelope, setIsAddingEnvelope] = useState(false)
   const [envelopeRowDate, setEnvelopeRowDate] = useState(new Date().toISOString().slice(0, 10))
   const [envelopeRowAmount, setEnvelopeRowAmount] = useState("")
+  const [envelopeRowType, setEnvelopeRowType] = useState<"income" | "expense">("expense")
+  const [envelopeRowName, setEnvelopeRowName] = useState("")
+  const [envelopeRowNotes, setEnvelopeRowNotes] = useState("")
   const [activeEnvelopeId, setActiveEnvelopeId] = useState("")
   const [isSavingEnvelopeRow, setIsSavingEnvelopeRow] = useState(false)
 
@@ -379,7 +386,14 @@ export default function CashierPage() {
     if (!envelopeRowDate || !envelopeRowAmount) return
     setIsSavingEnvelopeRow(true)
     try {
-      const nextRows = [...(Array.isArray(envelope.rows) ? envelope.rows : []), { date: envelopeRowDate, amount: Number(envelopeRowAmount || 0) }]
+      const row = {
+        date: envelopeRowDate,
+        amount: Number(envelopeRowAmount || 0),
+        type: envelopeRowType,
+        name: envelopeRowName,
+        notes: envelopeRowNotes,
+      }
+      const nextRows = [...(Array.isArray(envelope.rows) ? envelope.rows : []), row]
       const response = await fetch(`/api/envelopes/${envelope.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -392,6 +406,9 @@ export default function CashierPage() {
       if (response.ok) {
         mutate("/api/envelopes")
         setEnvelopeRowAmount("")
+        setEnvelopeRowName("")
+        setEnvelopeRowNotes("")
+        setEnvelopeRowType("expense")
       }
     } catch (error) {
       console.error("Failed to add envelope row:", error)
@@ -408,6 +425,9 @@ export default function CashierPage() {
       console.error("Failed to delete envelope:", error)
     }
   }
+
+  const filteredEnvelopesByMonth = envelopes.filter((e) => String(e.monthKey || "").slice(0, 7) === envelopeMonthFilter)
+  const filteredEnvelopesTargetSum = filteredEnvelopesByMonth.reduce((s, e) => s + Number(e.targetAmount || 0), 0)
 
   const filterByTimePeriod = <T extends { date?: string; paymentDate?: string }>(items: T[]): T[] => {
     if (!Array.isArray(items)) return []
@@ -1264,14 +1284,30 @@ export default function CashierPage() {
         <TabsContent value="envelopes" className="space-y-4">
           <Card>
             <CardHeader className="px-3 text-right sm:px-6">
-              <CardTitle>מעטפות</CardTitle>
-              <CardDescription>ניהול מעטפות חודשי לפי סכום יעד ותנועות</CardDescription>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="order-2 sm:order-1">
+                  <CardTitle>מעטפות</CardTitle>
+                  <CardDescription>ניהול מעטפות חודשי לפי סכום יעד ותנועות</CardDescription>
+                </div>
+                <div className="order-1 flex flex-wrap items-center gap-2 sm:order-2">
+                  <div className="text-sm text-muted-foreground">סכום מעטפות בחודש:</div>
+                  <div className="rounded-md border bg-muted/30 px-2 py-1 text-sm font-semibold">
+                    ₪{filteredEnvelopesTargetSum.toLocaleString()}
+                  </div>
+                  <Input
+                    type="month"
+                    className="w-[170px]"
+                    value={envelopeMonthFilter}
+                    onChange={(e) => setEnvelopeMonthFilter(e.target.value)}
+                  />
+                </div>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4 px-3 sm:px-6">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 <div className="space-y-2">
-                  <Label>תאריך לחודש</Label>
-                  <Input type="month" value={envelopeMonthKey} onChange={(e) => setEnvelopeMonthKey(e.target.value)} />
+                  <Label>תאריך לכותרת המעטפה</Label>
+                  <Input type="date" value={envelopeMonthKey} onChange={(e) => setEnvelopeMonthKey(e.target.value)} />
                 </div>
                 <div className="space-y-2">
                   <Label>סכום מעטפה</Label>
@@ -1285,13 +1321,17 @@ export default function CashierPage() {
                 </div>
               </div>
 
-              {envelopes.length === 0 ? (
+              {filteredEnvelopesByMonth.length === 0 ? (
                 <div className="rounded-md border p-4 text-right text-muted-foreground">אין מעטפות עדיין</div>
               ) : (
                 <div className="space-y-4">
-                  {envelopes.map((env) => {
+                  {filteredEnvelopesByMonth.map((env) => {
                     const rows = Array.isArray(env.rows) ? env.rows : []
-                    const rowsSum = rows.reduce((s, r) => s + Number(r.amount || 0), 0)
+                    const rowsSum = rows.reduce((s, r) => {
+                      const amount = Number(r.amount || 0)
+                      const t = String(r.type || "expense").toLowerCase()
+                      return s + (t === "income" ? amount : -amount)
+                    }, 0)
                     const target = Number(env.targetAmount || 0)
                     const balanceEnv = target - rowsSum
                     return (
@@ -1311,6 +1351,15 @@ export default function CashierPage() {
                           <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
                             <Input type="date" value={activeEnvelopeId === env.id ? envelopeRowDate : ""} onChange={(e) => { setActiveEnvelopeId(env.id); setEnvelopeRowDate(e.target.value) }} />
                             <Input type="number" min={0} placeholder="סכום" value={activeEnvelopeId === env.id ? envelopeRowAmount : ""} onChange={(e) => { setActiveEnvelopeId(env.id); setEnvelopeRowAmount(e.target.value) }} />
+                            <Select value={activeEnvelopeId === env.id ? envelopeRowType : "expense"} onValueChange={(v: "income" | "expense") => { setActiveEnvelopeId(env.id); setEnvelopeRowType(v) }}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="income">הכנסה</SelectItem>
+                                <SelectItem value="expense">הוצאה</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Input placeholder="שם" value={activeEnvelopeId === env.id ? envelopeRowName : ""} onChange={(e) => { setActiveEnvelopeId(env.id); setEnvelopeRowName(e.target.value) }} />
+                            <Input placeholder="הערות" value={activeEnvelopeId === env.id ? envelopeRowNotes : ""} onChange={(e) => { setActiveEnvelopeId(env.id); setEnvelopeRowNotes(e.target.value) }} />
                             <Button className="md:col-span-2" disabled={isSavingEnvelopeRow} onClick={() => addEnvelopeRow(env)}>
                               {isSavingEnvelopeRow && activeEnvelopeId === env.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                               הוסף שורה
@@ -1321,18 +1370,24 @@ export default function CashierPage() {
                               <TableHeader>
                                 <TableRow>
                                   <TableHead className="text-right">תאריך</TableHead>
+                                  <TableHead className="text-right">סוג</TableHead>
+                                  <TableHead className="text-right">שם</TableHead>
                                   <TableHead className="text-right">סכום</TableHead>
+                                  <TableHead className="text-right">הערות</TableHead>
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
                                 {rows.length === 0 ? (
                                   <TableRow>
-                                    <TableCell colSpan={2} className="text-center text-muted-foreground">אין שורות במעטפה זו</TableCell>
+                                    <TableCell colSpan={5} className="text-center text-muted-foreground">אין שורות במעטפה זו</TableCell>
                                   </TableRow>
                                 ) : rows.map((r, idx) => (
                                   <TableRow key={`${env.id}-r-${idx}`}>
                                     <TableCell>{r.date || "—"}</TableCell>
+                                    <TableCell>{String(r.type || "expense") === "income" ? "הכנסה" : "הוצאה"}</TableCell>
+                                    <TableCell>{r.name || "—"}</TableCell>
                                     <TableCell>₪{Number(r.amount || 0).toLocaleString()}</TableCell>
+                                    <TableCell>{r.notes || "—"}</TableCell>
                                   </TableRow>
                                 ))}
                               </TableBody>

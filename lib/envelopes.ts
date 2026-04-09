@@ -18,17 +18,30 @@ export async function ensureEnvelopeTables(db: ReturnType<typeof postgres>): Pro
   }
 }
 
-export function normalizeEnvelopeRows(raw: unknown): Array<{ date: string; amount: number }> {
+export function normalizeEnvelopeRows(raw: unknown): Array<{
+  date: string
+  amount: number
+  type: "income" | "expense"
+  name: string
+  notes: string
+}> {
   if (!Array.isArray(raw)) return []
   return raw
     .map((r) => {
       const x = (r ?? {}) as Record<string, unknown>
       const date = String(x.date ?? "")
       const amount = Number(x.amount ?? 0)
+      const typeRaw = String(x.type ?? "expense").toLowerCase()
+      const type = typeRaw === "income" ? "income" : "expense"
+      const name = String(x.name ?? "")
+      const notes = String(x.notes ?? "")
       return {
         date,
         amount: Number.isFinite(amount) && amount >= 0 ? amount : 0,
+        type,
+        name,
+        notes,
       }
     })
-    .filter((x) => x.date || x.amount > 0)
+    .filter((x) => x.date || x.amount > 0 || x.name || x.notes)
 }
