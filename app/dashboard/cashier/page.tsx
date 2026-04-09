@@ -136,6 +136,9 @@ const fetcher = async (url: string) => {
 export default function CashierPage() {
   const router = useRouter()
   const [timePeriod, setTimePeriod] = useState<"day" | "week" | "month" | "quarter" | "year">("month")
+  const [selectedMonthNumber, setSelectedMonthNumber] = useState(new Date().toISOString().slice(5, 7))
+  const [selectedQuarter, setSelectedQuarter] = useState("1")
+  const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()))
   const [isAddingExpense, setIsAddingExpense] = useState(false)
   const [isAddingIncome, setIsAddingIncome] = useState(false)
 
@@ -501,6 +504,7 @@ export default function CashierPage() {
   const filteredEnvelopesByMonth = envelopes
     .filter((e) => String(e.monthKey || "").slice(5, 7) === envelopeMonthFilter)
     .sort((a, b) => String(a.monthKey || "").localeCompare(String(b.monthKey || "")))
+  const filteredEnvelopesTargetSum = filteredEnvelopesByMonth.reduce((sum, envelope) => sum + Number(envelope.targetAmount || 0), 0)
   const filteredEnvelopesIncomeSum = filteredEnvelopesByMonth.reduce((sum, envelope) => {
     const rows = Array.isArray(envelope.rows) ? envelope.rows : []
     return sum + rows.reduce((inner, row) => inner + (String(row.type || "expense") === "income" ? Number(row.amount || 0) : 0), 0)
@@ -509,7 +513,8 @@ export default function CashierPage() {
     const rows = Array.isArray(envelope.rows) ? envelope.rows : []
     return sum + rows.reduce((inner, row) => inner + (String(row.type || "expense") === "expense" ? Number(row.amount || 0) : 0), 0)
   }, 0)
-  const filteredEnvelopesBalance = filteredEnvelopesIncomeSum - filteredEnvelopesExpenseSum
+  const filteredEnvelopesRowsSum = filteredEnvelopesIncomeSum - filteredEnvelopesExpenseSum
+  const filteredEnvelopesBalance = filteredEnvelopesTargetSum - filteredEnvelopesRowsSum
   const activeEnvelope = envelopes.find((e) => e.id === activeEnvelopeId)
 
   const filterByTimePeriod = <T extends { date?: string; paymentDate?: string }>(items: T[]): T[] => {
@@ -531,13 +536,13 @@ export default function CashierPage() {
           weekAgo.setDate(today.getDate() - 7)
           return itemDate >= weekAgo && itemDate <= today
         case "month":
-          return itemDate.getMonth() === now.getMonth() && itemDate.getFullYear() === now.getFullYear()
+          return String(itemDate.getMonth() + 1).padStart(2, "0") === selectedMonthNumber && String(itemDate.getFullYear()) === selectedYear
         case "quarter":
-          const quarter = Math.floor(now.getMonth() / 3)
+          const quarter = Number(selectedQuarter) - 1
           const itemQuarter = Math.floor(itemDate.getMonth() / 3)
-          return itemQuarter === quarter && itemDate.getFullYear() === now.getFullYear()
+          return itemQuarter === quarter && String(itemDate.getFullYear()) === selectedYear
         case "year":
-          return itemDate.getFullYear() === now.getFullYear()
+          return String(itemDate.getFullYear()) === selectedYear
         default:
           return true
       }
@@ -555,9 +560,9 @@ export default function CashierPage() {
     switch (period) {
       case "day": return "יום"
       case "week": return "שבוע"
-      case "month": return "חודש"
-      case "quarter": return "רבעון"
-      case "year": return "שנה"
+      case "month": return `חודש ${selectedMonthNumber}/${selectedYear}`
+      case "quarter": return `רבעון ${selectedQuarter} / ${selectedYear}`
+      case "year": return `שנה ${selectedYear}`
       default: return period
     }
   }
@@ -627,6 +632,91 @@ export default function CashierPage() {
               <SelectItem value="year">שנה</SelectItem>
             </SelectContent>
           </Select>
+          {timePeriod === "month" ? (
+            <>
+              <Select value={selectedMonthNumber} onValueChange={setSelectedMonthNumber}>
+                <SelectTrigger className="w-[110px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="01">01</SelectItem>
+                  <SelectItem value="02">02</SelectItem>
+                  <SelectItem value="03">03</SelectItem>
+                  <SelectItem value="04">04</SelectItem>
+                  <SelectItem value="05">05</SelectItem>
+                  <SelectItem value="06">06</SelectItem>
+                  <SelectItem value="07">07</SelectItem>
+                  <SelectItem value="08">08</SelectItem>
+                  <SelectItem value="09">09</SelectItem>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="11">11</SelectItem>
+                  <SelectItem value="12">12</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={selectedYear} onValueChange={setSelectedYear}>
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="2023">2023</SelectItem>
+                  <SelectItem value="2024">2024</SelectItem>
+                  <SelectItem value="2025">2025</SelectItem>
+                  <SelectItem value="2026">2026</SelectItem>
+                  <SelectItem value="2027">2027</SelectItem>
+                  <SelectItem value="2028">2028</SelectItem>
+                  <SelectItem value="2029">2029</SelectItem>
+                  <SelectItem value="2030">2030</SelectItem>
+                </SelectContent>
+              </Select>
+            </>
+          ) : null}
+          {timePeriod === "quarter" ? (
+            <>
+              <Select value={selectedQuarter} onValueChange={setSelectedQuarter}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">רבעון ראשון</SelectItem>
+                  <SelectItem value="2">רבעון שני</SelectItem>
+                  <SelectItem value="3">רבעון שלישי</SelectItem>
+                  <SelectItem value="4">רבעון רביעי</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={selectedYear} onValueChange={setSelectedYear}>
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="2023">2023</SelectItem>
+                  <SelectItem value="2024">2024</SelectItem>
+                  <SelectItem value="2025">2025</SelectItem>
+                  <SelectItem value="2026">2026</SelectItem>
+                  <SelectItem value="2027">2027</SelectItem>
+                  <SelectItem value="2028">2028</SelectItem>
+                  <SelectItem value="2029">2029</SelectItem>
+                  <SelectItem value="2030">2030</SelectItem>
+                </SelectContent>
+              </Select>
+            </>
+          ) : null}
+          {timePeriod === "year" ? (
+            <Select value={selectedYear} onValueChange={setSelectedYear}>
+              <SelectTrigger className="w-[120px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="2023">2023</SelectItem>
+                <SelectItem value="2024">2024</SelectItem>
+                <SelectItem value="2025">2025</SelectItem>
+                <SelectItem value="2026">2026</SelectItem>
+                <SelectItem value="2027">2027</SelectItem>
+                <SelectItem value="2028">2028</SelectItem>
+                <SelectItem value="2029">2029</SelectItem>
+                <SelectItem value="2030">2030</SelectItem>
+              </SelectContent>
+            </Select>
+          ) : null}
         </div>
       </div>
 
@@ -1373,13 +1463,19 @@ export default function CashierPage() {
                   <CardDescription>ניהול מעטפות חודשי לפי סכום יעד ותנועות</CardDescription>
                 </div>
                 <div className="order-1 flex flex-wrap items-center gap-2 sm:order-2">
-                  <div className="rounded-md border bg-muted/30 px-2 py-1 text-sm font-semibold">
+                  <div className="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-sm font-semibold text-indigo-700">
+                    סכום מעטפה בחודש: ₪{filteredEnvelopesTargetSum.toLocaleString()}
+                  </div>
+                  <div className="rounded-md border border-cyan-200 bg-cyan-50 px-2 py-1 text-sm font-semibold text-cyan-700">
+                    סכום בטבלה: ₪{filteredEnvelopesRowsSum.toLocaleString()}
+                  </div>
+                  <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-sm font-semibold text-emerald-700">
                     הכנסה: ₪{filteredEnvelopesIncomeSum.toLocaleString()}
                   </div>
-                  <div className="rounded-md border bg-muted/30 px-2 py-1 text-sm font-semibold">
+                  <div className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-sm font-semibold text-rose-700">
                     הוצאה: ₪{filteredEnvelopesExpenseSum.toLocaleString()}
                   </div>
-                  <div className="rounded-md border bg-muted/30 px-2 py-1 text-sm font-semibold">
+                  <div className="rounded-md border border-violet-200 bg-violet-50 px-2 py-1 text-sm font-semibold text-violet-700">
                     יתרה: ₪{filteredEnvelopesBalance.toLocaleString()}
                   </div>
                   <Button
@@ -1422,9 +1518,11 @@ export default function CashierPage() {
                 <div className="space-y-4">
                   {filteredEnvelopesByMonth.map((env) => {
                     const rows = Array.isArray(env.rows) ? env.rows : []
+                    const targetEnv = Number(env.targetAmount || 0)
                     const incomeEnv = rows.reduce((s, r) => s + (String(r.type || "expense") === "income" ? Number(r.amount || 0) : 0), 0)
                     const expenseEnv = rows.reduce((s, r) => s + (String(r.type || "expense") === "expense" ? Number(r.amount || 0) : 0), 0)
-                    const balanceEnv = incomeEnv - expenseEnv
+                    const rowsSumEnv = incomeEnv - expenseEnv
+                    const balanceEnv = targetEnv - rowsSumEnv
                     const isOpen = openedEnvelopeId === env.id
                     return (
                       <Card key={env.id}>
@@ -1435,9 +1533,14 @@ export default function CashierPage() {
                               onClick={() => setOpenedEnvelopeId((prev) => (prev === env.id ? "" : env.id))}
                             >
                               <CardTitle className="text-base">מעטפה לחודש: {formatDateDDMMYYYY(env.monthKey)}</CardTitle>
-                              <CardDescription>
-                                הכנסה: ₪{incomeEnv.toLocaleString()} | הוצאה: ₪{expenseEnv.toLocaleString()} | יתרה: ₪{balanceEnv.toLocaleString()}
-                              </CardDescription>
+                              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+                                <span className="rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 font-semibold text-sky-700">סכום במעטפה: ₪{targetEnv.toLocaleString()}</span>
+                                <span className="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 font-semibold text-indigo-700">סכום כותרת: ₪{targetEnv.toLocaleString()}</span>
+                                <span className="rounded-md border border-cyan-200 bg-cyan-50 px-2 py-0.5 font-semibold text-cyan-700">סכום בטבלה: ₪{rowsSumEnv.toLocaleString()}</span>
+                                <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700">הכנסה: ₪{incomeEnv.toLocaleString()}</span>
+                                <span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-0.5 font-semibold text-rose-700">הוצאה: ₪{expenseEnv.toLocaleString()}</span>
+                                <span className="rounded-md border border-violet-200 bg-violet-50 px-2 py-0.5 font-semibold text-violet-700">יתרה: ₪{balanceEnv.toLocaleString()}</span>
+                              </div>
                             </div>
                             <div className="flex items-center gap-2">
                               <Button
