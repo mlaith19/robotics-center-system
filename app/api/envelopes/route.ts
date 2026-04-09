@@ -14,7 +14,7 @@ export const GET = withTenantAuth(async (req, session) => {
   const db = tenant.db
   try {
     await ensureEnvelopeTables(db)
-    const rows = await db`SELECT * FROM "EnvelopeBudget" ORDER BY "monthKey" DESC, "createdAt" DESC`
+    const rows = await db`SELECT * FROM "EnvelopeBudget" ORDER BY "monthKey" DESC`
     return Response.json(rows)
   } catch (err) {
     return handleDbError(err, "GET /api/envelopes")

@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ArrowRight, Plus, Trash2, TrendingUp, TrendingDown, Calendar, CreditCard, Loader2 } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { ArrowRight, Plus, Trash2, TrendingUp, TrendingDown, Calendar, CreditCard, Loader2, ChevronDown, Pencil } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 interface Expense {
@@ -167,6 +168,13 @@ export default function CashierPage() {
   const [envelopeRowNotes, setEnvelopeRowNotes] = useState("")
   const [activeEnvelopeId, setActiveEnvelopeId] = useState("")
   const [isSavingEnvelopeRow, setIsSavingEnvelopeRow] = useState(false)
+  const [isEnvelopeRowDialogOpen, setIsEnvelopeRowDialogOpen] = useState(false)
+  const [openedEnvelopeId, setOpenedEnvelopeId] = useState("")
+  const [editingEnvelopeRowIndex, setEditingEnvelopeRowIndex] = useState<number | null>(null)
+  const [isEnvelopeEditDialogOpen, setIsEnvelopeEditDialogOpen] = useState(false)
+  const [isEnvelopeCreateDialogOpen, setIsEnvelopeCreateDialogOpen] = useState(false)
+  const [editEnvelopeMonthKey, setEditEnvelopeMonthKey] = useState("")
+  const [editEnvelopeTargetAmount, setEditEnvelopeTargetAmount] = useState("")
 
   // Fetch data from API
   const { data: rawExpenses, isLoading: expensesLoading } = useSWR<Expense[]>("/api/expenses", fetcher)
@@ -374,6 +382,7 @@ export default function CashierPage() {
       if (response.ok) {
         mutate("/api/envelopes")
         setEnvelopeTargetAmount("")
+        setIsEnvelopeCreateDialogOpen(false)
       }
     } catch (error) {
       console.error("Failed to create envelope:", error)
@@ -393,7 +402,11 @@ export default function CashierPage() {
         name: envelopeRowName,
         notes: envelopeRowNotes,
       }
-      const nextRows = [...(Array.isArray(envelope.rows) ? envelope.rows : []), row]
+      const existingRows = Array.isArray(envelope.rows) ? envelope.rows : []
+      const nextRows =
+        editingEnvelopeRowIndex === null
+          ? [...existingRows, row]
+          : existingRows.map((existingRow, idx) => (idx === editingEnvelopeRowIndex ? row : existingRow))
       const response = await fetch(`/api/envelopes/${envelope.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -409,6 +422,8 @@ export default function CashierPage() {
         setEnvelopeRowName("")
         setEnvelopeRowNotes("")
         setEnvelopeRowType("expense")
+        setEditingEnvelopeRowIndex(null)
+        setIsEnvelopeRowDialogOpen(false)
       }
     } catch (error) {
       console.error("Failed to add envelope row:", error)
@@ -426,8 +441,58 @@ export default function CashierPage() {
     }
   }
 
-  const filteredEnvelopesByMonth = envelopes.filter((e) => String(e.monthKey || "").slice(5, 7) === envelopeMonthFilter)
+  const deleteEnvelopeRow = async (envelope: EnvelopeBudget, rowIndex: number) => {
+    const existingRows = Array.isArray(envelope.rows) ? envelope.rows : []
+    const nextRows = existingRows.filter((_, idx) => idx !== rowIndex)
+    try {
+      const response = await fetch(`/api/envelopes/${envelope.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          monthKey: envelope.monthKey,
+          targetAmount: Number(envelope.targetAmount || 0),
+          rows: nextRows,
+        }),
+      })
+      if (response.ok) mutate("/api/envelopes")
+    } catch (error) {
+      console.error("Failed to delete envelope row:", error)
+    }
+  }
+
+  const openEditEnvelopeDialog = (envelope: EnvelopeBudget) => {
+    setActiveEnvelopeId(envelope.id)
+    setEditEnvelopeMonthKey(String(envelope.monthKey || ""))
+    setEditEnvelopeTargetAmount(String(Number(envelope.targetAmount || 0)))
+    setIsEnvelopeEditDialogOpen(true)
+  }
+
+  const saveEnvelopeDetails = async () => {
+    if (!activeEnvelope) return
+    try {
+      const response = await fetch(`/api/envelopes/${activeEnvelope.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          monthKey: editEnvelopeMonthKey,
+          targetAmount: Number(editEnvelopeTargetAmount || 0),
+          rows: Array.isArray(activeEnvelope.rows) ? activeEnvelope.rows : [],
+        }),
+      })
+      if (response.ok) {
+        mutate("/api/envelopes")
+        setIsEnvelopeEditDialogOpen(false)
+      }
+    } catch (error) {
+      console.error("Failed to update envelope details:", error)
+    }
+  }
+
+  const filteredEnvelopesByMonth = envelopes
+    .filter((e) => String(e.monthKey || "").slice(5, 7) === envelopeMonthFilter)
+    .sort((a, b) => String(b.monthKey || "").localeCompare(String(a.monthKey || "")))
   const filteredEnvelopesTargetSum = filteredEnvelopesByMonth.reduce((s, e) => s + Number(e.targetAmount || 0), 0)
+  const activeEnvelope = envelopes.find((e) => e.id === activeEnvelopeId)
 
   const filterByTimePeriod = <T extends { date?: string; paymentDate?: string }>(items: T[]): T[] => {
     if (!Array.isArray(items)) return []
@@ -1294,6 +1359,16 @@ export default function CashierPage() {
                   <div className="rounded-md border bg-muted/30 px-2 py-1 text-sm font-semibold">
                     ₪{filteredEnvelopesTargetSum.toLocaleString()}
                   </div>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setEnvelopeMonthKey(new Date().toISOString().slice(0, 10))
+                      setEnvelopeTargetAmount("")
+                      setIsEnvelopeCreateDialogOpen(true)
+                    }}
+                  >
+                    הוסף מעטפה
+                  </Button>
                   <Label className="text-sm">חודש:</Label>
                   <Select value={envelopeMonthFilter} onValueChange={setEnvelopeMonthFilter}>
                     <SelectTrigger className="w-[110px]">
@@ -1318,39 +1393,22 @@ export default function CashierPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4 px-3 sm:px-6">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                <div className="space-y-2">
-                  <Label>תאריך לכותרת המעטפה</Label>
-                  <Input type="date" value={envelopeMonthKey} onChange={(e) => setEnvelopeMonthKey(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label>סכום מעטפה</Label>
-                  <Input type="number" min={0} value={envelopeTargetAmount} onChange={(e) => setEnvelopeTargetAmount(e.target.value)} />
-                </div>
-                <div className="flex items-end">
-                  <Button className="w-full" disabled={isAddingEnvelope} onClick={createEnvelope}>
-                    {isAddingEnvelope ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                    הוסף מעטפה
-                  </Button>
-                </div>
-              </div>
-
               {filteredEnvelopesByMonth.length === 0 ? (
                 <div className="rounded-md border p-4 text-right text-muted-foreground">אין מעטפות עדיין</div>
               ) : (
                 <div className="space-y-4">
                   {filteredEnvelopesByMonth.map((env) => {
                     const rows = Array.isArray(env.rows) ? env.rows : []
-                    const rowsSum = rows.reduce((s, r) => {
-                      const amount = Number(r.amount || 0)
-                      const t = String(r.type || "expense").toLowerCase()
-                      return s + (t === "income" ? amount : -amount)
-                    }, 0)
+                    const rowsSum = rows.reduce((s, r) => s + Number(r.amount || 0), 0)
                     const target = Number(env.targetAmount || 0)
                     const balanceEnv = target - rowsSum
+                    const isOpen = openedEnvelopeId === env.id
                     return (
                       <Card key={env.id}>
-                        <CardHeader className="px-3 pb-2 text-right sm:px-6">
+                        <CardHeader
+                          className="cursor-pointer px-3 pb-2 text-right sm:px-6"
+                          onClick={() => setOpenedEnvelopeId((prev) => (prev === env.id ? "" : env.id))}
+                        >
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div className="space-y-1">
                               <CardTitle className="text-base">מעטפה לחודש: {env.monthKey}</CardTitle>
@@ -1358,63 +1416,178 @@ export default function CashierPage() {
                                 סכום כותרת: ₪{target.toLocaleString()} | סכום בטבלה: ₪{rowsSum.toLocaleString()} | יתרה: ₪{balanceEnv.toLocaleString()}
                               </CardDescription>
                             </div>
-                            <Button variant="destructive" size="sm" onClick={() => deleteEnvelope(env.id)}>מחיקה</Button>
+                            <ChevronDown className={`h-5 w-5 transition-transform ${isOpen ? "rotate-180" : ""}`} />
                           </div>
                         </CardHeader>
-                        <CardContent className="space-y-3 px-3 sm:px-6">
-                          <div className="overflow-x-auto">
-                            <div className="flex min-w-[940px] items-center gap-2">
-                              <Input className="w-[160px]" type="date" value={activeEnvelopeId === env.id ? envelopeRowDate : ""} onChange={(e) => { setActiveEnvelopeId(env.id); setEnvelopeRowDate(e.target.value) }} />
-                              <Input className="w-[130px]" type="number" min={0} placeholder="סכום" value={activeEnvelopeId === env.id ? envelopeRowAmount : ""} onChange={(e) => { setActiveEnvelopeId(env.id); setEnvelopeRowAmount(e.target.value) }} />
-                              <Select value={activeEnvelopeId === env.id ? envelopeRowType : "expense"} onValueChange={(v: "income" | "expense") => { setActiveEnvelopeId(env.id); setEnvelopeRowType(v) }}>
-                                <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="income">הכנסה</SelectItem>
-                                  <SelectItem value="expense">הוצאה</SelectItem>
-                                </SelectContent>
-                              </Select>
-                              <Input className="w-[180px]" placeholder="שם" value={activeEnvelopeId === env.id ? envelopeRowName : ""} onChange={(e) => { setActiveEnvelopeId(env.id); setEnvelopeRowName(e.target.value) }} />
-                              <Input className="w-[220px]" placeholder="הערות" value={activeEnvelopeId === env.id ? envelopeRowNotes : ""} onChange={(e) => { setActiveEnvelopeId(env.id); setEnvelopeRowNotes(e.target.value) }} />
-                              <Button className="w-[120px]" disabled={isSavingEnvelopeRow} onClick={() => addEnvelopeRow(env)}>
-                                {isSavingEnvelopeRow && activeEnvelopeId === env.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        {isOpen ? (
+                          <CardContent className="space-y-3 px-3 sm:px-6">
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  setActiveEnvelopeId(env.id)
+                                  setEnvelopeRowDate(new Date().toISOString().slice(0, 10))
+                                  setEnvelopeRowAmount("")
+                                  setEnvelopeRowType("expense")
+                                  setEnvelopeRowName("")
+                                  setEnvelopeRowNotes("")
+                                  setEditingEnvelopeRowIndex(null)
+                                  setIsEnvelopeRowDialogOpen(true)
+                                }}
+                              >
                                 הוסף שורה
                               </Button>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                onClick={() => openEditEnvelopeDialog(env)}
+                                aria-label="עריכת מעטפה"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="icon"
+                                onClick={() => deleteEnvelope(env.id)}
+                                aria-label="מחיקת מעטפה"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
                             </div>
-                          </div>
-                          <div className="overflow-x-auto rounded-md border">
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead className="text-right">תאריך</TableHead>
-                                  <TableHead className="text-right">סוג</TableHead>
-                                  <TableHead className="text-right">שם</TableHead>
-                                  <TableHead className="text-right">סכום</TableHead>
-                                  <TableHead className="text-right">הערות</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {rows.length === 0 ? (
+                            <div className="overflow-x-auto rounded-md border">
+                              <Table>
+                                <TableHeader>
                                   <TableRow>
-                                    <TableCell colSpan={5} className="text-center text-muted-foreground">אין שורות במעטפה זו</TableCell>
+                                    <TableHead className="text-right">תאריך</TableHead>
+                                    <TableHead className="text-right">סוג</TableHead>
+                                    <TableHead className="text-right">שם</TableHead>
+                                    <TableHead className="text-right">סכום</TableHead>
+                                    <TableHead className="text-right">הערות</TableHead>
+                                    <TableHead className="text-right">פעולות</TableHead>
                                   </TableRow>
-                                ) : rows.map((r, idx) => (
-                                  <TableRow key={`${env.id}-r-${idx}`}>
-                                    <TableCell>{r.date || "—"}</TableCell>
-                                    <TableCell>{String(r.type || "expense") === "income" ? "הכנסה" : "הוצאה"}</TableCell>
-                                    <TableCell>{r.name || "—"}</TableCell>
-                                    <TableCell>₪{Number(r.amount || 0).toLocaleString()}</TableCell>
-                                    <TableCell>{r.notes || "—"}</TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </div>
-                        </CardContent>
+                                </TableHeader>
+                                <TableBody>
+                                  {rows.length === 0 ? (
+                                    <TableRow>
+                                      <TableCell colSpan={6} className="text-center text-muted-foreground">אין שורות במעטפה זו</TableCell>
+                                    </TableRow>
+                                  ) : rows.map((r, idx) => (
+                                    <TableRow key={`${env.id}-r-${idx}`}>
+                                      <TableCell>{r.date || "—"}</TableCell>
+                                      <TableCell>{String(r.type || "expense") === "income" ? "הכנסה" : "הוצאה"}</TableCell>
+                                      <TableCell>{r.name || "—"}</TableCell>
+                                      <TableCell>₪{Number(r.amount || 0).toLocaleString()}</TableCell>
+                                      <TableCell>{r.notes || "—"}</TableCell>
+                                      <TableCell>
+                                        <div className="flex items-center justify-end gap-2">
+                                          <Button
+                                            variant="outline"
+                                            size="icon"
+                                            onClick={() => {
+                                              setActiveEnvelopeId(env.id)
+                                              setEnvelopeRowDate(r.date || new Date().toISOString().slice(0, 10))
+                                              setEnvelopeRowAmount(String(Number(r.amount || 0)))
+                                              setEnvelopeRowType(String(r.type || "expense") === "income" ? "income" : "expense")
+                                              setEnvelopeRowName(r.name || "")
+                                              setEnvelopeRowNotes(r.notes || "")
+                                              setEditingEnvelopeRowIndex(idx)
+                                              setIsEnvelopeRowDialogOpen(true)
+                                            }}
+                                            aria-label="עריכת שורה"
+                                          >
+                                            <Pencil className="h-4 w-4" />
+                                          </Button>
+                                          <Button
+                                            variant="destructive"
+                                            size="icon"
+                                            onClick={() => deleteEnvelopeRow(env, idx)}
+                                            aria-label="מחיקת שורה"
+                                          >
+                                            <Trash2 className="h-4 w-4" />
+                                          </Button>
+                                        </div>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          </CardContent>
+                        ) : null}
                       </Card>
                     )
                   })}
                 </div>
               )}
+
+              <Dialog open={isEnvelopeRowDialogOpen} onOpenChange={setIsEnvelopeRowDialogOpen}>
+                <DialogContent dir="rtl" className="sm:max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>{editingEnvelopeRowIndex === null ? "הוספת שורה למעטפה" : "עריכת שורה במעטפה"}</DialogTitle>
+                  </DialogHeader>
+                  <div className="grid grid-cols-1 gap-2 md:grid-cols-5">
+                    <Input type="date" value={envelopeRowDate} onChange={(e) => setEnvelopeRowDate(e.target.value)} />
+                    <Input type="number" min={0} placeholder="סכום" value={envelopeRowAmount} onChange={(e) => setEnvelopeRowAmount(e.target.value)} />
+                    <Select value={envelopeRowType} onValueChange={(v: "income" | "expense") => setEnvelopeRowType(v)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="income">הכנסה</SelectItem>
+                        <SelectItem value="expense">הוצאה</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input placeholder="שם" value={envelopeRowName} onChange={(e) => setEnvelopeRowName(e.target.value)} />
+                    <Input placeholder="הערות" value={envelopeRowNotes} onChange={(e) => setEnvelopeRowNotes(e.target.value)} />
+                  </div>
+                  <Button
+                    disabled={!activeEnvelope || isSavingEnvelopeRow}
+                    onClick={() => activeEnvelope && addEnvelopeRow(activeEnvelope)}
+                  >
+                    {isSavingEnvelopeRow ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    {editingEnvelopeRowIndex === null ? "הוסף שורה" : "שמור שינויים"}
+                  </Button>
+                </DialogContent>
+              </Dialog>
+
+              <Dialog open={isEnvelopeEditDialogOpen} onOpenChange={setIsEnvelopeEditDialogOpen}>
+                <DialogContent dir="rtl" className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>עריכת מעטפה</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <Label>תאריך לכותרת המעטפה</Label>
+                      <Input type="date" value={editEnvelopeMonthKey} onChange={(e) => setEditEnvelopeMonthKey(e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>סכום מעטפה</Label>
+                      <Input type="number" min={0} value={editEnvelopeTargetAmount} onChange={(e) => setEditEnvelopeTargetAmount(e.target.value)} />
+                    </div>
+                    <Button onClick={saveEnvelopeDetails}>שמור מעטפה</Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
+              <Dialog open={isEnvelopeCreateDialogOpen} onOpenChange={setIsEnvelopeCreateDialogOpen}>
+                <DialogContent dir="rtl" className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>הוספת מעטפה</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <Label>תאריך לכותרת המעטפה</Label>
+                      <Input type="date" value={envelopeMonthKey} onChange={(e) => setEnvelopeMonthKey(e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>סכום מעטפה</Label>
+                      <Input type="number" min={0} value={envelopeTargetAmount} onChange={(e) => setEnvelopeTargetAmount(e.target.value)} />
+                    </div>
+                    <Button disabled={isAddingEnvelope} onClick={createEnvelope}>
+                      {isAddingEnvelope ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      הוסף מעטפה
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </CardContent>
           </Card>
         </TabsContent>
