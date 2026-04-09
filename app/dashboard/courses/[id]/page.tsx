@@ -2407,7 +2407,17 @@ tr:nth-child(even) td{background:#f9fafb}
                               <TableCell className="text-right font-medium px-2 truncate">{e.studentName || "—"}</TableCell>
                               {dates.map((d) => {
                                 const s = row.byDate[d] || "—"
-                                return <TableCell key={`${e.id}-${d}`} className="text-center px-1 whitespace-nowrap">{s}</TableCell>
+                                const toneClass =
+                                  s === "נוכח"
+                                    ? "text-emerald-700 font-semibold"
+                                    : s === "לא נכח"
+                                      ? "text-rose-700 font-semibold"
+                                      : "text-foreground"
+                                return (
+                                  <TableCell key={`${e.id}-${d}`} className={`text-center px-1 whitespace-nowrap ${toneClass}`}>
+                                    {s}
+                                  </TableCell>
+                                )
                               })}
                               <TableCell className="text-center font-semibold text-emerald-700 px-1">{row.presentCount}</TableCell>
                             </TableRow>
