@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input"
 import { ArrowRight, Pencil, Loader2, BookOpen, Calendar, Users, BarChart3, CalendarCheck, Check, X, Thermometer, Plane, CalendarRange, Printer, Layers, Trash2, Clock, Plus } from "lucide-react"
 import { courseTimeToDisplayValue, normalizeCourseCalendarYmd } from "@/lib/course-db-fields"
+import { courseTypeIsPerSession, normalizeSessionPricesMap } from "@/lib/course-session-prices"
 import { useLanguage } from "@/lib/i18n/context"
 
 interface Course {
@@ -1183,22 +1184,60 @@ export default function CourseViewPage() {
     if (!p.studentId) continue
     paidByStudent.set(p.studentId, (paidByStudent.get(p.studentId) || 0) + Number(p.amount || 0))
   }
-  const debtRowsAll = enrollments
-    .map((e) => {
-      const totalDue = Number((e as any).coursePrice ?? course?.price ?? 0)
-      const paid = paidByStudent.get(e.studentId) || 0
-      const balance = Math.max(0, totalDue - paid)
-      return {
-        enrollmentId: e.id,
-        studentId: e.studentId,
-        studentName: e.studentName || "—",
-        totalDue,
-        paid,
-        balance,
-      }
-    })
+  const isPerSessionCoursePricing = courseTypeIsPerSession(String((course as any)?.courseType || ""))
+  const scheduleDatesSet = new Set(allowedAttendanceDates)
+  const sessionPriceMap = normalizeSessionPricesMap((course as any)?.sessionPrices)
+  const fallbackPerSessionPrice =
+    allowedAttendanceDates.length > 0
+      ? Number(course?.price || 0) / allowedAttendanceDates.length
+      : Number(course?.price || 0)
+  const presentDatesByStudent = new Map<string, Set<string>>()
+  for (const row of attendanceList) {
+    const sid = String((row as any)?.studentId || "").trim()
+    if (!sid) continue
+    const st = String((row as any)?.status || "").trim().toLowerCase()
+    if (!(st === "present" || st === "נוכח")) continue
+    const ymd = String((row as any)?.date || "").trim().slice(0, 10)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) continue
+    if (scheduleDatesSet.size > 0 && !scheduleDatesSet.has(ymd)) continue
+    const set = presentDatesByStudent.get(sid) || new Set<string>()
+    set.add(ymd)
+    presentDatesByStudent.set(sid, set)
+  }
+
+  const dueByStudent = new Map<string, { studentName: string; totalDue: number }>()
+  for (const e of enrollments) {
+    const sid = String(e.studentId || "").trim()
+    if (!sid) continue
+    const studentName = e.studentName || "—"
+    let enrollmentDue = Number((e as any).coursePrice ?? course?.price ?? 0)
+    if (isPerSessionCoursePricing) {
+      const presentDates = Array.from(presentDatesByStudent.get(sid) || [])
+      enrollmentDue = presentDates.reduce((sum, d) => sum + Number(sessionPriceMap[d] ?? fallbackPerSessionPrice), 0)
+    }
+    const prev = dueByStudent.get(sid)
+    if (!prev) {
+      dueByStudent.set(sid, { studentName, totalDue: enrollmentDue })
+    } else {
+      dueByStudent.set(sid, { studentName: prev.studentName || studentName, totalDue: prev.totalDue + enrollmentDue })
+    }
+  }
+
+  const debtRowsAll = Array.from(dueByStudent.entries()).map(([studentId, due]) => {
+    const paid = paidByStudent.get(studentId) || 0
+    const balance = Math.max(0, due.totalDue - paid)
+    return {
+      enrollmentId: studentId,
+      studentId,
+      studentName: due.studentName,
+      totalDue: due.totalDue,
+      paid,
+      balance,
+    }
+  })
   const debtRows = debtRowsAll
     .filter((r) => r.balance > 0.009)
+    .sort((a, b) => b.balance - a.balance || a.studentName.localeCompare(b.studentName, "he"))
   const debtRowsTotalDue = debtRowsAll.reduce((sum, r) => sum + r.totalDue, 0)
   const debtRowsTotalPaid = debtRowsAll.reduce((sum, r) => sum + r.paid, 0)
   const totalDebtAmount = Math.max(0, debtRowsTotalDue - debtRowsTotalPaid)
