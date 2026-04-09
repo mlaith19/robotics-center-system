@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { Fragment, useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -2343,7 +2343,7 @@ tr:nth-child(even) td{background:#f9fafb}
                       </TableHeader>
                       <TableBody>
                         {(() => {
-                          return teacherAttendance.map((a) => {
+                          return teacherAttendance.map((a, idx) => {
                             const teacher = teachers.find((t) => t.id === a.teacherId)
                             const teacherName = teacher?.name ?? "—"
                             const statusLabel = isTeacherAttendancePresentStatus(a.status)
@@ -2369,33 +2369,72 @@ tr:nth-child(even) td{background:#f9fafb}
                             const colorIdx = tid ? teacherAttendanceColorIndexById.get(tid) ?? 0 : 0
                             const rowAccent =
                               TEACHER_ROW_ACCENT_STYLES[colorIdx % TEACHER_ROW_ACCENT_STYLES.length]
+                            const aTeacherId = String(a.teacherId || "")
+                            const aDateKey = String(a.date || "")
+                            const next = teacherAttendance[idx + 1]
+                            const nextTeacherId = next ? String(next.teacherId || "") : ""
+                            const nextDateKey = next ? String(next.date || "") : ""
+                            const isEndOfTeacherDayGroup = !next || nextTeacherId !== aTeacherId || nextDateKey !== aDateKey
+                            const dayTeacherTotalHours = isEndOfTeacherDayGroup
+                              ? teacherAttendance
+                                  .filter(
+                                    (row) =>
+                                      String(row.teacherId || "") === aTeacherId &&
+                                      String(row.date || "") === aDateKey &&
+                                      isTeacherAttendancePresentStatus(row.status),
+                                  )
+                                  .reduce(
+                                    (sum, row) =>
+                                      sum +
+                                      attendanceHoursToNumber(
+                                        row.hours,
+                                        row.campSlotStart,
+                                        row.campSlotEnd,
+                                        course?.startTime,
+                                        course?.endTime,
+                                      ),
+                                    0,
+                                  )
+                              : 0
                             return (
-                              <TableRow key={a.id} className={rowAccent}>
-                                <TableCell className="text-right">{new Date(a.date).toLocaleDateString(localeTag)}</TableCell>
-                                <TableCell className="text-right">{teacherName}</TableCell>
-                                <TableCell className="text-right text-muted-foreground">{lessonDisp}</TableCell>
-                                <TableCell className="text-center">{startDisp}</TableCell>
-                                <TableCell className="text-center">{endDisp}</TableCell>
-                                <TableCell className="text-center font-medium">{hoursDisp}</TableCell>
-                                <TableCell className="text-right">{statusLabel}</TableCell>
-                                <TableCell className="text-right text-muted-foreground">{a.notes ?? "—"}</TableCell>
-                                <TableCell className="text-right text-muted-foreground">{a.createdByUserName || "—"}</TableCell>
-                                {canDeleteTeacherAttendanceRow ? (
-                                  <TableCell className="text-center p-1">
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                      disabled={busy}
-                                      aria-label={locale === "en" ? "Delete attendance" : locale === "ar" ? "حذف" : "מחיקת נוכחות"}
-                                      onClick={() => deleteTeacherAttendanceRecord(a.id)}
+                              <Fragment key={a.id}>
+                                <TableRow className={rowAccent}>
+                                  <TableCell className="text-right">{new Date(a.date).toLocaleDateString(localeTag)}</TableCell>
+                                  <TableCell className="text-right">{teacherName}</TableCell>
+                                  <TableCell className="text-right text-muted-foreground">{lessonDisp}</TableCell>
+                                  <TableCell className="text-center">{startDisp}</TableCell>
+                                  <TableCell className="text-center">{endDisp}</TableCell>
+                                  <TableCell className="text-center font-medium">{hoursDisp}</TableCell>
+                                  <TableCell className="text-right">{statusLabel}</TableCell>
+                                  <TableCell className="text-right text-muted-foreground">{a.notes ?? "—"}</TableCell>
+                                  <TableCell className="text-right text-muted-foreground">{a.createdByUserName || "—"}</TableCell>
+                                  {canDeleteTeacherAttendanceRow ? (
+                                    <TableCell className="text-center p-1">
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                        disabled={busy}
+                                        aria-label={locale === "en" ? "Delete attendance" : locale === "ar" ? "حذف" : "מחיקת נוכחות"}
+                                        onClick={() => deleteTeacherAttendanceRecord(a.id)}
+                                      >
+                                        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                      </Button>
+                                    </TableCell>
+                                  ) : null}
+                                </TableRow>
+                                {isEndOfTeacherDayGroup ? (
+                                  <TableRow className="bg-amber-50/70">
+                                    <TableCell
+                                      className="text-right font-semibold text-amber-900"
+                                      colSpan={canDeleteTeacherAttendanceRow ? 10 : 9}
                                     >
-                                      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                                    </Button>
-                                  </TableCell>
+                                      סה&quot;כ נוכחות לתאריך {new Date(a.date).toLocaleDateString("he-IL")} - {teacherName}: {dayTeacherTotalHours.toFixed(1)} {tr.hoursShort}
+                                    </TableCell>
+                                  </TableRow>
                                 ) : null}
-                              </TableRow>
+                              </Fragment>
                             )
                           })
                         })()}
