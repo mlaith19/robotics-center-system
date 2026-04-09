@@ -2359,27 +2359,27 @@ tr:nth-child(even) td{background:#f9fafb}
                 return students.length > 0 ? (
                   <div className="space-y-2">
                     <div className="overflow-x-auto rounded-md border bg-muted/20">
-                      <Table className="min-w-[1100px]">
+                      <Table className="w-full table-fixed text-xs">
                         <TableHeader>
                           <TableRow className="bg-emerald-50/60">
-                            <TableHead className="text-right" colSpan={2}>נוכח</TableHead>
+                            <TableHead className="text-right px-2" colSpan={2}>נוכח</TableHead>
                             {dates.map((d) => (
-                              <TableHead key={`present-${d}`} className="text-center text-emerald-700 font-semibold">
+                              <TableHead key={`present-${d}`} className="text-center text-emerald-700 font-semibold px-1 whitespace-nowrap">
                                 {presentByDate.get(d) || 0}
                               </TableHead>
                             ))}
-                            <TableHead className="text-center text-emerald-700 font-semibold">
+                            <TableHead className="text-center text-emerald-700 font-semibold px-1 whitespace-nowrap">
                               {Array.from(presentByDate.values()).reduce((sum, n) => sum + n, 0)}
                             </TableHead>
                           </TableRow>
                           <TableRow className="bg-rose-50/60">
-                            <TableHead className="text-right" colSpan={2}>לא נכח</TableHead>
+                            <TableHead className="text-right px-2" colSpan={2}>לא נכח</TableHead>
                             {dates.map((d) => (
-                              <TableHead key={`absent-${d}`} className="text-center text-rose-700 font-semibold">
+                              <TableHead key={`absent-${d}`} className="text-center text-rose-700 font-semibold px-1 whitespace-nowrap">
                                 {absentByDate.get(d) || 0}
                               </TableHead>
                             ))}
-                            <TableHead className="text-center text-rose-700 font-semibold">
+                            <TableHead className="text-center text-rose-700 font-semibold px-1 whitespace-nowrap">
                               {Array.from(absentByDate.values()).reduce((sum, n) => sum + n, 0)}
                             </TableHead>
                           </TableRow>
@@ -2387,15 +2387,15 @@ tr:nth-child(even) td{background:#f9fafb}
                       </Table>
                     </div>
                     <div className="overflow-x-auto rounded-md border">
-                    <Table className="min-w-[1100px]">
+                    <Table className="w-full table-fixed text-xs">
                       <TableHeader>
                         <TableRow className="bg-muted/50">
-                          <TableHead className="text-right">מס'</TableHead>
-                          <TableHead className="text-right">{tr.student}</TableHead>
+                          <TableHead className="text-right w-[42px] px-1">מס'</TableHead>
+                          <TableHead className="text-right w-[150px] px-2">{tr.student}</TableHead>
                           {dates.map((d) => (
-                            <TableHead key={d} className="text-center">{new Date(d).toLocaleDateString("he-IL")}</TableHead>
+                            <TableHead key={d} className="text-center px-1 whitespace-nowrap">{new Date(d).toLocaleDateString("he-IL")}</TableHead>
                           ))}
-                          <TableHead className="text-center">סה"כ נוכחות</TableHead>
+                          <TableHead className="text-center w-[74px] px-1 whitespace-nowrap">סה"כ נוכחות</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -2403,13 +2403,13 @@ tr:nth-child(even) td{background:#f9fafb}
                           const e = row.enrollment
                           return (
                             <TableRow key={e.id}>
-                              <TableCell className="text-right">{idx + 1}</TableCell>
-                              <TableCell className="text-right font-medium">{e.studentName || "—"}</TableCell>
+                              <TableCell className="text-right px-1">{idx + 1}</TableCell>
+                              <TableCell className="text-right font-medium px-2 truncate">{e.studentName || "—"}</TableCell>
                               {dates.map((d) => {
                                 const s = row.byDate[d] || "—"
-                                return <TableCell key={`${e.id}-${d}`} className="text-center">{s}</TableCell>
+                                return <TableCell key={`${e.id}-${d}`} className="text-center px-1 whitespace-nowrap">{s}</TableCell>
                               })}
-                              <TableCell className="text-center font-semibold text-emerald-700">{row.presentCount}</TableCell>
+                              <TableCell className="text-center font-semibold text-emerald-700 px-1">{row.presentCount}</TableCell>
                             </TableRow>
                           )
                         })}
