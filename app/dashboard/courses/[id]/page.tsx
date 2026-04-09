@@ -2119,10 +2119,21 @@ tr:nth-child(even) td{background:#f9fafb}
                       w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>דוח נוכחות מלא - ${course?.name || ""}</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;padding:24px;color:#1f2937}.header{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid #4f46e5}.header h1{font-size:22px;color:#3730a3}.header h2{font-size:14px;color:#4b5563;font-weight:500}.note{font-size:12px;color:#64748b;text-align:center;margin-bottom:10px}.table-wrap{overflow:auto;border:1px solid #cbd5e1;border-radius:10px}table{border-collapse:collapse;min-width:1200px;width:max-content;background:#fff}th{background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe;padding:8px 10px;text-align:center;font-size:12px;white-space:nowrap}td{border:1px solid #d1d5db;padding:6px 8px;text-align:center;font-size:12px;white-space:nowrap}tr:nth-child(even) td{background:#f8fafc}.name-col{position:sticky;right:0;background:#fff;font-weight:600;text-align:right;min-width:170px}.idx-col{position:sticky;right:170px;background:#fff;min-width:52px}.total-col{font-weight:700;background:#ecfeff}.present{color:#166534;font-weight:700}.not-present{color:#991b1b;font-weight:700}.summary-row td{background:#f1f5f9 !important;font-weight:700}@media print{@page{size:landscape;margin:12mm}body{padding:0}.table-wrap{border:none}}</style></head><body>`)
                       w.document.write(`<div class="header">${logoHtml}<h1>${centerName || "מרכז"}</h1>${course?.name ? `<h2>${course.name}</h2>` : ""}<h2>דוח נוכחות מלא לתלמידים</h2></div>`)
                       if (datesForReport.length > 0) w.document.write(`<div class="note">טווח תאריכים: ${new Date(datesForReport[0]).toLocaleDateString("he-IL")} - ${new Date(datesForReport[datesForReport.length - 1]).toLocaleDateString("he-IL")}</div>`)
+                      const studentsSortedByAttendance = studentsForReport
+                        .map((e) => {
+                          const presentCount = datesForReport.reduce((sum, d) => {
+                            const st = statusAt(String(e.studentId), d)
+                            return sum + (st === "present" ? 1 : 0)
+                          }, 0)
+                          return { enrollment: e, presentCount }
+                        })
+                        .sort((a, b) => b.presentCount - a.presentCount || String(a.enrollment.studentName || "").localeCompare(String(b.enrollment.studentName || ""), "he"))
+
                       w.document.write(`<div class="table-wrap"><table><thead><tr><th class="idx-col">מס'</th><th class="name-col">שם תלמיד</th>`)
                       datesForReport.forEach((d) => w.document.write(`<th>${new Date(d).toLocaleDateString("he-IL")}</th>`))
                       w.document.write(`<th class="total-col">סה"כ נוכחות</th></tr></thead><tbody>`)
-                      studentsForReport.forEach((e, i) => {
+                      studentsSortedByAttendance.forEach((row, i) => {
+                        const e = row.enrollment
                         let presentCount = 0
                         w.document.write(`<tr><td class="idx-col">${i + 1}</td><td class="name-col">${(e.studentName || "—").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</td>`)
                         datesForReport.forEach((d) => {
