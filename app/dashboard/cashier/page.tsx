@@ -557,9 +557,10 @@ export default function CashierPage() {
       </div>
 
       <Tabs defaultValue="expenses" dir="rtl">
-        <TabsList className="grid h-auto w-full grid-cols-2 gap-1">
+        <TabsList className="grid h-auto w-full grid-cols-3 gap-1">
           <TabsTrigger value="expenses">הוצאות</TabsTrigger>
           <TabsTrigger value="incomes">הכנסות</TabsTrigger>
+          <TabsTrigger value="envelopes">מעטפות</TabsTrigger>
         </TabsList>
 
         <TabsContent value="expenses" className="space-y-4">
@@ -1177,6 +1178,20 @@ export default function CashierPage() {
                   </div>
                 </>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="envelopes" className="space-y-4">
+          <Card>
+            <CardHeader className="px-3 text-right sm:px-6">
+              <CardTitle>מעטפות</CardTitle>
+              <CardDescription>טאב מעטפות מוכן להמשך הגדרה</CardDescription>
+            </CardHeader>
+            <CardContent className="px-3 sm:px-6">
+              <div className="rounded-md border bg-muted/20 p-4 text-right text-muted-foreground">
+                כאן נבנה את ניהול המעטפות לפי ההנחיות שלך.
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
