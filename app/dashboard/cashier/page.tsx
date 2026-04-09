@@ -173,7 +173,7 @@ export default function CashierPage() {
   const [isAddingEnvelope, setIsAddingEnvelope] = useState(false)
   const [envelopeRowDate, setEnvelopeRowDate] = useState(new Date().toISOString().slice(0, 10))
   const [envelopeRowAmount, setEnvelopeRowAmount] = useState("")
-  const [envelopeRowType, setEnvelopeRowType] = useState<"income" | "expense">("expense")
+  const [envelopeRowType, setEnvelopeRowType] = useState<"income" | "expense">("income")
   const [envelopeRowName, setEnvelopeRowName] = useState("")
   const [envelopeRowNotes, setEnvelopeRowNotes] = useState("")
   const [activeEnvelopeId, setActiveEnvelopeId] = useState("")
@@ -431,7 +431,7 @@ export default function CashierPage() {
         setEnvelopeRowAmount("")
         setEnvelopeRowName("")
         setEnvelopeRowNotes("")
-        setEnvelopeRowType("expense")
+        setEnvelopeRowType("income")
         setEditingEnvelopeRowIndex(null)
         setIsEnvelopeRowDialogOpen(false)
       }
@@ -501,7 +501,15 @@ export default function CashierPage() {
   const filteredEnvelopesByMonth = envelopes
     .filter((e) => String(e.monthKey || "").slice(5, 7) === envelopeMonthFilter)
     .sort((a, b) => String(a.monthKey || "").localeCompare(String(b.monthKey || "")))
-  const filteredEnvelopesTargetSum = filteredEnvelopesByMonth.reduce((s, e) => s + Number(e.targetAmount || 0), 0)
+  const filteredEnvelopesIncomeSum = filteredEnvelopesByMonth.reduce((sum, envelope) => {
+    const rows = Array.isArray(envelope.rows) ? envelope.rows : []
+    return sum + rows.reduce((inner, row) => inner + (String(row.type || "expense") === "income" ? Number(row.amount || 0) : 0), 0)
+  }, 0)
+  const filteredEnvelopesExpenseSum = filteredEnvelopesByMonth.reduce((sum, envelope) => {
+    const rows = Array.isArray(envelope.rows) ? envelope.rows : []
+    return sum + rows.reduce((inner, row) => inner + (String(row.type || "expense") === "expense" ? Number(row.amount || 0) : 0), 0)
+  }, 0)
+  const filteredEnvelopesBalance = filteredEnvelopesIncomeSum - filteredEnvelopesExpenseSum
   const activeEnvelope = envelopes.find((e) => e.id === activeEnvelopeId)
 
   const filterByTimePeriod = <T extends { date?: string; paymentDate?: string }>(items: T[]): T[] => {
@@ -1365,9 +1373,14 @@ export default function CashierPage() {
                   <CardDescription>ניהול מעטפות חודשי לפי סכום יעד ותנועות</CardDescription>
                 </div>
                 <div className="order-1 flex flex-wrap items-center gap-2 sm:order-2">
-                  <div className="text-sm text-muted-foreground">סכום מעטפות בחודש:</div>
                   <div className="rounded-md border bg-muted/30 px-2 py-1 text-sm font-semibold">
-                    ₪{filteredEnvelopesTargetSum.toLocaleString()}
+                    הכנסה: ₪{filteredEnvelopesIncomeSum.toLocaleString()}
+                  </div>
+                  <div className="rounded-md border bg-muted/30 px-2 py-1 text-sm font-semibold">
+                    הוצאה: ₪{filteredEnvelopesExpenseSum.toLocaleString()}
+                  </div>
+                  <div className="rounded-md border bg-muted/30 px-2 py-1 text-sm font-semibold">
+                    יתרה: ₪{filteredEnvelopesBalance.toLocaleString()}
                   </div>
                   <Button
                     size="sm"
@@ -1409,28 +1422,23 @@ export default function CashierPage() {
                 <div className="space-y-4">
                   {filteredEnvelopesByMonth.map((env) => {
                     const rows = Array.isArray(env.rows) ? env.rows : []
-                    const rowsSum = rows.reduce((s, r) => s + Number(r.amount || 0), 0)
-                    const target = Number(env.targetAmount || 0)
-                    const balanceEnv = target - rowsSum
+                    const incomeEnv = rows.reduce((s, r) => s + (String(r.type || "expense") === "income" ? Number(r.amount || 0) : 0), 0)
+                    const expenseEnv = rows.reduce((s, r) => s + (String(r.type || "expense") === "expense" ? Number(r.amount || 0) : 0), 0)
+                    const balanceEnv = incomeEnv - expenseEnv
                     const isOpen = openedEnvelopeId === env.id
                     return (
                       <Card key={env.id}>
-                        <CardHeader
-                          className="cursor-pointer px-3 pb-2 text-right sm:px-6"
-                          onClick={() => setOpenedEnvelopeId((prev) => (prev === env.id ? "" : env.id))}
-                        >
+                        <CardHeader className="px-3 pb-2 text-right sm:px-6">
                           <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="space-y-1">
+                            <div
+                              className="cursor-pointer space-y-1"
+                              onClick={() => setOpenedEnvelopeId((prev) => (prev === env.id ? "" : env.id))}
+                            >
                               <CardTitle className="text-base">מעטפה לחודש: {formatDateDDMMYYYY(env.monthKey)}</CardTitle>
                               <CardDescription>
-                                סכום כותרת: ₪{target.toLocaleString()} | סכום בטבלה: ₪{rowsSum.toLocaleString()} | יתרה: ₪{balanceEnv.toLocaleString()}
+                                הכנסה: ₪{incomeEnv.toLocaleString()} | הוצאה: ₪{expenseEnv.toLocaleString()} | יתרה: ₪{balanceEnv.toLocaleString()}
                               </CardDescription>
                             </div>
-                            <ChevronDown className={`h-5 w-5 transition-transform ${isOpen ? "rotate-180" : ""}`} />
-                          </div>
-                        </CardHeader>
-                        {isOpen ? (
-                          <CardContent className="space-y-3 px-3 sm:px-6">
                             <div className="flex items-center gap-2">
                               <Button
                                 size="sm"
@@ -1438,7 +1446,7 @@ export default function CashierPage() {
                                   setActiveEnvelopeId(env.id)
                                   setEnvelopeRowDate(new Date().toISOString().slice(0, 10))
                                   setEnvelopeRowAmount("")
-                                  setEnvelopeRowType("expense")
+                                  setEnvelopeRowType("income")
                                   setEnvelopeRowName("")
                                   setEnvelopeRowNotes("")
                                   setEditingEnvelopeRowIndex(null)
@@ -1463,7 +1471,19 @@ export default function CashierPage() {
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setOpenedEnvelopeId((prev) => (prev === env.id ? "" : env.id))}
+                                aria-label={isOpen ? "סגירת מעטפה" : "פתיחת מעטפה"}
+                              >
+                                <ChevronDown className={`h-5 w-5 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                              </Button>
                             </div>
+                          </div>
+                        </CardHeader>
+                        {isOpen ? (
+                          <CardContent className="space-y-3 px-3 sm:px-6">
                             <div className="overflow-x-auto rounded-md border">
                               <Table>
                                 <TableHeader>
@@ -1482,7 +1502,10 @@ export default function CashierPage() {
                                       <TableCell colSpan={6} className="text-center text-muted-foreground">אין שורות במעטפה זו</TableCell>
                                     </TableRow>
                                   ) : rows.map((r, idx) => (
-                                    <TableRow key={`${env.id}-r-${idx}`}>
+                                    <TableRow
+                                      key={`${env.id}-r-${idx}`}
+                                      className={String(r.type || "expense") === "expense" ? "bg-rose-50/70" : ""}
+                                    >
                                       <TableCell>{formatDateDDMMYYYY(r.date)}</TableCell>
                                       <TableCell>{String(r.type || "expense") === "income" ? "הכנסה" : "הוצאה"}</TableCell>
                                       <TableCell>{r.name || "—"}</TableCell>

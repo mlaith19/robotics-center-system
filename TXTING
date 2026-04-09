@@ -5,9 +5,6 @@ git push origin mainSet-Location "e:\PROJECTS\robotics center system"
 git add .
 git commit -m "תיאור השינוי"
 git push origin main
-
-
-
 ssh root@147.93.123.132   
 
-cd /var/www/robotics-center && git pull origin main && (docker compose --env-file .env.production -f docker-compose.production.yml up -d --build || docker compose --env-file .env -f docker-compose.production.yml up -d --build) && docker image prune -f
+cd /var/www/robotics-center && git pull --rebase origin main && (docker compose --env-file .env.production -f docker-compose.production.yml up -d --build || docker compose --env-file .env -f docker-compose.production.yml up -d --build) && docker image prune -f
