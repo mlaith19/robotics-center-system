@@ -554,7 +554,25 @@ export default function CashierPage() {
   const totalExpenses = filteredExpenses.reduce((sum, e) => sum + Number(e.amount), 0)
   const totalIncomes = filteredPayments.reduce((sum, p) => sum + Number(p.amount), 0)
   const balance = totalIncomes - totalExpenses
-  const cashBalanceForSelectedMonth = filteredEnvelopesBalance
+  const cashBalanceForSelectedMonth = envelopes
+    .filter((envelope) => {
+      const date = new Date(String(envelope.monthKey || ""))
+      return !Number.isNaN(date.getTime()) &&
+        String(date.getMonth() + 1).padStart(2, "0") === selectedMonthNumber &&
+        String(date.getFullYear()) === selectedYear
+    })
+    .reduce((sum, envelope) => {
+      const rows = Array.isArray(envelope.rows) ? envelope.rows : []
+      const income = rows.reduce(
+        (inner, row) => inner + (String(row.type || "expense") === "income" ? Number(row.amount || 0) : 0),
+        0,
+      )
+      const expense = rows.reduce(
+        (inner, row) => inner + (String(row.type || "expense") === "expense" ? Number(row.amount || 0) : 0),
+        0,
+      )
+      return sum + (income - expense)
+    }, 0)
   const yearlyCashBalance = envelopes
     .filter((envelope) => {
       const date = new Date(String(envelope.monthKey || ""))
