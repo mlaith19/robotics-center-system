@@ -513,8 +513,7 @@ export default function CashierPage() {
     const rows = Array.isArray(envelope.rows) ? envelope.rows : []
     return sum + rows.reduce((inner, row) => inner + (String(row.type || "expense") === "expense" ? Number(row.amount || 0) : 0), 0)
   }, 0)
-  const filteredEnvelopesRowsSum = filteredEnvelopesIncomeSum - filteredEnvelopesExpenseSum
-  const filteredEnvelopesBalance = filteredEnvelopesTargetSum - filteredEnvelopesRowsSum
+  const filteredEnvelopesBalance = filteredEnvelopesIncomeSum - filteredEnvelopesExpenseSum
   const activeEnvelope = envelopes.find((e) => e.id === activeEnvelopeId)
 
   const filterByTimePeriod = <T extends { date?: string; paymentDate?: string }>(items: T[]): T[] => {
@@ -555,23 +554,7 @@ export default function CashierPage() {
   const totalExpenses = filteredExpenses.reduce((sum, e) => sum + Number(e.amount), 0)
   const totalIncomes = filteredPayments.reduce((sum, p) => sum + Number(p.amount), 0)
   const balance = totalIncomes - totalExpenses
-  const monthlyExpensesForCash = expenses
-    .filter((e) => {
-      const date = new Date(e.date)
-      return !Number.isNaN(date.getTime()) &&
-        String(date.getMonth() + 1).padStart(2, "0") === selectedMonthNumber &&
-        String(date.getFullYear()) === selectedYear
-    })
-    .reduce((sum, e) => sum + Number(e.amount || 0), 0)
-  const monthlyIncomesForCash = payments
-    .filter((p) => {
-      const date = new Date(p.paymentDate)
-      return !Number.isNaN(date.getTime()) &&
-        String(date.getMonth() + 1).padStart(2, "0") === selectedMonthNumber &&
-        String(date.getFullYear()) === selectedYear
-    })
-    .reduce((sum, p) => sum + Number(p.amount || 0), 0)
-  const cashBalanceForSelectedMonth = monthlyIncomesForCash - monthlyExpensesForCash
+  const cashBalanceForSelectedMonth = filteredEnvelopesBalance
   const yearlyExpensesForCash = expenses
     .filter((e) => {
       const date = new Date(e.date)
@@ -798,7 +781,7 @@ export default function CashierPage() {
           <CardHeader className="px-3 pb-2 text-right sm:px-6">
             <CardTitle className={`text-base ${cashBalanceForSelectedMonth >= 0 ? "text-emerald-700" : "text-rose-700"}`}>קופה</CardTitle>
             <CardDescription className={`text-xs ${cashBalanceForSelectedMonth >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-              יתרת חודש {selectedMonthNumber}/{selectedYear}
+              יתרת מעטפות בחודש {selectedMonthNumber}/{selectedYear}
             </CardDescription>
           </CardHeader>
           <CardContent className="px-3 sm:px-6">
@@ -1522,16 +1505,13 @@ export default function CashierPage() {
                 </div>
                 <div className="order-1 flex flex-wrap items-center gap-2 sm:order-2">
                   <div className="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-sm font-semibold text-indigo-700">
-                    סכום מעטפה בחודש: ₪{filteredEnvelopesTargetSum.toLocaleString()}
-                  </div>
-                  <div className="rounded-md border border-cyan-200 bg-cyan-50 px-2 py-1 text-sm font-semibold text-cyan-700">
-                    סכום בטבלה: ₪{filteredEnvelopesRowsSum.toLocaleString()}
+                    סכום מעטפות: ₪{filteredEnvelopesTargetSum.toLocaleString()}
                   </div>
                   <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-sm font-semibold text-emerald-700">
-                    הכנסה: ₪{filteredEnvelopesIncomeSum.toLocaleString()}
+                    הכנסות: ₪{filteredEnvelopesIncomeSum.toLocaleString()}
                   </div>
                   <div className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-sm font-semibold text-rose-700">
-                    הוצאה: ₪{filteredEnvelopesExpenseSum.toLocaleString()}
+                    הוצאות: ₪{filteredEnvelopesExpenseSum.toLocaleString()}
                   </div>
                   <div className="rounded-md border border-violet-200 bg-violet-50 px-2 py-1 text-sm font-semibold text-violet-700">
                     יתרה: ₪{filteredEnvelopesBalance.toLocaleString()}
@@ -1580,7 +1560,7 @@ export default function CashierPage() {
                     const incomeEnv = rows.reduce((s, r) => s + (String(r.type || "expense") === "income" ? Number(r.amount || 0) : 0), 0)
                     const expenseEnv = rows.reduce((s, r) => s + (String(r.type || "expense") === "expense" ? Number(r.amount || 0) : 0), 0)
                     const rowsSumEnv = incomeEnv - expenseEnv
-                    const balanceEnv = targetEnv - rowsSumEnv
+                    const balanceEnv = incomeEnv - expenseEnv
                     const isOpen = openedEnvelopeId === env.id
                     return (
                       <Card key={env.id}>
@@ -1590,13 +1570,15 @@ export default function CashierPage() {
                               className="cursor-pointer space-y-1"
                               onClick={() => setOpenedEnvelopeId((prev) => (prev === env.id ? "" : env.id))}
                             >
-                              <CardTitle className="text-base">מעטפה לחודש: {formatDateDDMMYYYY(env.monthKey)}</CardTitle>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <CardTitle className="text-base">מעטפה לחודש: {formatDateDDMMYYYY(env.monthKey)}</CardTitle>
+                                <span className="rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">סכום במעטפה: ₪{targetEnv.toLocaleString()}</span>
+                              </div>
                               <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
-                                <span className="rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 font-semibold text-sky-700">סכום במעטפה: ₪{targetEnv.toLocaleString()}</span>
                                 <span className="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 font-semibold text-indigo-700">סכום כותרת: ₪{targetEnv.toLocaleString()}</span>
                                 <span className="rounded-md border border-cyan-200 bg-cyan-50 px-2 py-0.5 font-semibold text-cyan-700">סכום בטבלה: ₪{rowsSumEnv.toLocaleString()}</span>
-                                <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700">הכנסה: ₪{incomeEnv.toLocaleString()}</span>
-                                <span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-0.5 font-semibold text-rose-700">הוצאה: ₪{expenseEnv.toLocaleString()}</span>
+                                <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700">הכנסות: ₪{incomeEnv.toLocaleString()}</span>
+                                <span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-0.5 font-semibold text-rose-700">הוצאות: ₪{expenseEnv.toLocaleString()}</span>
                                 <span className="rounded-md border border-violet-200 bg-violet-50 px-2 py-0.5 font-semibold text-violet-700">יתרה: ₪{balanceEnv.toLocaleString()}</span>
                               </div>
                             </div>
