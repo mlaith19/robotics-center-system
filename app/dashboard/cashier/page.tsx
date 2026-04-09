@@ -555,6 +555,36 @@ export default function CashierPage() {
   const totalExpenses = filteredExpenses.reduce((sum, e) => sum + Number(e.amount), 0)
   const totalIncomes = filteredPayments.reduce((sum, p) => sum + Number(p.amount), 0)
   const balance = totalIncomes - totalExpenses
+  const monthlyExpensesForCash = expenses
+    .filter((e) => {
+      const date = new Date(e.date)
+      return !Number.isNaN(date.getTime()) &&
+        String(date.getMonth() + 1).padStart(2, "0") === selectedMonthNumber &&
+        String(date.getFullYear()) === selectedYear
+    })
+    .reduce((sum, e) => sum + Number(e.amount || 0), 0)
+  const monthlyIncomesForCash = payments
+    .filter((p) => {
+      const date = new Date(p.paymentDate)
+      return !Number.isNaN(date.getTime()) &&
+        String(date.getMonth() + 1).padStart(2, "0") === selectedMonthNumber &&
+        String(date.getFullYear()) === selectedYear
+    })
+    .reduce((sum, p) => sum + Number(p.amount || 0), 0)
+  const cashBalanceForSelectedMonth = monthlyIncomesForCash - monthlyExpensesForCash
+  const yearlyExpensesForCash = expenses
+    .filter((e) => {
+      const date = new Date(e.date)
+      return !Number.isNaN(date.getTime()) && String(date.getFullYear()) === selectedYear
+    })
+    .reduce((sum, e) => sum + Number(e.amount || 0), 0)
+  const yearlyIncomesForCash = payments
+    .filter((p) => {
+      const date = new Date(p.paymentDate)
+      return !Number.isNaN(date.getTime()) && String(date.getFullYear()) === selectedYear
+    })
+    .reduce((sum, p) => sum + Number(p.amount || 0), 0)
+  const yearlyCashBalance = yearlyIncomesForCash - yearlyExpensesForCash
 
   const getTimePeriodLabel = (period: string) => {
     switch (period) {
@@ -721,7 +751,7 @@ export default function CashierPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-5">
         <Card className="border-green-200 bg-green-50">
           <CardHeader className="px-3 pb-2 text-right sm:px-6">
             <CardTitle className="flex flex-row-reverse items-center justify-end gap-2 text-base text-green-700">
@@ -760,6 +790,34 @@ export default function CashierPage() {
           <CardContent className="px-3 sm:px-6">
             <div className={`text-2xl font-bold ${balance >= 0 ? "text-blue-700" : "text-orange-700"}`}>
               ₪{balance.toLocaleString()}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className={cashBalanceForSelectedMonth >= 0 ? "border-emerald-200 bg-emerald-50" : "border-rose-200 bg-rose-50"}>
+          <CardHeader className="px-3 pb-2 text-right sm:px-6">
+            <CardTitle className={`text-base ${cashBalanceForSelectedMonth >= 0 ? "text-emerald-700" : "text-rose-700"}`}>קופה</CardTitle>
+            <CardDescription className={`text-xs ${cashBalanceForSelectedMonth >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+              יתרת חודש {selectedMonthNumber}/{selectedYear}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="px-3 sm:px-6">
+            <div className={`text-2xl font-bold ${cashBalanceForSelectedMonth >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+              ₪{cashBalanceForSelectedMonth.toLocaleString()}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className={yearlyCashBalance >= 0 ? "border-teal-200 bg-teal-50" : "border-rose-200 bg-rose-50"}>
+          <CardHeader className="px-3 pb-2 text-right sm:px-6">
+            <CardTitle className={`text-base ${yearlyCashBalance >= 0 ? "text-teal-700" : "text-rose-700"}`}>קופה שנתית</CardTitle>
+            <CardDescription className={`text-xs ${yearlyCashBalance >= 0 ? "text-teal-600" : "text-rose-600"}`}>
+              סה״כ כל החודשים בשנת {selectedYear}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="px-3 sm:px-6">
+            <div className={`text-2xl font-bold ${yearlyCashBalance >= 0 ? "text-teal-700" : "text-rose-700"}`}>
+              ₪{yearlyCashBalance.toLocaleString()}
             </div>
           </CardContent>
         </Card>
