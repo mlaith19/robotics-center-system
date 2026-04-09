@@ -1955,6 +1955,120 @@ export default function CourseViewPage() {
                     <Printer className="h-4 w-4" />
                     הדפסה
                   </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="gap-1 bg-indigo-600 hover:bg-indigo-700 text-white"
+                    onClick={() => {
+                      const w = window.open("", "_blank")
+                      if (!w) return
+                      const logoHtml = centerLogo ? `<img src="${centerLogo}" style="max-height:60px;max-width:160px;object-fit:contain" />` : ""
+                      const datesForReport = [...allowedAttendanceDates].sort((a, b) => a.localeCompare(b))
+                      const studentsForReport = [...sortedEnrollmentsForAttendanceTab]
+
+                      const pickStatusForStudentDate = (studentId: string, date: string): string => {
+                        const rows = attendanceList.filter(
+                          (r) => String(r.studentId || "") === String(studentId) && toYmd(r.date) === date,
+                        )
+                        if (rows.length === 0) return ""
+                        if (rows.some((r) => String(r.status || "").toLowerCase() === "present")) return "present"
+                        if (rows.some((r) => String(r.status || "").toLowerCase() === "sick")) return "sick"
+                        if (rows.some((r) => String(r.status || "").toLowerCase() === "vacation")) return "vacation"
+                        if (rows.some((r) => String(r.status || "").toLowerCase() === "absent")) return "absent"
+                        return ""
+                      }
+
+                      const statusLabel = (status: string): string => {
+                        if (status === "present") return "נוכח"
+                        if (status === "absent") return "לא נכח"
+                        if (status === "sick") return "חולה"
+                        if (status === "vacation") return "חופש"
+                        return "—"
+                      }
+
+                      const presentByDate = new Map<string, number>()
+                      const notPresentByDate = new Map<string, number>()
+                      datesForReport.forEach((d) => {
+                        let present = 0
+                        let notPresent = 0
+                        studentsForReport.forEach((e) => {
+                          const st = pickStatusForStudentDate(e.studentId, d)
+                          if (st === "present") present += 1
+                          else notPresent += 1
+                        })
+                        presentByDate.set(d, present)
+                        notPresentByDate.set(d, notPresent)
+                      })
+
+                      w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>דוח נוכחות מלא - ${course?.name || ""}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;padding:24px;color:#1f2937}
+.header{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid #4f46e5}
+.header h1{font-size:22px;color:#3730a3}
+.header h2{font-size:14px;color:#4b5563;font-weight:500}
+.note{font-size:12px;color:#64748b;text-align:center;margin-bottom:10px}
+.table-wrap{overflow:auto;border:1px solid #cbd5e1;border-radius:10px}
+table{border-collapse:collapse;min-width:1200px;width:max-content;background:#fff}
+th{background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe;padding:8px 10px;text-align:center;font-size:12px;white-space:nowrap}
+td{border:1px solid #d1d5db;padding:6px 8px;text-align:center;font-size:12px;white-space:nowrap}
+tr:nth-child(even) td{background:#f8fafc}
+.name-col{position:sticky;right:0;background:#fff;font-weight:600;text-align:right;min-width:170px}
+.idx-col{position:sticky;right:170px;background:#fff;min-width:52px}
+.total-col{font-weight:700;background:#ecfeff}
+.present{color:#166534;font-weight:700}
+.not-present{color:#991b1b;font-weight:700}
+.summary-row td{background:#f1f5f9 !important;font-weight:700}
+@media print{
+  @page{size:landscape;margin:12mm}
+  body{padding:0}
+  .table-wrap{border:none}
+}
+</style></head><body>`)
+                      w.document.write(`<div class="header">${logoHtml}<h1>${centerName || "מרכז"}</h1>${course?.name ? `<h2>${course.name}</h2>` : ""}<h2>דוח נוכחות מלא לתלמידים</h2></div>`)
+                      if (datesForReport.length > 0) {
+                        const firstDate = new Date(datesForReport[0]).toLocaleDateString("he-IL")
+                        const lastDate = new Date(datesForReport[datesForReport.length - 1]).toLocaleDateString("he-IL")
+                        w.document.write(`<div class="note">טווח תאריכים: ${firstDate} - ${lastDate}</div>`)
+                      }
+                      w.document.write(`<div class="table-wrap"><table><thead><tr><th class="idx-col">מס'</th><th class="name-col">שם תלמיד</th>`)
+                      datesForReport.forEach((d) => {
+                        w.document.write(`<th>${new Date(d).toLocaleDateString("he-IL")}</th>`)
+                      })
+                      w.document.write(`<th class="total-col">סה"כ נוכחות</th></tr></thead><tbody>`)
+
+                      studentsForReport.forEach((e, idx) => {
+                        let presentCount = 0
+                        w.document.write(`<tr><td class="idx-col">${idx + 1}</td><td class="name-col">${(e.studentName || "—").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</td>`)
+                        datesForReport.forEach((d) => {
+                          const st = pickStatusForStudentDate(e.studentId, d)
+                          if (st === "present") presentCount += 1
+                          const cls = st === "present" ? "present" : st ? "not-present" : ""
+                          w.document.write(`<td class="${cls}">${statusLabel(st)}</td>`)
+                        })
+                        w.document.write(`<td class="total-col present">${presentCount}</td></tr>`)
+                      })
+
+                      w.document.write(`<tr class="summary-row"><td class="idx-col" colspan="2">סה"כ נוכחים</td>`)
+                      datesForReport.forEach((d) => {
+                        w.document.write(`<td class="present">${presentByDate.get(d) || 0}</td>`)
+                      })
+                      w.document.write(`<td class="total-col present">${datesForReport.reduce((sum, d) => sum + (presentByDate.get(d) || 0), 0)}</td></tr>`)
+
+                      w.document.write(`<tr class="summary-row"><td class="idx-col" colspan="2">סה"כ לא נכחו</td>`)
+                      datesForReport.forEach((d) => {
+                        w.document.write(`<td class="not-present">${notPresentByDate.get(d) || 0}</td>`)
+                      })
+                      w.document.write(`<td class="total-col not-present">${datesForReport.reduce((sum, d) => sum + (notPresentByDate.get(d) || 0), 0)}</td></tr>`)
+
+                      w.document.write(`</tbody></table></div></body></html>`)
+                      w.document.close()
+                      setTimeout(() => w.print(), 400)
+                    }}
+                  >
+                    <Printer className="h-4 w-4" />
+                    הדפסת כל הנוכחות
+                  </Button>
                 </div>
               </div>
             </CardHeader>
