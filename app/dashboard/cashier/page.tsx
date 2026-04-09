@@ -109,6 +109,16 @@ function formatExpenseDescription(desc: string): string {
   return desc
 }
 
+function formatDateDDMMYYYY(value?: string): string {
+  if (!value) return "—"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value)
+  const day = String(date.getDate()).padStart(2, "0")
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const year = date.getFullYear()
+  return `${day}/${month}/${year}`
+}
+
 const fetcher = async (url: string) => {
   const res = await fetch(url, { credentials: "include" })
   if (!res.ok) {
@@ -490,7 +500,7 @@ export default function CashierPage() {
 
   const filteredEnvelopesByMonth = envelopes
     .filter((e) => String(e.monthKey || "").slice(5, 7) === envelopeMonthFilter)
-    .sort((a, b) => String(b.monthKey || "").localeCompare(String(a.monthKey || "")))
+    .sort((a, b) => String(a.monthKey || "").localeCompare(String(b.monthKey || "")))
   const filteredEnvelopesTargetSum = filteredEnvelopesByMonth.reduce((s, e) => s + Number(e.targetAmount || 0), 0)
   const activeEnvelope = envelopes.find((e) => e.id === activeEnvelopeId)
 
@@ -1411,7 +1421,7 @@ export default function CashierPage() {
                         >
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div className="space-y-1">
-                              <CardTitle className="text-base">מעטפה לחודש: {env.monthKey}</CardTitle>
+                              <CardTitle className="text-base">מעטפה לחודש: {formatDateDDMMYYYY(env.monthKey)}</CardTitle>
                               <CardDescription>
                                 סכום כותרת: ₪{target.toLocaleString()} | סכום בטבלה: ₪{rowsSum.toLocaleString()} | יתרה: ₪{balanceEnv.toLocaleString()}
                               </CardDescription>
@@ -1473,7 +1483,7 @@ export default function CashierPage() {
                                     </TableRow>
                                   ) : rows.map((r, idx) => (
                                     <TableRow key={`${env.id}-r-${idx}`}>
-                                      <TableCell>{r.date || "—"}</TableCell>
+                                      <TableCell>{formatDateDDMMYYYY(r.date)}</TableCell>
                                       <TableCell>{String(r.type || "expense") === "income" ? "הכנסה" : "הוצאה"}</TableCell>
                                       <TableCell>{r.name || "—"}</TableCell>
                                       <TableCell>₪{Number(r.amount || 0).toLocaleString()}</TableCell>
