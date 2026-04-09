@@ -1238,9 +1238,10 @@ export default function CourseViewPage() {
   const debtRows = debtRowsAll
     .filter((r) => r.balance > 0.009)
     .sort((a, b) => b.balance - a.balance || a.studentName.localeCompare(b.studentName, "he"))
-  const debtRowsTotalDue = debtRowsAll.reduce((sum, r) => sum + r.totalDue, 0)
-  const debtRowsTotalPaid = debtRowsAll.reduce((sum, r) => sum + r.paid, 0)
-  const totalDebtAmount = Math.max(0, debtRowsTotalDue - debtRowsTotalPaid)
+  // כותרת חייבים מחושבת לפי העמודות של הטבלה המוצגת (רק תלמידים עם יתרה)
+  const debtRowsTotalDue = debtRows.reduce((sum, r) => sum + r.totalDue, 0)
+  const debtRowsTotalPaid = debtRows.reduce((sum, r) => sum + r.paid, 0)
+  const totalDebtAmount = debtRows.reduce((sum, r) => sum + r.balance, 0)
 
   const courseTeachers = teachers.filter(t => 
     course.teacherIds && course.teacherIds.includes(t.id)
