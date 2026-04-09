@@ -267,6 +267,16 @@ CREATE TABLE IF NOT EXISTS "Expense" (
 );
 CREATE INDEX IF NOT EXISTS "Expense_teacherId_idx" ON "Expense"("teacherId");
 
+CREATE TABLE IF NOT EXISTS "EnvelopeBudget" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "monthKey" TEXT NOT NULL,
+  "targetAmount" NUMERIC NOT NULL DEFAULT 0,
+  "rows" JSONB NOT NULL DEFAULT '[]'::jsonb,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS "EnvelopeBudget_monthKey_idx" ON "EnvelopeBudget"("monthKey");
+
 -- Course categories
 CREATE TABLE IF NOT EXISTS "CourseCategory" (
   "id" TEXT NOT NULL PRIMARY KEY,

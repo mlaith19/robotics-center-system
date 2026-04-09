@@ -67,6 +67,18 @@ interface Enrollment {
   studentName?: string
 }
 
+interface EnvelopeRow {
+  date: string
+  amount: number
+}
+
+interface EnvelopeBudget {
+  id: string
+  monthKey: string
+  targetAmount: number
+  rows: EnvelopeRow[]
+}
+
 /** תצוגת שם תלמיד – תומך ב-API שמחזיר name או firstName+lastName */
 function getStudentDisplayName(s: Student | { studentName?: string; studentId?: string }): string {
   if (!s) return "—"
@@ -141,6 +153,13 @@ export default function CashierPage() {
   const [bankName, setBankName] = useState("")
   const [bankBranch, setBankBranch] = useState("")
   const [accountNumber, setAccountNumber] = useState("")
+  const [envelopeMonthKey, setEnvelopeMonthKey] = useState(new Date().toISOString().slice(0, 7))
+  const [envelopeTargetAmount, setEnvelopeTargetAmount] = useState("")
+  const [isAddingEnvelope, setIsAddingEnvelope] = useState(false)
+  const [envelopeRowDate, setEnvelopeRowDate] = useState(new Date().toISOString().slice(0, 10))
+  const [envelopeRowAmount, setEnvelopeRowAmount] = useState("")
+  const [activeEnvelopeId, setActiveEnvelopeId] = useState("")
+  const [isSavingEnvelopeRow, setIsSavingEnvelopeRow] = useState(false)
 
   // Fetch data from API
   const { data: rawExpenses, isLoading: expensesLoading } = useSWR<Expense[]>("/api/expenses", fetcher)
@@ -149,6 +168,7 @@ export default function CashierPage() {
   const { data: rawSchools  } = useSWR<School[]>("/api/schools",   fetcher)
   const { data: rawCourses } = useSWR<Course[]>("/api/courses", fetcher)
   const { data: rawEnrollments } = useSWR<Enrollment[]>("/api/enrollments", fetcher)
+  const { data: rawEnvelopes, isLoading: envelopesLoading } = useSWR<EnvelopeBudget[]>("/api/envelopes", fetcher)
 
   // Defensive normalisation — never let a non-array reach .map()
   const expenses = Array.isArray(rawExpenses) ? rawExpenses : []
@@ -157,6 +177,7 @@ export default function CashierPage() {
   const schools  = Array.isArray(rawSchools)  ? rawSchools  : []
   const courses  = Array.isArray(rawCourses)  ? rawCourses  : []
   const enrollments = Array.isArray(rawEnrollments) ? rawEnrollments : []
+  const envelopes = Array.isArray(rawEnvelopes) ? rawEnvelopes : []
   const studentsInSelectedCourse = selectedCourseId
     ? enrollments.filter((e) => e.courseId === selectedCourseId)
     : []
@@ -330,6 +351,64 @@ export default function CashierPage() {
     }
   }
 
+  const createEnvelope = async () => {
+    if (!envelopeMonthKey || !envelopeTargetAmount) return
+    setIsAddingEnvelope(true)
+    try {
+      const response = await fetch("/api/envelopes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          monthKey: envelopeMonthKey,
+          targetAmount: Number(envelopeTargetAmount || 0),
+          rows: [],
+        }),
+      })
+      if (response.ok) {
+        mutate("/api/envelopes")
+        setEnvelopeTargetAmount("")
+      }
+    } catch (error) {
+      console.error("Failed to create envelope:", error)
+    } finally {
+      setIsAddingEnvelope(false)
+    }
+  }
+
+  const addEnvelopeRow = async (envelope: EnvelopeBudget) => {
+    if (!envelopeRowDate || !envelopeRowAmount) return
+    setIsSavingEnvelopeRow(true)
+    try {
+      const nextRows = [...(Array.isArray(envelope.rows) ? envelope.rows : []), { date: envelopeRowDate, amount: Number(envelopeRowAmount || 0) }]
+      const response = await fetch(`/api/envelopes/${envelope.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          monthKey: envelope.monthKey,
+          targetAmount: Number(envelope.targetAmount || 0),
+          rows: nextRows,
+        }),
+      })
+      if (response.ok) {
+        mutate("/api/envelopes")
+        setEnvelopeRowAmount("")
+      }
+    } catch (error) {
+      console.error("Failed to add envelope row:", error)
+    } finally {
+      setIsSavingEnvelopeRow(false)
+    }
+  }
+
+  const deleteEnvelope = async (id: string) => {
+    try {
+      const response = await fetch(`/api/envelopes/${id}`, { method: "DELETE" })
+      if (response.ok) mutate("/api/envelopes")
+    } catch (error) {
+      console.error("Failed to delete envelope:", error)
+    }
+  }
+
   const filterByTimePeriod = <T extends { date?: string; paymentDate?: string }>(items: T[]): T[] => {
     if (!Array.isArray(items)) return []
     const now = new Date()
@@ -411,7 +490,7 @@ export default function CashierPage() {
       .reduce((sum, p) => sum + Number(p.amount), 0)
   }
 
-  if (expensesLoading || paymentsLoading) {
+  if (expensesLoading || paymentsLoading || envelopesLoading) {
     return (
       <div className="flex min-h-[300px] items-center justify-center bg-background p-3 sm:p-6" dir="rtl">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -1186,12 +1265,85 @@ export default function CashierPage() {
           <Card>
             <CardHeader className="px-3 text-right sm:px-6">
               <CardTitle>מעטפות</CardTitle>
-              <CardDescription>טאב מעטפות מוכן להמשך הגדרה</CardDescription>
+              <CardDescription>ניהול מעטפות חודשי לפי סכום יעד ותנועות</CardDescription>
             </CardHeader>
-            <CardContent className="px-3 sm:px-6">
-              <div className="rounded-md border bg-muted/20 p-4 text-right text-muted-foreground">
-                כאן נבנה את ניהול המעטפות לפי ההנחיות שלך.
+            <CardContent className="space-y-4 px-3 sm:px-6">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div className="space-y-2">
+                  <Label>תאריך לחודש</Label>
+                  <Input type="month" value={envelopeMonthKey} onChange={(e) => setEnvelopeMonthKey(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>סכום מעטפה</Label>
+                  <Input type="number" min={0} value={envelopeTargetAmount} onChange={(e) => setEnvelopeTargetAmount(e.target.value)} />
+                </div>
+                <div className="flex items-end">
+                  <Button className="w-full" disabled={isAddingEnvelope} onClick={createEnvelope}>
+                    {isAddingEnvelope ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    הוסף מעטפה
+                  </Button>
+                </div>
               </div>
+
+              {envelopes.length === 0 ? (
+                <div className="rounded-md border p-4 text-right text-muted-foreground">אין מעטפות עדיין</div>
+              ) : (
+                <div className="space-y-4">
+                  {envelopes.map((env) => {
+                    const rows = Array.isArray(env.rows) ? env.rows : []
+                    const rowsSum = rows.reduce((s, r) => s + Number(r.amount || 0), 0)
+                    const target = Number(env.targetAmount || 0)
+                    const balanceEnv = target - rowsSum
+                    return (
+                      <Card key={env.id}>
+                        <CardHeader className="px-3 pb-2 text-right sm:px-6">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="space-y-1">
+                              <CardTitle className="text-base">מעטפה לחודש: {env.monthKey}</CardTitle>
+                              <CardDescription>
+                                סכום כותרת: ₪{target.toLocaleString()} | סכום בטבלה: ₪{rowsSum.toLocaleString()} | יתרה: ₪{balanceEnv.toLocaleString()}
+                              </CardDescription>
+                            </div>
+                            <Button variant="destructive" size="sm" onClick={() => deleteEnvelope(env.id)}>מחיקה</Button>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3 px-3 sm:px-6">
+                          <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
+                            <Input type="date" value={activeEnvelopeId === env.id ? envelopeRowDate : ""} onChange={(e) => { setActiveEnvelopeId(env.id); setEnvelopeRowDate(e.target.value) }} />
+                            <Input type="number" min={0} placeholder="סכום" value={activeEnvelopeId === env.id ? envelopeRowAmount : ""} onChange={(e) => { setActiveEnvelopeId(env.id); setEnvelopeRowAmount(e.target.value) }} />
+                            <Button className="md:col-span-2" disabled={isSavingEnvelopeRow} onClick={() => addEnvelopeRow(env)}>
+                              {isSavingEnvelopeRow && activeEnvelopeId === env.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                              הוסף שורה
+                            </Button>
+                          </div>
+                          <div className="overflow-x-auto rounded-md border">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead className="text-right">תאריך</TableHead>
+                                  <TableHead className="text-right">סכום</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {rows.length === 0 ? (
+                                  <TableRow>
+                                    <TableCell colSpan={2} className="text-center text-muted-foreground">אין שורות במעטפה זו</TableCell>
+                                  </TableRow>
+                                ) : rows.map((r, idx) => (
+                                  <TableRow key={`${env.id}-r-${idx}`}>
+                                    <TableCell>{r.date || "—"}</TableCell>
+                                    <TableCell>₪{Number(r.amount || 0).toLocaleString()}</TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
