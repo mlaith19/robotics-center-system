@@ -856,7 +856,7 @@ export default function CourseViewPage() {
   ])
 
   async function loadCoursePayments() {
-    if (!canTabPayments) return
+    if (!canTabPayments && !canTabDebtors) return
     if (!enrollments.length) {
       setPaidStudentIds([])
       setPaymentsForCourse([])
@@ -899,7 +899,7 @@ export default function CourseViewPage() {
 
   useEffect(() => {
     loadCoursePayments()
-  }, [canTabPayments, enrollments])
+  }, [canTabPayments, canTabDebtors, enrollments])
 
   useEffect(() => {
     if (!id || !canTabSessionsFeedback) return
@@ -1183,7 +1183,7 @@ export default function CourseViewPage() {
     if (!p.studentId) continue
     paidByStudent.set(p.studentId, (paidByStudent.get(p.studentId) || 0) + Number(p.amount || 0))
   }
-  const debtRows = enrollments
+  const debtRowsAll = enrollments
     .map((e) => {
       const totalDue = Number((e as any).coursePrice ?? course?.price ?? 0)
       const paid = paidByStudent.get(e.studentId) || 0
@@ -1197,9 +1197,10 @@ export default function CourseViewPage() {
         balance,
       }
     })
+  const debtRows = debtRowsAll
     .filter((r) => r.balance > 0.009)
-  const debtRowsTotalDue = debtRows.reduce((sum, r) => sum + r.totalDue, 0)
-  const debtRowsTotalPaid = debtRows.reduce((sum, r) => sum + r.paid, 0)
+  const debtRowsTotalDue = debtRowsAll.reduce((sum, r) => sum + r.totalDue, 0)
+  const debtRowsTotalPaid = debtRowsAll.reduce((sum, r) => sum + r.paid, 0)
   const totalDebtAmount = debtRows.reduce((sum, r) => sum + r.balance, 0)
 
   const courseTeachers = teachers.filter(t => 
