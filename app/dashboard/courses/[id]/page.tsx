@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { ArrowRight, Pencil, Loader2, BookOpen, Calendar, Users, BarChart3, CalendarCheck, Check, X, Thermometer, Plane, CalendarRange, Printer, Layers, Trash2, Clock } from "lucide-react"
+import { ArrowRight, Pencil, Loader2, BookOpen, Calendar, Users, BarChart3, CalendarCheck, Check, X, Thermometer, Plane, CalendarRange, Printer, Layers, Trash2, Clock, Plus } from "lucide-react"
 import { courseTimeToDisplayValue, normalizeCourseCalendarYmd } from "@/lib/course-db-fields"
 import { useLanguage } from "@/lib/i18n/context"
 
@@ -459,6 +459,8 @@ export default function CourseViewPage() {
   >([])
   const [attendanceDate, setAttendanceDate] = useState(() => new Date().toISOString().split("T")[0])
   const [attendanceByStudent, setAttendanceByStudent] = useState<Record<string, string>>({})
+  const [isBulkAttendanceOpen, setIsBulkAttendanceOpen] = useState(false)
+  const [bulkAttendanceByStudent, setBulkAttendanceByStudent] = useState<Record<string, "present" | "absent" | "sick" | "vacation">>({})
   const [savingByStudent, setSavingByStudent] = useState<Record<string, boolean>>({})
   const [deletingTeacherAttendanceId, setDeletingTeacherAttendanceId] = useState<string | null>(null)
   const [sessions, setSessions] = useState<CourseSessionItem[]>([])
@@ -1012,6 +1014,47 @@ export default function CourseViewPage() {
       setAttendanceByStudent((p) => ({ ...p, [studentId]: prev }))
     } finally {
       setSavingByStudent((p) => ({ ...p, [studentId]: false }))
+    }
+  }
+
+  async function saveBulkAttendanceForSelectedDate() {
+    if (!canEditAttendanceStudentsTab || !id || !attendanceDateForApi) return
+    const entries = Object.entries(bulkAttendanceByStudent)
+    if (entries.length === 0) {
+      setIsBulkAttendanceOpen(false)
+      return
+    }
+    try {
+      await Promise.all(
+        entries.map(async ([studentId, status]) => {
+          const body: Record<string, unknown> = { studentId, courseId: id, date: attendanceDateForApi, status }
+          if (teacherCampAttendanceMode && selectedCampCellId) body.campMeetingCellId = selectedCampCellId
+          const res = await fetch("/api/attendance", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          })
+          if (!res.ok) throw new Error("Failed to save bulk attendance")
+        }),
+      )
+      const allRes = await fetch(`/api/attendance?courseId=${id}`)
+      const allRows = allRes.ok ? await allRes.json() : []
+      setAttendanceList(Array.isArray(allRows) ? allRows : [])
+
+      let url = `/api/attendance?courseId=${id}&date=${attendanceDateForApi}`
+      if (teacherCampAttendanceMode && selectedCampCellId) {
+        url += `&campMeetingCellId=${encodeURIComponent(selectedCampCellId)}`
+      }
+      const dayRes = await fetch(url)
+      const dayRows = dayRes.ok ? await dayRes.json() : []
+      const next: Record<string, string> = {}
+      ;(Array.isArray(dayRows) ? dayRows : []).forEach((r: any) => {
+        if (r?.studentId) next[String(r.studentId)] = String(r.status || "")
+      })
+      setAttendanceByStudent(next)
+      setIsBulkAttendanceOpen(false)
+    } catch {
+      // keep page behavior silent
     }
   }
 
@@ -2034,6 +2077,25 @@ export default function CourseViewPage() {
                   <Button
                     type="button"
                     size="sm"
+                    className="gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    onClick={() => {
+                      const seed: Record<string, "present" | "absent" | "sick" | "vacation"> = {}
+                      sortedEnrollmentsForAttendanceTab.forEach((e) => {
+                        const curr = String(attendanceByStudent[e.studentId] || "").toLowerCase()
+                        if (curr === "present" || curr === "absent" || curr === "sick" || curr === "vacation") {
+                          seed[e.studentId] = curr
+                        }
+                      })
+                      setBulkAttendanceByStudent(seed)
+                      setIsBulkAttendanceOpen(true)
+                    }}
+                  >
+                    <Plus className="h-4 w-4" />
+                    הוסף נוכחות
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
                     className="gap-1 bg-purple-600 hover:bg-purple-700 text-white"
                     onClick={() => {
                       const w = window.open("", "_blank")
@@ -2206,7 +2268,7 @@ tr:nth-child(even) td{background:#f9fafb}
                 }).length
                 const unmarked = total - present - absent - sick - vacation
                 return total > 0 ? (
-                  <div className="mb-4 flex flex-wrap gap-3 text-sm">
+                  <div className="hidden mb-4 flex flex-wrap gap-3 text-sm">
                     <span className="rounded-md bg-green-100 text-green-800 px-3 py-1 font-medium">{tr.present}: {present}</span>
                     <span className="rounded-md bg-red-100 text-red-800 px-3 py-1 font-medium">{tr.absent}: {absent}</span>
                     <span className="rounded-md bg-orange-100 text-orange-800 px-3 py-1 font-medium">{tr.sick}: {sick}</span>
@@ -2215,7 +2277,7 @@ tr:nth-child(even) td{background:#f9fafb}
                   </div>
                 ) : null
               })()}
-              <div className="mb-6 overflow-x-auto rounded-md border">
+              <div className="hidden mb-6 overflow-x-auto rounded-md border">
                 <Table className="min-w-0">
                   <TableHeader>
                     <TableRow className="bg-muted/50">
@@ -2247,41 +2309,51 @@ tr:nth-child(even) td{background:#f9fafb}
                 </Table>
               </div>
               {(() => {
-                const scopeIds = new Set(enrollmentsForAttendanceTab.map((e) => e.studentId))
-                const studentAttendance =
-                  isCampCourse && !isAdmin
-                    ? attendanceList.filter((a) => {
-                        if (a.studentId == null || !scopeIds.has(String(a.studentId))) return false
-                        if (teacherCampAttendanceMode && selectedCampCellId) {
-                          return String(a.campMeetingCellId || "") === selectedCampCellId
-                        }
-                        return true
-                      })
-                    : attendanceList.filter((a) => a.studentId != null)
-                return studentAttendance.length > 0 ? (
+                const dates = [...allowedAttendanceDates].sort((a, b) => a.localeCompare(b))
+                const students = [...sortedEnrollmentsForAttendanceTab]
+                const statusFor = (studentId: string, date: string) => {
+                  const rows = attendanceList.filter((r) => {
+                    const head = String(r.date ?? "").trim().slice(0, 10)
+                    const ymd = /^\d{4}-\d{2}-\d{2}$/.test(head) ? head : ""
+                    if (String(r.studentId || "") !== String(studentId)) return false
+                    if (ymd !== date) return false
+                    if (teacherCampAttendanceMode && selectedCampCellId) {
+                      return String(r.campMeetingCellId || "") === selectedCampCellId
+                    }
+                    return true
+                  })
+                  if (rows.some((r) => String(r.status || "").toLowerCase() === "present")) return "נוכח"
+                  if (rows.some((r) => String(r.status || "").toLowerCase() === "absent")) return "לא נכח"
+                  if (rows.some((r) => String(r.status || "").toLowerCase() === "sick")) return "חולה"
+                  if (rows.some((r) => String(r.status || "").toLowerCase() === "vacation")) return "חופש"
+                  return "—"
+                }
+                return students.length > 0 ? (
                   <div className="overflow-x-auto rounded-md border">
-                    <Table className="min-w-[560px]">
+                    <Table className="min-w-[1100px]">
                       <TableHeader>
                         <TableRow className="bg-muted/50">
-                          <TableHead className="text-right">{tr.date}</TableHead>
+                          <TableHead className="text-right">מס'</TableHead>
                           <TableHead className="text-right">{tr.student}</TableHead>
-                          <TableHead className="text-right">{tr.status}</TableHead>
-                          <TableHead className="text-right">{tr.note}</TableHead>
-                          <TableHead className="text-right">{tr.performedBy}</TableHead>
+                          {dates.map((d) => (
+                            <TableHead key={d} className="text-center">{new Date(d).toLocaleDateString("he-IL")}</TableHead>
+                          ))}
+                          <TableHead className="text-center">סה"כ נוכחות</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {studentAttendance.map((a) => {
-                          const enrollment = enrollments.find((e) => e.studentId === a.studentId)
-                          const studentName = enrollment?.studentName ?? "—"
-                          const statusLabel = a.status === "present" || a.status === "PRESENT" ? tr.present : a.status === "absent" || a.status === "ABSENT" ? tr.absent : a.status
+                        {students.map((e, idx) => {
+                          let presentCount = 0
                           return (
-                            <TableRow key={a.id}>
-                              <TableCell className="text-right">{new Date(a.date).toLocaleDateString(localeTag)}</TableCell>
-                              <TableCell className="text-right">{studentName}</TableCell>
-                              <TableCell className="text-right">{statusLabel}</TableCell>
-                              <TableCell className="text-right text-muted-foreground">{a.notes ?? "—"}</TableCell>
-                              <TableCell className="text-right text-muted-foreground">{a.createdByUserName || "—"}</TableCell>
+                            <TableRow key={e.id}>
+                              <TableCell className="text-right">{idx + 1}</TableCell>
+                              <TableCell className="text-right font-medium">{e.studentName || "—"}</TableCell>
+                              {dates.map((d) => {
+                                const s = statusFor(e.studentId, d)
+                                if (s === "נוכח") presentCount += 1
+                                return <TableCell key={`${e.id}-${d}`} className="text-center">{s}</TableCell>
+                              })}
+                              <TableCell className="text-center font-semibold text-emerald-700">{presentCount}</TableCell>
                             </TableRow>
                           )
                         })}
@@ -2293,6 +2365,71 @@ tr:nth-child(even) td{background:#f9fafb}
                 )
               })()}
             </CardContent>
+            <Dialog open={isBulkAttendanceOpen} onOpenChange={setIsBulkAttendanceOpen}>
+              <DialogContent dir={isRtl ? "rtl" : "ltr"} className="max-w-3xl">
+                <DialogHeader>
+                  <DialogTitle>
+                    הוספת נוכחות מרוכזת לתאריך {new Date(attendanceDateForApi).toLocaleDateString("he-IL")}
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="max-h-[55vh] overflow-y-auto rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead className="text-right">תלמיד</TableHead>
+                        <TableHead className="text-right">סטטוס</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sortedEnrollmentsForAttendanceTab.map((enrollment) => {
+                        const selected = bulkAttendanceByStudent[enrollment.studentId] || ""
+                        const itemBtn = (
+                          status: "present" | "absent" | "sick" | "vacation",
+                          label: string,
+                          cls: string,
+                        ) => (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={selected === status ? "default" : "outline"}
+                            className={selected === status ? cls : ""}
+                            onClick={() =>
+                              setBulkAttendanceByStudent((prev) => ({
+                                ...prev,
+                                [enrollment.studentId]: status,
+                              }))
+                            }
+                          >
+                            {label}
+                          </Button>
+                        )
+                        return (
+                          <TableRow key={`bulk-${enrollment.id}`}>
+                            <TableCell className="text-right font-medium">{enrollment.studentName || "—"}</TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex flex-wrap gap-2">
+                                {itemBtn("present", tr.present, "bg-green-600 hover:bg-green-700")}
+                                {itemBtn("absent", tr.absent, "bg-red-600 hover:bg-red-700")}
+                                {itemBtn("sick", tr.sick, "bg-orange-600 hover:bg-orange-700")}
+                                {itemBtn("vacation", tr.vacation, "bg-blue-600 hover:bg-blue-700")}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={() => setIsBulkAttendanceOpen(false)}>
+                    ביטול
+                  </Button>
+                  <Button type="button" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={saveBulkAttendanceForSelectedDate}>
+                    שמור נוכחות
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
           </Card>
         </TabsContent>
         )}
