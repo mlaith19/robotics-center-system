@@ -2328,6 +2328,34 @@ tr:nth-child(even) td{background:#f9fafb}
                   if (rows.some((r) => String(r.status || "").toLowerCase() === "vacation")) return "חופש"
                   return "—"
                 }
+                const studentRows = students
+                  .map((e) => {
+                    const byDate: Record<string, string> = {}
+                    let presentCount = 0
+                    dates.forEach((d) => {
+                      const s = statusFor(e.studentId, d)
+                      byDate[d] = s
+                      if (s === "נוכח") presentCount += 1
+                    })
+                    return { enrollment: e, byDate, presentCount }
+                  })
+                  .sort(
+                    (a, b) =>
+                      b.presentCount - a.presentCount ||
+                      String(a.enrollment.studentName || "").localeCompare(String(b.enrollment.studentName || ""), "he"),
+                  )
+                const presentByDate = new Map<string, number>()
+                const absentByDate = new Map<string, number>()
+                dates.forEach((d) => {
+                  let present = 0
+                  let absent = 0
+                  studentRows.forEach((row) => {
+                    if (row.byDate[d] === "נוכח") present += 1
+                    else absent += 1
+                  })
+                  presentByDate.set(d, present)
+                  absentByDate.set(d, absent)
+                })
                 return students.length > 0 ? (
                   <div className="overflow-x-auto rounded-md border">
                     <Table className="min-w-[1100px]">
@@ -2340,20 +2368,41 @@ tr:nth-child(even) td{background:#f9fafb}
                           ))}
                           <TableHead className="text-center">סה"כ נוכחות</TableHead>
                         </TableRow>
+                        <TableRow className="bg-emerald-50/60">
+                          <TableHead className="text-right" colSpan={2}>נוכח</TableHead>
+                          {dates.map((d) => (
+                            <TableHead key={`present-${d}`} className="text-center text-emerald-700 font-semibold">
+                              {presentByDate.get(d) || 0}
+                            </TableHead>
+                          ))}
+                          <TableHead className="text-center text-emerald-700 font-semibold">
+                            {Array.from(presentByDate.values()).reduce((sum, n) => sum + n, 0)}
+                          </TableHead>
+                        </TableRow>
+                        <TableRow className="bg-rose-50/60">
+                          <TableHead className="text-right" colSpan={2}>לא נכח</TableHead>
+                          {dates.map((d) => (
+                            <TableHead key={`absent-${d}`} className="text-center text-rose-700 font-semibold">
+                              {absentByDate.get(d) || 0}
+                            </TableHead>
+                          ))}
+                          <TableHead className="text-center text-rose-700 font-semibold">
+                            {Array.from(absentByDate.values()).reduce((sum, n) => sum + n, 0)}
+                          </TableHead>
+                        </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {students.map((e, idx) => {
-                          let presentCount = 0
+                        {studentRows.map((row, idx) => {
+                          const e = row.enrollment
                           return (
                             <TableRow key={e.id}>
                               <TableCell className="text-right">{idx + 1}</TableCell>
                               <TableCell className="text-right font-medium">{e.studentName || "—"}</TableCell>
                               {dates.map((d) => {
-                                const s = statusFor(e.studentId, d)
-                                if (s === "נוכח") presentCount += 1
+                                const s = row.byDate[d] || "—"
                                 return <TableCell key={`${e.id}-${d}`} className="text-center">{s}</TableCell>
                               })}
-                              <TableCell className="text-center font-semibold text-emerald-700">{presentCount}</TableCell>
+                              <TableCell className="text-center font-semibold text-emerald-700">{row.presentCount}</TableCell>
                             </TableRow>
                           )
                         })}
