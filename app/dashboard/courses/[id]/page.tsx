@@ -2091,7 +2091,11 @@ tr:nth-child(even) td{background:#f9fafb}
                       const datesForReport = [...allowedAttendanceDates].sort((a, b) => a.localeCompare(b))
                       const studentsForReport = [...sortedEnrollmentsForAttendanceTab]
                       const statusAt = (studentId: string, date: string): string => {
-                        const rows = attendanceList.filter((r) => String(r.studentId || "") === studentId && toYmd(r.date) === date)
+                        const rows = attendanceList.filter((r) => {
+                          const head = String(r.date ?? "").trim().slice(0, 10)
+                          const ymd = /^\d{4}-\d{2}-\d{2}$/.test(head) ? head : ""
+                          return String(r.studentId || "") === studentId && ymd === date
+                        })
                         if (rows.some((r) => String(r.status || "").toLowerCase() === "present")) return "present"
                         if (rows.some((r) => String(r.status || "").toLowerCase() === "sick")) return "sick"
                         if (rows.some((r) => String(r.status || "").toLowerCase() === "vacation")) return "vacation"
