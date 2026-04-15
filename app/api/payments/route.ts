@@ -21,6 +21,17 @@ function canWritePayments(session: { role?: string; roleKey?: string; permission
   return hasPermission(perms, "cashier.income") || hasPermission(perms, "students.financial")
 }
 
+async function ensurePaymentCourseIdColumn(db: any) {
+  try {
+    await db`
+      ALTER TABLE "Payment"
+      ADD COLUMN IF NOT EXISTS "courseId" TEXT REFERENCES "Course"("id") ON DELETE SET NULL
+    `
+  } catch (err) {
+    console.warn("[payments] ensure courseId column skipped:", err)
+  }
+}
+
 export const GET = withTenantAuth(async (req, session) => {
   if (!canReadPayments(session)) {
     const permErr = requirePerm(session, "cashier.view")
@@ -34,8 +45,10 @@ export const GET = withTenantAuth(async (req, session) => {
   const db = tenant.db
 
   try {
+    await ensurePaymentCourseIdColumn(db)
     const { searchParams } = new URL(req.url)
     const schoolPayId = (searchParams.get("schoolId") || "").trim()
+    const courseId = (searchParams.get("courseId") || "").trim()
     if (schoolPayId) {
       const bySchool = await db`
         SELECT p.*, s.name as "studentName", u.name as "createdByUserName"
@@ -58,7 +71,85 @@ export const GET = withTenantAuth(async (req, session) => {
     const endDate   = searchParams.get("endDate")
 
     let result
-    if (studentId && startDate && endDate) {
+    if (courseId && studentId && startDate && endDate) {
+      result = await db`
+        SELECT p.*, s.name as "studentName", u.name as "createdByUserName"
+        FROM "Payment" p
+        LEFT JOIN "Student" s ON p."studentId" = s.id
+        LEFT JOIN "User" u ON p."createdByUserId" = u.id
+        WHERE p."courseId" = ${courseId} AND p."studentId" = ${studentId}
+          AND p."paymentDate" >= ${startDate} AND p."paymentDate" <= ${endDate}
+        ORDER BY p."paymentDate" DESC
+      `
+    } else if (courseId && studentId && startDate) {
+      result = await db`
+        SELECT p.*, s.name as "studentName", u.name as "createdByUserName"
+        FROM "Payment" p
+        LEFT JOIN "Student" s ON p."studentId" = s.id
+        LEFT JOIN "User" u ON p."createdByUserId" = u.id
+        WHERE p."courseId" = ${courseId} AND p."studentId" = ${studentId}
+          AND p."paymentDate" >= ${startDate}
+        ORDER BY p."paymentDate" DESC
+      `
+    } else if (courseId && studentId && endDate) {
+      result = await db`
+        SELECT p.*, s.name as "studentName", u.name as "createdByUserName"
+        FROM "Payment" p
+        LEFT JOIN "Student" s ON p."studentId" = s.id
+        LEFT JOIN "User" u ON p."createdByUserId" = u.id
+        WHERE p."courseId" = ${courseId} AND p."studentId" = ${studentId}
+          AND p."paymentDate" <= ${endDate}
+        ORDER BY p."paymentDate" DESC
+      `
+    } else if (courseId && startDate && endDate) {
+      result = await db`
+        SELECT p.*, s.name as "studentName", u.name as "createdByUserName"
+        FROM "Payment" p
+        LEFT JOIN "Student" s ON p."studentId" = s.id
+        LEFT JOIN "User" u ON p."createdByUserId" = u.id
+        WHERE p."courseId" = ${courseId}
+          AND p."paymentDate" >= ${startDate} AND p."paymentDate" <= ${endDate}
+        ORDER BY p."paymentDate" DESC
+      `
+    } else if (courseId && startDate) {
+      result = await db`
+        SELECT p.*, s.name as "studentName", u.name as "createdByUserName"
+        FROM "Payment" p
+        LEFT JOIN "Student" s ON p."studentId" = s.id
+        LEFT JOIN "User" u ON p."createdByUserId" = u.id
+        WHERE p."courseId" = ${courseId}
+          AND p."paymentDate" >= ${startDate}
+        ORDER BY p."paymentDate" DESC
+      `
+    } else if (courseId && endDate) {
+      result = await db`
+        SELECT p.*, s.name as "studentName", u.name as "createdByUserName"
+        FROM "Payment" p
+        LEFT JOIN "Student" s ON p."studentId" = s.id
+        LEFT JOIN "User" u ON p."createdByUserId" = u.id
+        WHERE p."courseId" = ${courseId}
+          AND p."paymentDate" <= ${endDate}
+        ORDER BY p."paymentDate" DESC
+      `
+    } else if (courseId && studentId) {
+      result = await db`
+        SELECT p.*, s.name as "studentName", u.name as "createdByUserName"
+        FROM "Payment" p
+        LEFT JOIN "Student" s ON p."studentId" = s.id
+        LEFT JOIN "User" u ON p."createdByUserId" = u.id
+        WHERE p."courseId" = ${courseId} AND p."studentId" = ${studentId}
+        ORDER BY p."paymentDate" DESC
+      `
+    } else if (courseId) {
+      result = await db`
+        SELECT p.*, s.name as "studentName", u.name as "createdByUserName"
+        FROM "Payment" p
+        LEFT JOIN "Student" s ON p."studentId" = s.id
+        LEFT JOIN "User" u ON p."createdByUserId" = u.id
+        WHERE p."courseId" = ${courseId}
+        ORDER BY p."paymentDate" DESC
+      `
+    } else if (studentId && startDate && endDate) {
       result = await db`
         SELECT p.*, s.name as "studentName", u.name as "createdByUserName"
         FROM "Payment" p
@@ -150,8 +241,9 @@ export const POST = withTenantAuth(async (req, session) => {
   const db = tenant.db
 
   try {
+    await ensurePaymentCourseIdColumn(db)
     const body = await req.json()
-    const { studentId, amount, date, paymentMethod, paymentType, description, siblingPackageId, applySiblingDiscount } = body
+    const { studentId, amount, date, paymentMethod, paymentType, description, siblingPackageId, applySiblingDiscount, courseId } = body
     const createdByUserId = session.id
 
     if (!amount || !date) return Response.json({ error: "amount and date are required" }, { status: 400 })
@@ -189,8 +281,8 @@ export const POST = withTenantAuth(async (req, session) => {
     const typeVal = paymentType ?? paymentMethod ?? "cash"
 
     const result = await db`
-      INSERT INTO "Payment" (id, "studentId", amount, "paymentDate", "paymentType", description, "createdByUserId", "createdAt")
-      VALUES (${id}, ${studentId || null}, ${finalAmount}, ${date}, ${typeVal}, ${finalDescription}, ${createdByUserId}, ${now})
+      INSERT INTO "Payment" (id, "studentId", amount, "paymentDate", "paymentType", description, "courseId", "createdByUserId", "createdAt")
+      VALUES (${id}, ${studentId || null}, ${finalAmount}, ${date}, ${typeVal}, ${finalDescription}, ${courseId || null}, ${createdByUserId}, ${now})
       RETURNING *
     `
     return Response.json(result[0], { status: 201 })

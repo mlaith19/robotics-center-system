@@ -1021,7 +1021,7 @@ export default function CourseViewPage() {
       return
     }
     try {
-      const res = await fetch("/api/payments")
+      const res = await fetch(`/api/payments?courseId=${encodeURIComponent(id)}`)
       if (!res.ok) {
         setPaidStudentIds([])
         setPaymentsForCourse([])
@@ -1267,6 +1267,7 @@ export default function CourseViewPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           studentId: payStudentId,
+          courseId: id,
           amount,
           date: payDate,
           paymentMethod: payMethod,
