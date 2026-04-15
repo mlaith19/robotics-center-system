@@ -35,6 +35,7 @@ interface Course {
   createdAt: string
   updatedAt: string
   campChargeFirstSessionIfNoAttendance?: boolean | null
+  useStudentSiblingDiscountInCourse?: boolean | null
 }
 
 function isTruthyCourseFlag(raw: unknown): boolean {
@@ -369,6 +370,18 @@ export default function CourseViewPage() {
         : locale === "en"
           ? "Camp: if a student has no attendance at all, charge first session price"
           : "קייטנה: אם תלמיד לא נכח בכלל — החיוב לפי מחיר המפגש הראשון",
+    studentSiblingDiscountRule:
+      locale === "ar"
+        ? "تفعيل خصم الإخوة من إعدادات الطالب لهذه الدورة"
+        : locale === "en"
+          ? "Use student-level sibling discount in this course"
+          : "הנחת אחים לפי הגדרת תלמיד פעילה בקורס זה",
+    studentSiblingDiscountRuleOff:
+      locale === "ar"
+        ? "خصم الإخوة מהגדרת الطالب כבוי בקורס זה"
+        : locale === "en"
+          ? "Student-level sibling discount is disabled in this course"
+          : "הנחת אחים מהגדרת תלמיד כבויה בקורס זה",
     assignStudentsTitle:
       locale === "ar" ? "إسناد طلاب للدورة" : locale === "en" ? "Assign students to course" : "שיוך תלמידים לקורס",
     assignStudentsSearch:
@@ -1021,7 +1034,9 @@ export default function CourseViewPage() {
       return
     }
     try {
-      const res = await fetch(`/api/payments?courseId=${encodeURIComponent(id)}`)
+      const res = await fetch(
+        `/api/payments?courseId=${encodeURIComponent(id)}&includeLegacyCoursePayments=1`,
+      )
       if (!res.ok) {
         setPaidStudentIds([])
         setPaymentsForCourse([])
@@ -1604,6 +1619,17 @@ export default function CourseViewPage() {
                     {tr.campNoAttendanceChargeRule}
                   </div>
                 )}
+                <div
+                  className={`rounded-md border px-3 py-2 text-xs ${
+                    course.useStudentSiblingDiscountInCourse !== false
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                      : "border-slate-200 bg-slate-50 text-slate-700"
+                  }`}
+                >
+                  {course.useStudentSiblingDiscountInCourse !== false
+                    ? tr.studentSiblingDiscountRule
+                    : tr.studentSiblingDiscountRuleOff}
+                </div>
               </CardContent>
             </Card>
 

@@ -139,6 +139,7 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
           "schoolId"       = ${cleanStr(body.schoolId)},
           "gafanProgramId" = ${cleanStr(body.gafanProgramId)},
           "siblingDiscountPackageId" = ${cleanStr(body.siblingDiscountPackageId)},
+          "useStudentSiblingDiscountInCourse" = ${body.useStudentSiblingDiscountInCourse !== false},
           "sessionPrices" = ${db.json(sessionPricesPut)},
           "campChargeFirstSessionIfNoAttendance" = ${body.campChargeFirstSessionIfNoAttendance === true},
           "updatedAt" = ${now}

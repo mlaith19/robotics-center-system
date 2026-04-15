@@ -142,6 +142,7 @@ export const POST = withTenantAuth(async (req, session) => {
     const schoolId = body.schoolId ? String(body.schoolId).trim() : null
     const gafanProgramId = body.gafanProgramId ? String(body.gafanProgramId).trim() : null
     const siblingDiscountPackageId = body.siblingDiscountPackageId ? String(body.siblingDiscountPackageId).trim() : null
+    const useStudentSiblingDiscountInCourse = body.useStudentSiblingDiscountInCourse !== false
     const campChargeFirstSessionIfNoAttendance = body.campChargeFirstSessionIfNoAttendance === true
     const rawTariffPost = body.teacherTariffByTeacherId
     const tariffMapPost =
@@ -180,14 +181,14 @@ export const POST = withTenantAuth(async (req, session) => {
         "courseNumber", category, "courseType", location,
         "startDate", "endDate", "startTime", "endTime",
         "daysOfWeek", "teacherIds", "schoolId", "gafanProgramId", "siblingDiscountPackageId",
-        "sessionPrices", "campChargeFirstSessionIfNoAttendance", "createdAt", "updatedAt"
+        "sessionPrices", "campChargeFirstSessionIfNoAttendance", "useStudentSiblingDiscountInCourse", "createdAt", "updatedAt"
       )
       VALUES (
         ${id}, ${name}, ${description}, ${level}, ${duration}, ${price}, ${status},
         ${courseNumber}, ${category}, ${courseType}, ${location},
         ${startDate}, ${endDate}, ${startTimeVal}::timestamp, ${endTimeVal}::timestamp,
         ${daysOfWeek}, ${teacherIds}, ${schoolId}, ${gafanProgramId}, ${siblingDiscountPackageId},
-        ${db.json(sessionPricesJson)}, ${campChargeFirstSessionIfNoAttendance}, ${now}, ${now}
+        ${db.json(sessionPricesJson)}, ${campChargeFirstSessionIfNoAttendance}, ${useStudentSiblingDiscountInCourse}, ${now}, ${now}
       )
       RETURNING *
     `

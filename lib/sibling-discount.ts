@@ -70,6 +70,13 @@ export async function ensureSiblingDiscountTables(sql: Sql) {
       ADD COLUMN IF NOT EXISTS "siblingDiscountPackageId" TEXT
     `
   )
+  await safeExec(
+    "add course student sibling toggle column",
+    sql`
+      ALTER TABLE "Course"
+      ADD COLUMN IF NOT EXISTS "useStudentSiblingDiscountInCourse" BOOLEAN NOT NULL DEFAULT TRUE
+    `
+  )
 
   await safeExec(
     "create student sibling group index",

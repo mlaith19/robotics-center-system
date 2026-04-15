@@ -49,6 +49,8 @@ export const GET = withTenantAuth(async (req, session) => {
     const { searchParams } = new URL(req.url)
     const schoolPayId = (searchParams.get("schoolId") || "").trim()
     const courseId = (searchParams.get("courseId") || "").trim()
+    const includeLegacyCoursePayments =
+      (searchParams.get("includeLegacyCoursePayments") || "").trim() === "1"
     if (schoolPayId) {
       const bySchool = await db`
         SELECT p.*, s.name as "studentName", u.name as "createdByUserName"
@@ -141,14 +143,38 @@ export const GET = withTenantAuth(async (req, session) => {
         ORDER BY p."paymentDate" DESC
       `
     } else if (courseId) {
-      result = await db`
-        SELECT p.*, s.name as "studentName", u.name as "createdByUserName"
-        FROM "Payment" p
-        LEFT JOIN "Student" s ON p."studentId" = s.id
-        LEFT JOIN "User" u ON p."createdByUserId" = u.id
-        WHERE p."courseId" = ${courseId}
-        ORDER BY p."paymentDate" DESC
-      `
+      if (includeLegacyCoursePayments) {
+        result = await db`
+          SELECT p.*, s.name as "studentName", u.name as "createdByUserName"
+          FROM "Payment" p
+          LEFT JOIN "Student" s ON p."studentId" = s.id
+          LEFT JOIN "User" u ON p."createdByUserId" = u.id
+          LEFT JOIN "Course" c ON c.id = ${courseId}
+          WHERE p."courseId" = ${courseId}
+             OR (
+               p."courseId" IS NULL
+               AND p."studentId" IN (
+                 SELECT e."studentId"
+                 FROM "Enrollment" e
+                 WHERE e."courseId" = ${courseId}
+               )
+               AND (
+                 p.description = ('תשלום לקורס: ' || COALESCE(c.name, ''))
+                 OR p.description = ('Payment for course: ' || COALESCE(c.name, ''))
+               )
+             )
+          ORDER BY p."paymentDate" DESC
+        `
+      } else {
+        result = await db`
+          SELECT p.*, s.name as "studentName", u.name as "createdByUserName"
+          FROM "Payment" p
+          LEFT JOIN "Student" s ON p."studentId" = s.id
+          LEFT JOIN "User" u ON p."createdByUserId" = u.id
+          WHERE p."courseId" = ${courseId}
+          ORDER BY p."paymentDate" DESC
+        `
+      }
     } else if (studentId && startDate && endDate) {
       result = await db`
         SELECT p.*, s.name as "studentName", u.name as "createdByUserName"

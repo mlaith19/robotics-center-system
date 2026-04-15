@@ -71,6 +71,7 @@ export async function applySiblingAndAttendancePricingToEnrollmentRows(
     ...new Set(rows.map((r) => String(r.courseId || "").trim()).filter(Boolean)),
   ]
   const attendanceMap = new Map<string, { date: unknown; status: unknown }[]>()
+  const courseAllowStudentSiblingDiscountMap = new Map<string, boolean>()
   if (courseIds.length) {
     const attRows = await db<
       { studentId: string; courseId: string; date: unknown; status: unknown }[]
@@ -85,6 +86,17 @@ export async function applySiblingAndAttendancePricingToEnrollmentRows(
       if (!attendanceMap.has(key)) attendanceMap.set(key, [])
       attendanceMap.get(key)!.push({ date: a.date, status: a.status })
     }
+    const courseRows = await db<{ id: string; useStudentSiblingDiscountInCourse: boolean | null }[]>`
+      SELECT id, "useStudentSiblingDiscountInCourse"
+      FROM "Course"
+      WHERE id = ANY(${courseIds}::text[])
+    `
+    for (const c of courseRows) {
+      courseAllowStudentSiblingDiscountMap.set(
+        String(c.id),
+        c.useStudentSiblingDiscountInCourse !== false,
+      )
+    }
   }
 
   const rankCache = new Map<string, number | null>()
@@ -95,7 +107,8 @@ export async function applySiblingAndAttendancePricingToEnrollmentRows(
     const courseIdVal = String(r.courseId || "")
     const coursePackageId = r.siblingDiscountPackageId ? String(r.siblingDiscountPackageId) : null
     const studentPackageId = packageByStudent.get(studentIdVal) || null
-    const packageId = coursePackageId || studentPackageId
+    const allowStudentSiblingDiscount = courseAllowStudentSiblingDiscountMap.get(courseIdVal) !== false
+    const packageId = coursePackageId || (allowStudentSiblingDiscount ? studentPackageId : null)
     const pkg = packageId ? packagesMap.get(packageId) : undefined
 
     let effectivePrice = Number(r.coursePrice || 0)
