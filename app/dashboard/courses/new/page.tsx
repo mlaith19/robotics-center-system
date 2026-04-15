@@ -127,6 +127,7 @@ export default function NewCoursePage() {
     validYear: new Date().getFullYear().toString(),
     showRegistrationLink: false,
     campChargeFirstSessionIfNoAttendance: false,
+    useStudentSiblingDiscountInCourse: true,
     siblingDiscountPackageId: "",
     /** שיטת תמחור */
     pricingMode: "perStudent" as "perStudent" | "perCourse" | "perSession" | "perHour",
@@ -984,6 +985,20 @@ export default function NewCoursePage() {
         ))}
       </SelectContent>
     </Select>
+  </div>
+  <div className="mb-4 rounded-md border p-3">
+    <div
+      className="flex cursor-pointer items-center justify-end gap-2"
+      onClick={() =>
+        setFormData((prev) => ({
+          ...prev,
+          useStudentSiblingDiscountInCourse: !prev.useStudentSiblingDiscountInCourse,
+        }))
+      }
+    >
+      <span className="text-sm">החל הנחת אחים שמוגדרת על התלמיד גם בקורס הזה</span>
+      <Checkbox checked={formData.useStudentSiblingDiscountInCourse} />
+    </div>
   </div>
   <div className="space-y-2">
   <Label className="text-right block">
