@@ -59,6 +59,12 @@ interface Enrollment {
   siblingGroupId?: string | null
 }
 
+interface StudentOption {
+  id: string
+  name: string
+  status?: string | null
+}
+
 interface CourseSessionFeedback {
   id: string
   studentId: string
@@ -329,6 +335,32 @@ export default function CourseViewPage() {
     sick: locale === "ar" ? "مريض" : locale === "en" ? "Sick" : "חולה",
     vacation: locale === "ar" ? "إجازة" : locale === "en" ? "Vacation" : "חופש",
     noLinkedStudents: locale === "ar" ? "لا يوجد طلاب مرتبطون بهذه الدورة" : locale === "en" ? "No students linked to this course" : "אין תלמידים משויכים לקורס זה",
+    assignStudentsTitle:
+      locale === "ar" ? "إسناد طلاب للدورة" : locale === "en" ? "Assign students to course" : "שיוך תלמידים לקורס",
+    assignStudentsSearch:
+      locale === "ar" ? "بحث عن طالب..." : locale === "en" ? "Search student..." : "חיפוש תלמיד...",
+    assignStudentsSelected:
+      locale === "ar" ? "تم تحديد" : locale === "en" ? "Selected" : "נבחרו",
+    assignStudentsBulk:
+      locale === "ar" ? "إسناد المحددين" : locale === "en" ? "Assign selected" : "שייך מסומנים",
+    assignStudentsNoneLeft:
+      locale === "ar"
+        ? "كل الطلاب مسندون بالفعل لهذه الدورة."
+        : locale === "en"
+          ? "All students are already assigned to this course."
+          : "כל התלמידים כבר משויכים לקורס זה.",
+    assignStudentsNoResults:
+      locale === "ar" ? "لا توجد نتائج للبحث" : locale === "en" ? "No students found" : "לא נמצאו תלמידים לחיפוש",
+    assignStudentsSelectAll:
+      locale === "ar" ? "تحديد הכל" : locale === "en" ? "Select all" : "בחר הכל",
+    assignStudentsClear:
+      locale === "ar" ? "مسح" : locale === "en" ? "Clear" : "נקה",
+    assignStudentsDone:
+      locale === "ar"
+        ? "تم إسناد الطلاب بنجاح."
+        : locale === "en"
+          ? "Students were assigned successfully."
+          : "התלמידים שויכו בהצלחה.",
     noStudentAttendance: locale === "ar" ? "لا توجد سجلات حضور طلاب لهذه الدورة بعد." : locale === "en" ? "No student attendance records for this course yet." : "אין עדיין רשומות נוכחות תלמידים לקורס זה.",
     noTeacherAttendance: locale === "ar" ? "لا توجد سجلات حضور معلمين لهذه الدورة." : locale === "en" ? "No teacher attendance records for this course." : "אין רשומות נוכחות מורים לקורס זה.",
     teacherHoursGrandTotal:
@@ -360,6 +392,11 @@ export default function CourseViewPage() {
   const [course, setCourse] = useState<Course | null>(null)
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [enrollments, setEnrollments] = useState<Enrollment[]>([])
+  const [students, setStudents] = useState<StudentOption[]>([])
+  const [assignStudentsQuery, setAssignStudentsQuery] = useState("")
+  const [selectedStudentIdsToAssign, setSelectedStudentIdsToAssign] = useState<string[]>([])
+  const [isAssigningStudents, setIsAssigningStudents] = useState(false)
+  const [assignStudentsMessage, setAssignStudentsMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [isStudentUser, setIsStudentUser] = useState(false)
 
@@ -485,6 +522,16 @@ export default function CourseViewPage() {
   const [campScheduleMeetings, setCampScheduleMeetings] = useState<Array<Record<string, unknown>>>([])
   const [selectedCampCellId, setSelectedCampCellId] = useState("")
   const campGroups = HEBREW_GROUP_LETTERS
+  const enrolledStudentIds = useMemo(() => new Set(enrollments.map((e) => String(e.studentId))), [enrollments])
+  const studentsAvailableToAssign = useMemo(
+    () => students.filter((s) => !enrolledStudentIds.has(String(s.id))),
+    [students, enrolledStudentIds],
+  )
+  const assignStudentsFiltered = useMemo(() => {
+    const q = assignStudentsQuery.trim().toLowerCase()
+    if (!q) return studentsAvailableToAssign
+    return studentsAvailableToAssign.filter((s) => String(s.name || "").toLowerCase().includes(q))
+  }, [studentsAvailableToAssign, assignStudentsQuery])
 
   const campGroupTabsData = useMemo(() => {
     if (!isCampCourse) return [] as { label: string; members: Enrollment[] }[]
@@ -729,6 +776,49 @@ export default function CourseViewPage() {
     )
   }, [courseTeacherAttendanceList, teachers, course?.startTime])
 
+  async function loadCourseEnrollments() {
+    try {
+      const enrollmentsRes = await fetch(`/api/enrollments?courseId=${id}`)
+      if (!enrollmentsRes.ok) return
+      const data = await enrollmentsRes.json()
+      setEnrollments(Array.isArray(data) ? data : [])
+    } catch {
+      // ignore
+    }
+  }
+
+  async function assignSelectedStudents() {
+    const candidateIds = selectedStudentIdsToAssign.filter((sid) => !enrolledStudentIds.has(sid))
+    if (!id || candidateIds.length === 0 || isAssigningStudents) return
+    setIsAssigningStudents(true)
+    setAssignStudentsMessage(null)
+    try {
+      const results = await Promise.allSettled(
+        candidateIds.map((studentId) =>
+          fetch("/api/enrollments", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              studentId,
+              courseId: id,
+              status: "active",
+            }),
+          }),
+        ),
+      )
+      const successCount = results.filter(
+        (result) => result.status === "fulfilled" && result.value.ok,
+      ).length
+      await loadCourseEnrollments()
+      setSelectedStudentIdsToAssign([])
+      if (successCount > 0) {
+        setAssignStudentsMessage(`${tr.assignStudentsDone} (${successCount})`)
+      }
+    } finally {
+      setIsAssigningStudents(false)
+    }
+  }
+
   useEffect(() => {
     if (!currentUser?.id) return
     fetch(`/api/students/by-user/${currentUser.id}`)
@@ -740,11 +830,12 @@ export default function CourseViewPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [courseRes, teachersRes, enrollmentsRes, settingsRes] = await Promise.all([
+        const [courseRes, teachersRes, enrollmentsRes, settingsRes, studentsRes] = await Promise.all([
           fetch(`/api/courses/${id}`),
           fetch("/api/teachers"),
           fetch(`/api/enrollments?courseId=${id}`),
           fetch("/api/settings"),
+          fetch("/api/students"),
         ])
         if (courseRes.ok) {
           const data = await courseRes.json()
@@ -757,6 +848,20 @@ export default function CourseViewPage() {
         if (enrollmentsRes.ok) {
           const data = await enrollmentsRes.json()
           setEnrollments(Array.isArray(data) ? data : [])
+        }
+        if (studentsRes.ok) {
+          const data = await studentsRes.json()
+          setStudents(
+            Array.isArray(data)
+              ? data.map((s: any) => ({
+                  id: String(s.id || ""),
+                  name: String(s.name || ""),
+                  status: s.status ? String(s.status) : null,
+                }))
+              : [],
+          )
+        } else {
+          setStudents([])
         }
         if (settingsRes.ok) {
           const s = await settingsRes.json()
@@ -771,6 +876,10 @@ export default function CourseViewPage() {
     }
     fetchData()
   }, [id])
+
+  useEffect(() => {
+    setSelectedStudentIdsToAssign((prev) => prev.filter((sid) => !enrolledStudentIds.has(sid)))
+  }, [enrolledStudentIds])
 
   useEffect(() => {
     if (!id || !course) return
@@ -968,11 +1077,7 @@ export default function CourseViewPage() {
         body: JSON.stringify({ campGroupLabel: campGroupLabel || null }),
       })
       if (!res.ok) return
-      const enrollmentsRes = await fetch(`/api/enrollments?courseId=${id}`)
-      if (enrollmentsRes.ok) {
-        const data = await enrollmentsRes.json()
-        setEnrollments(Array.isArray(data) ? data : [])
-      }
+      await loadCourseEnrollments()
     } catch {
       // ignore
     }
@@ -1327,7 +1432,7 @@ export default function CourseViewPage() {
             )}
             {!isStudentUser && canTabStudents && (
               <TabsTrigger value="students" className="shrink-0 px-2 text-xs sm:text-sm md:min-w-0">
-                {tr.linkedStudents}
+                {tr.linkedStudents} ({enrollments.length})
               </TabsTrigger>
             )}
             {!isStudentUser && canTabCampGroups && (
@@ -1570,6 +1675,92 @@ export default function CourseViewPage() {
 
         {!isStudentUser && canTabStudents && (
         <TabsContent value="students">
+          {canEditCourses && (
+          <Card className="mb-4">
+            <CardHeader>
+              <CardTitle className="text-base">{tr.assignStudentsTitle}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {studentsAvailableToAssign.length > 0 ? (
+                <>
+                  <Input
+                    value={assignStudentsQuery}
+                    onChange={(e) => setAssignStudentsQuery(e.target.value)}
+                    placeholder={tr.assignStudentsSearch}
+                    className="max-w-md text-right"
+                    dir={isRtl ? "rtl" : "ltr"}
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        setSelectedStudentIdsToAssign(
+                          assignStudentsFiltered.map((student) => String(student.id)),
+                        )
+                      }
+                      className="bg-transparent"
+                    >
+                      {tr.assignStudentsSelectAll}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setSelectedStudentIdsToAssign([])}
+                    >
+                      {tr.assignStudentsClear}
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      {tr.assignStudentsSelected}: {selectedStudentIdsToAssign.length}
+                    </span>
+                  </div>
+                  <div className="max-h-56 space-y-2 overflow-auto rounded-md border p-2">
+                    {assignStudentsFiltered.length > 0 ? (
+                      assignStudentsFiltered.map((student) => {
+                        const isSelected = selectedStudentIdsToAssign.includes(String(student.id))
+                        return (
+                          <label
+                            key={student.id}
+                            className="flex cursor-pointer items-center justify-between rounded border px-3 py-2 hover:bg-muted/40"
+                          >
+                            <span className="font-medium">{student.name}</span>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() =>
+                                setSelectedStudentIdsToAssign((prev) =>
+                                  isSelected
+                                    ? prev.filter((id) => id !== String(student.id))
+                                    : [...prev, String(student.id)],
+                                )
+                              }
+                            />
+                          </label>
+                        )
+                      })
+                    ) : (
+                      <p className="py-4 text-center text-sm text-muted-foreground">{tr.assignStudentsNoResults}</p>
+                    )}
+                  </div>
+                  {assignStudentsMessage && (
+                    <p className="text-sm text-green-700">{assignStudentsMessage}</p>
+                  )}
+                  <Button
+                    type="button"
+                    onClick={assignSelectedStudents}
+                    disabled={selectedStudentIdsToAssign.length === 0 || isAssigningStudents}
+                    className="gap-2"
+                  >
+                    {isAssigningStudents ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                    {tr.assignStudentsBulk}
+                  </Button>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">{tr.assignStudentsNoneLeft}</p>
+              )}
+            </CardContent>
+          </Card>
+          )}
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">{tr.enrolledStudents} ({enrollments.length})</CardTitle>
