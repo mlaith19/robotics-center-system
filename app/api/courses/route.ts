@@ -9,6 +9,7 @@ import { ensureSiblingDiscountTables } from "@/lib/sibling-discount"
 import { syncCourseTeacherTariffs } from "@/lib/teacher-tariff-profiles"
 import {
   ensureCourseSessionPricesColumn,
+  ensureCourseNoAttendanceChargeColumn,
   normalizeSessionPricesMap,
   buildSessionPricesForCourseDates,
   courseTypeIsPerSession,
@@ -32,6 +33,7 @@ export const GET = withTenantAuth(async (req, session) => {
   try {
     await ensureSiblingDiscountTables(db)
     await ensureCourseSessionPricesColumn(db)
+    await ensureCourseNoAttendanceChargeColumn(db)
     // Avoid blocking/slowing every courses read request.
     // Keep status sync as best-effort background work.
     runAutoCompleteExpiredCourses(db).catch((e) => {
@@ -115,6 +117,7 @@ export const POST = withTenantAuth(async (req, session) => {
   try {
     await ensureSiblingDiscountTables(db)
     await ensureCourseSessionPricesColumn(db)
+    await ensureCourseNoAttendanceChargeColumn(db)
     const body = await req.json()
     const name = body.name ? String(body.name).trim() : null
     if (!name) return Response.json({ error: "name is required" }, { status: 400 })
@@ -139,6 +142,7 @@ export const POST = withTenantAuth(async (req, session) => {
     const schoolId = body.schoolId ? String(body.schoolId).trim() : null
     const gafanProgramId = body.gafanProgramId ? String(body.gafanProgramId).trim() : null
     const siblingDiscountPackageId = body.siblingDiscountPackageId ? String(body.siblingDiscountPackageId).trim() : null
+    const campChargeFirstSessionIfNoAttendance = body.campChargeFirstSessionIfNoAttendance === true
     const rawTariffPost = body.teacherTariffByTeacherId
     const tariffMapPost =
       rawTariffPost && typeof rawTariffPost === "object" && !Array.isArray(rawTariffPost)
@@ -176,14 +180,14 @@ export const POST = withTenantAuth(async (req, session) => {
         "courseNumber", category, "courseType", location,
         "startDate", "endDate", "startTime", "endTime",
         "daysOfWeek", "teacherIds", "schoolId", "gafanProgramId", "siblingDiscountPackageId",
-        "sessionPrices", "createdAt", "updatedAt"
+        "sessionPrices", "campChargeFirstSessionIfNoAttendance", "createdAt", "updatedAt"
       )
       VALUES (
         ${id}, ${name}, ${description}, ${level}, ${duration}, ${price}, ${status},
         ${courseNumber}, ${category}, ${courseType}, ${location},
         ${startDate}, ${endDate}, ${startTimeVal}::timestamp, ${endTimeVal}::timestamp,
         ${daysOfWeek}, ${teacherIds}, ${schoolId}, ${gafanProgramId}, ${siblingDiscountPackageId},
-        ${db.json(sessionPricesJson)}, ${now}, ${now}
+        ${db.json(sessionPricesJson)}, ${campChargeFirstSessionIfNoAttendance}, ${now}, ${now}
       )
       RETURNING *
     `

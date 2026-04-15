@@ -137,6 +137,7 @@ export default function EditCoursePage() {
     gafanProgramId: "",
     validYear: new Date().getFullYear().toString(),
     showRegistrationLink: false,
+    campChargeFirstSessionIfNoAttendance: false,
     siblingDiscountPackageId: "",
     pricingMode: "perStudent" as "perStudent" | "perCourse" | "perSession" | "perHour",
   })
@@ -251,6 +252,7 @@ export default function EditCoursePage() {
             gafanProgramId: course.gafanProgramId || "",
             validYear: course.validYear?.toString() || new Date().getFullYear().toString(),
             showRegistrationLink: course.showRegistrationLink === true,
+            campChargeFirstSessionIfNoAttendance: course.campChargeFirstSessionIfNoAttendance === true,
             siblingDiscountPackageId: course.siblingDiscountPackageId || "",
             pricingMode: isTotalCoursePricingType(course.courseType || "")
               ? "perCourse"
@@ -488,6 +490,7 @@ export default function EditCoursePage() {
                 if (value === "gafan" && !formData.duration) {
                   updates.duration = "30"
                 }
+                if (value !== "camp") updates.campChargeFirstSessionIfNoAttendance = false
                 setFormData({...formData, ...updates})
               }}>
                 <SelectTrigger className="text-right" dir="rtl">
@@ -533,6 +536,28 @@ export default function EditCoursePage() {
               <Checkbox checked={formData.showRegistrationLink} />
             </div>
           </div>
+          {formData.courseType === "camp" && (
+            <div className="mt-3 rounded-md border border-blue-200 bg-white/70 p-3">
+              <div
+                className="flex cursor-pointer items-center justify-end gap-2"
+                onClick={() =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    campChargeFirstSessionIfNoAttendance: !prev.campChargeFirstSessionIfNoAttendance,
+                  }))
+                }
+              >
+                <span className="text-sm">
+                  {l(
+                    "בקייטנה: תלמיד שלא נכח בכלל יחויב לפי מחיר המפגש הראשון",
+                    "Camp: if a student has no attendance at all, charge by the first session price",
+                    "في المخيم: الطالب الذي لم يحضر إطلاقًا يُحاسب بسعر الجلسة الأولى",
+                  )}
+                </span>
+                <Checkbox checked={formData.campChargeFirstSessionIfNoAttendance} />
+              </div>
+            </div>
+          )}
           
           {/* שדות גפ"ן - מוצגים רק כאשר סוג הקורס הוא גפ"ן */}
           {formData.courseType === "gafan" && (

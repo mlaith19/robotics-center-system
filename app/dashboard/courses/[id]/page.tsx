@@ -34,6 +34,7 @@ interface Course {
   teacherIds: string[] | null
   createdAt: string
   updatedAt: string
+  campChargeFirstSessionIfNoAttendance?: boolean | null
 }
 
 interface Teacher {
@@ -355,6 +356,12 @@ export default function CourseViewPage() {
     sick: locale === "ar" ? "مريض" : locale === "en" ? "Sick" : "חולה",
     vacation: locale === "ar" ? "إجازة" : locale === "en" ? "Vacation" : "חופש",
     noLinkedStudents: locale === "ar" ? "لا يوجد طلاب مرتبطون بهذه الدورة" : locale === "en" ? "No students linked to this course" : "אין תלמידים משויכים לקורס זה",
+    campNoAttendanceChargeRule:
+      locale === "ar"
+        ? "بالمخيم: عند عدم حضور الطالب إطلاقًا، يُحسب له سعر الجلسة الأولى"
+        : locale === "en"
+          ? "Camp: if a student has no attendance at all, charge first session price"
+          : "קייטנה: אם תלמיד לא נכח בכלל — החיוב לפי מחיר המפגש הראשון",
     assignStudentsTitle:
       locale === "ar" ? "إسناد طلاب للدورة" : locale === "en" ? "Assign students to course" : "שיוך תלמידים לקורס",
     assignStudentsSearch:
@@ -1351,6 +1358,12 @@ export default function CourseViewPage() {
     allowedAttendanceDates.length > 0
       ? Number(course?.price || 0) / allowedAttendanceDates.length
       : Number(course?.price || 0)
+  const firstSessionDate =
+    allowedAttendanceDates.length > 0 ? [...allowedAttendanceDates].sort((a, b) => a.localeCompare(b))[0] : ""
+  const firstSessionPrice =
+    firstSessionDate && sessionPriceMap[firstSessionDate] != null
+      ? Number(sessionPriceMap[firstSessionDate])
+      : Number(fallbackPerSessionPrice || 0)
   const presentDatesByStudent = new Map<string, Set<string>>()
   const rowsByStudentAndDate = new Map<string, Record<string, unknown>[]>()
   for (const row of attendanceList) {
@@ -1383,7 +1396,11 @@ export default function CourseViewPage() {
     let enrollmentDue = Number((e as any).coursePrice ?? course?.price ?? 0)
     if (isPerSessionCoursePricing) {
       const presentDates = Array.from(presentDatesByStudent.get(sid) || [])
-      enrollmentDue = presentDates.reduce((sum, d) => sum + Number(sessionPriceMap[d] ?? fallbackPerSessionPrice), 0)
+      if (isCampCourse && course?.campChargeFirstSessionIfNoAttendance === true && presentDates.length === 0) {
+        enrollmentDue = Math.round(Number(firstSessionPrice || 0) * 100) / 100
+      } else {
+        enrollmentDue = presentDates.reduce((sum, d) => sum + Number(sessionPriceMap[d] ?? fallbackPerSessionPrice), 0)
+      }
     }
     const prev = dueByStudent.get(sid)
     if (!prev) {
@@ -1566,6 +1583,11 @@ export default function CourseViewPage() {
                   <div className="flex flex-row-reverse justify-between items-center">
                     <span className="text-muted-foreground">{isTotalPriceMode ? `${tr.totalCoursePrice}:` : `${tr.pricePerStudent}:`}</span>
                     <span className="font-medium text-blue-600 text-xl">₪{course.price || 0}</span>
+                  </div>
+                )}
+                {isCampCourse && course.campChargeFirstSessionIfNoAttendance === true && (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    {tr.campNoAttendanceChargeRule}
                   </div>
                 )}
               </CardContent>

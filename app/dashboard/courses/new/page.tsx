@@ -126,6 +126,7 @@ export default function NewCoursePage() {
     gafanProgramId: "",
     validYear: new Date().getFullYear().toString(),
     showRegistrationLink: false,
+    campChargeFirstSessionIfNoAttendance: false,
     siblingDiscountPackageId: "",
     /** שיטת תמחור */
     pricingMode: "perStudent" as "perStudent" | "perCourse" | "perSession" | "perHour",
@@ -461,6 +462,7 @@ export default function NewCoursePage() {
                   updates.duration = "30"
                 }
                 updates.pricingMode = value === "gafan" ? "perStudent" : formData.pricingMode
+                if (value !== "camp") updates.campChargeFirstSessionIfNoAttendance = false
                 setFormData({ ...formData, ...updates } as typeof formData)
               }}>
                 <SelectTrigger className="text-right" dir="rtl">
@@ -506,6 +508,28 @@ export default function NewCoursePage() {
               <Checkbox checked={formData.showRegistrationLink} />
             </div>
           </div>
+          {baseCourseType === "camp" && (
+            <div className="mt-3 rounded-md border border-blue-200 bg-white/70 p-3">
+              <div
+                className="flex cursor-pointer items-center justify-end gap-2"
+                onClick={() =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    campChargeFirstSessionIfNoAttendance: !prev.campChargeFirstSessionIfNoAttendance,
+                  }))
+                }
+              >
+                <span className="text-sm">
+                  {l(
+                    "בקייטנה: תלמיד שלא נכח בכלל יחויב לפי מחיר המפגש הראשון",
+                    "Camp: if a student has no attendance at all, charge by the first session price",
+                    "في المخيم: الطالب الذي لم يحضر إطلاقًا يُحاسب بسعر الجلسة الأولى",
+                  )}
+                </span>
+                <Checkbox checked={formData.campChargeFirstSessionIfNoAttendance} />
+              </div>
+            </div>
+          )}
           
           {/* שדות גפ"ן - מוצגים רק כאשר סוג הקורס הוא גפ"ן */}
           {formData.courseType === "gafan" && (

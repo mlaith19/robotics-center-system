@@ -13,6 +13,17 @@ export async function ensureCourseSessionPricesColumn(sql: Sql) {
   }
 }
 
+export async function ensureCourseNoAttendanceChargeColumn(sql: Sql) {
+  try {
+    await sql`
+      ALTER TABLE "Course"
+      ADD COLUMN IF NOT EXISTS "campChargeFirstSessionIfNoAttendance" BOOLEAN NOT NULL DEFAULT FALSE
+    `
+  } catch (e) {
+    console.warn("[course-session-prices] ensure no-attendance charge column skipped:", e)
+  }
+}
+
 /** מחירים לפי תאריך מפגש — רק מפתחות YYYY-MM-DD וערכים לא שליליים */
 export function normalizeSessionPricesMap(raw: unknown): Record<string, number> {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {}

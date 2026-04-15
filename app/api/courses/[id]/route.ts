@@ -8,6 +8,7 @@ import { ensureSiblingDiscountTables } from "@/lib/sibling-discount"
 import { ensureTeacherTariffTables, loadCourseTeacherTariffMap, syncCourseTeacherTariffs } from "@/lib/teacher-tariff-profiles"
 import {
   ensureCourseSessionPricesColumn,
+  ensureCourseNoAttendanceChargeColumn,
   normalizeSessionPricesMap,
   buildSessionPricesForCourseDates,
   courseTypeIsPerSession,
@@ -31,6 +32,7 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
   try {
     await ensureSiblingDiscountTables(db)
     await ensureCourseSessionPricesColumn(db)
+    await ensureCourseNoAttendanceChargeColumn(db)
     await runAutoCompleteExpiredCourses(db)
     const result = await db`
       SELECT
@@ -74,6 +76,7 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
   try {
     await ensureSiblingDiscountTables(db)
     await ensureCourseSessionPricesColumn(db)
+    await ensureCourseNoAttendanceChargeColumn(db)
     const teacherIdsPre = Array.isArray(body.teacherIds) ? body.teacherIds.map((x: unknown) => String(x)) : []
     const rawTariffPre = body.teacherTariffByTeacherId
     const tariffMapPre =
@@ -137,6 +140,7 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
           "gafanProgramId" = ${cleanStr(body.gafanProgramId)},
           "siblingDiscountPackageId" = ${cleanStr(body.siblingDiscountPackageId)},
           "sessionPrices" = ${db.json(sessionPricesPut)},
+          "campChargeFirstSessionIfNoAttendance" = ${body.campChargeFirstSessionIfNoAttendance === true},
           "updatedAt" = ${now}
       WHERE id = ${id}
       RETURNING *
