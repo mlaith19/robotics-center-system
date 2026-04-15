@@ -5,7 +5,7 @@ git push origin mainSet-Location "e:\PROJECTS\robotics center system"
 git add .
 git commit -m "תיאור השינוי"
 git push origin main
-ssh root@147.93.123.132   
+ssh root@147.93.123.132
 
 
 Set-Location "e:\PROJECTS\robotics center system"; git add .; $msg = "auto-update $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"; git commit -m $msg; git push origin main; ssh root@147.93.123.132

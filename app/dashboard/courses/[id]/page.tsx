@@ -1393,14 +1393,16 @@ export default function CourseViewPage() {
     const sid = String(e.studentId || "").trim()
     if (!sid) continue
     const studentName = e.studentName || "—"
+    const presentDates = Array.from(presentDatesByStudent.get(sid) || [])
     let enrollmentDue = Number((e as any).coursePrice ?? course?.price ?? 0)
-    if (isPerSessionCoursePricing) {
-      const presentDates = Array.from(presentDatesByStudent.get(sid) || [])
-      if (isCampCourse && course?.campChargeFirstSessionIfNoAttendance === true && presentDates.length === 0) {
-        enrollmentDue = Math.round(Number(firstSessionPrice || 0) * 100) / 100
-      } else {
-        enrollmentDue = presentDates.reduce((sum, d) => sum + Number(sessionPriceMap[d] ?? fallbackPerSessionPrice), 0)
-      }
+    if (
+      isCampCourse &&
+      course?.campChargeFirstSessionIfNoAttendance === true &&
+      presentDates.length === 0
+    ) {
+      enrollmentDue = Math.round(Number(firstSessionPrice || 0) * 100) / 100
+    } else if (isPerSessionCoursePricing) {
+      enrollmentDue = presentDates.reduce((sum, d) => sum + Number(sessionPriceMap[d] ?? fallbackPerSessionPrice), 0)
     }
     const prev = dueByStudent.get(sid)
     if (!prev) {
