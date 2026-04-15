@@ -937,7 +937,7 @@ export default function CourseViewPage() {
 
   useEffect(() => {
     if ((!canTabAttendanceStudents && !canTabAttendanceTeachers) || !id) return
-    fetch(`/api/attendance?courseId=${id}`)
+    fetch(`/api/attendance?courseId=${id}&_ts=${Date.now()}`, { cache: "no-store" })
       .then((res) => res.ok ? res.json() : [])
       .then((data) => setAttendanceList(Array.isArray(data) ? data : []))
       .catch(() => setAttendanceList([]))
@@ -953,7 +953,7 @@ export default function CourseViewPage() {
     if (teacherCampAttendanceMode && selectedCampCellId) {
       url += `&campMeetingCellId=${encodeURIComponent(selectedCampCellId)}`
     }
-    fetch(url)
+    fetch(url, { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : []))
       .then((rows) => {
         const next: Record<string, string> = {}
@@ -1089,6 +1089,26 @@ export default function CourseViewPage() {
     }
   }
 
+  async function refreshAttendanceData() {
+    if (!id) return
+    const allRes = await fetch(`/api/attendance?courseId=${id}&_ts=${Date.now()}`, { cache: "no-store" })
+    const allRows = allRes.ok ? await allRes.json() : []
+    setAttendanceList(Array.isArray(allRows) ? allRows : [])
+
+    if (!canTabAttendanceStudents || !attendanceDateForApi) return
+    let dayUrl = `/api/attendance?courseId=${id}&date=${attendanceDateForApi}&_ts=${Date.now()}`
+    if (teacherCampAttendanceMode && selectedCampCellId) {
+      dayUrl += `&campMeetingCellId=${encodeURIComponent(selectedCampCellId)}`
+    }
+    const dayRes = await fetch(dayUrl, { cache: "no-store" })
+    const dayRows = dayRes.ok ? await dayRes.json() : []
+    const next: Record<string, string> = {}
+    ;(Array.isArray(dayRows) ? dayRows : []).forEach((r: any) => {
+      if (r?.studentId) next[String(r.studentId)] = String(r.status || "")
+    })
+    setAttendanceByStudent(next)
+  }
+
   async function saveStudentAttendance(studentId: string, status: "present" | "absent" | "sick" | "vacation") {
     if (!canEditAttendanceStudentsTab) return
     const prev = attendanceByStudent[studentId]
@@ -1117,9 +1137,7 @@ export default function CourseViewPage() {
             : ""
         throw new Error(msg || "Failed to save attendance")
       }
-      const allRes = await fetch(`/api/attendance?courseId=${id}`)
-      const allRows = allRes.ok ? await allRes.json() : []
-      setAttendanceList(Array.isArray(allRows) ? allRows : [])
+      await refreshAttendanceData()
     } catch (e) {
       const msg = e instanceof Error ? e.message : ""
       if (msg) window.alert(msg)
@@ -1149,21 +1167,7 @@ export default function CourseViewPage() {
           if (!res.ok) throw new Error("Failed to save bulk attendance")
         }),
       )
-      const allRes = await fetch(`/api/attendance?courseId=${id}`)
-      const allRows = allRes.ok ? await allRes.json() : []
-      setAttendanceList(Array.isArray(allRows) ? allRows : [])
-
-      let url = `/api/attendance?courseId=${id}&date=${attendanceDateForApi}`
-      if (teacherCampAttendanceMode && selectedCampCellId) {
-        url += `&campMeetingCellId=${encodeURIComponent(selectedCampCellId)}`
-      }
-      const dayRes = await fetch(url)
-      const dayRows = dayRes.ok ? await dayRes.json() : []
-      const next: Record<string, string> = {}
-      ;(Array.isArray(dayRows) ? dayRows : []).forEach((r: any) => {
-        if (r?.studentId) next[String(r.studentId)] = String(r.status || "")
-      })
-      setAttendanceByStudent(next)
+      await refreshAttendanceData()
       setIsBulkAttendanceOpen(false)
     } catch {
       // keep page behavior silent
@@ -1184,9 +1188,7 @@ export default function CourseViewPage() {
             : ""
         throw new Error(msg || "Failed to delete")
       }
-      const allRes = await fetch(`/api/attendance?courseId=${id}`)
-      const allRows = allRes.ok ? await allRes.json() : []
-      setAttendanceList(Array.isArray(allRows) ? allRows : [])
+      await refreshAttendanceData()
     } catch (e) {
       const msg = e instanceof Error ? e.message : ""
       if (msg) window.alert(msg)
