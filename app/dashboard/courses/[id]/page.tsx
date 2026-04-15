@@ -377,6 +377,12 @@ export default function CourseViewPage() {
         : locale === "en"
           ? "Delete this teacher attendance record?"
           : "למחוק את רשומת נוכחות המורה?",
+    duplicatePaymentConfirm:
+      locale === "ar"
+        ? "يوجد دفعة بنفس المبلغ ونفس التاريخ لهذا الطالب. هل تريد المتابعة على أي حال؟"
+        : locale === "en"
+          ? "A payment with the same amount and date already exists for this student. Do you want to continue anyway?"
+          : "קיים כבר תשלום עם אותו סכום ואותו תאריך לתלמיד הזה. האם לבצע בכל זאת?",
     sessionsFeedback: locale === "ar" ? "الجلسات والملاحظات" : locale === "en" ? "Sessions & Feedback" : "מפגשים ומשוב",
     newSession: locale === "ar" ? "מפגש חדש" : locale === "en" ? "New Session" : "מפגש חדש",
     sessionDate: locale === "ar" ? "تاريخ الجلسة" : locale === "en" ? "Session Date" : "תאריך מפגש",
@@ -1191,6 +1197,17 @@ export default function CourseViewPage() {
 
   async function addCoursePayment() {
     if (!canEditPaymentsTab || !payStudentId || !payAmount || Number(payAmount) <= 0) return
+    const amount = Number(payAmount)
+    const dateYmd = String(payDate || "").trim().split("T")[0]
+    const hasDuplicatePayment = paymentsForCourse.some((row) => {
+      const rowDateYmd = String(row.paymentDate || "").trim().split("T")[0]
+      return (
+        String(row.studentId || "") === String(payStudentId) &&
+        Number(row.amount || 0) === amount &&
+        rowDateYmd === dateYmd
+      )
+    })
+    if (hasDuplicatePayment && !window.confirm(tr.duplicatePaymentConfirm)) return
     setIsAddingPayment(true)
     try {
       const res = await fetch("/api/payments", {
@@ -1198,7 +1215,7 @@ export default function CourseViewPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           studentId: payStudentId,
-          amount: Number(payAmount),
+          amount,
           date: payDate,
           paymentMethod: payMethod,
           description: payDescription.trim() || `תשלום לקורס: ${course?.name || ""}`,
