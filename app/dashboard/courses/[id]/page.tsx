@@ -251,6 +251,26 @@ function compareTeacherAttendanceRows(
   return String(a.id).localeCompare(String(b.id))
 }
 
+function normalizeAttendanceStatus(raw: unknown): "present" | "absent" | "sick" | "vacation" | "" {
+  const s = String(raw ?? "").trim().toLowerCase()
+  if (s === "present" || s === "נוכח") return "present"
+  if (s === "absent" || s === "לא נוכח") return "absent"
+  if (s === "sick" || s === "חולה") return "sick"
+  if (s === "vacation" || s === "חופש") return "vacation"
+  return ""
+}
+
+function latestStudentStatusFromRows(rows: Array<Record<string, unknown>>): "present" | "absent" | "sick" | "vacation" | "" {
+  if (!Array.isArray(rows) || rows.length === 0) return ""
+  const sorted = [...rows].sort((a, b) => {
+    const ta = Date.parse(String(a.createdAt ?? a.updatedAt ?? a.date ?? ""))
+    const tb = Date.parse(String(b.createdAt ?? b.updatedAt ?? b.date ?? ""))
+    if (Number.isFinite(ta) && Number.isFinite(tb) && ta !== tb) return tb - ta
+    return String(b.id ?? "").localeCompare(String(a.id ?? ""))
+  })
+  return normalizeAttendanceStatus(sorted[0]?.status)
+}
+
 import { useCurrentUser } from "@/lib/auth-context"
 import {
   hasPermission,
@@ -957,9 +977,17 @@ export default function CourseViewPage() {
       .then((res) => (res.ok ? res.json() : []))
       .then((rows) => {
         const next: Record<string, string> = {}
+        const rowsByStudent = new Map<string, Record<string, unknown>[]>()
         ;(Array.isArray(rows) ? rows : []).forEach((r: any) => {
-          if (r?.studentId) next[String(r.studentId)] = String(r.status || "")
+          const sid = String(r?.studentId || "").trim()
+          if (!sid) return
+          if (!rowsByStudent.has(sid)) rowsByStudent.set(sid, [])
+          rowsByStudent.get(sid)!.push(r as Record<string, unknown>)
         })
+        for (const [sid, studentRows] of rowsByStudent.entries()) {
+          const status = latestStudentStatusFromRows(studentRows)
+          if (status) next[sid] = status
+        }
         setAttendanceByStudent(next)
       })
       .catch(() => setAttendanceByStudent({}))
@@ -1103,9 +1131,17 @@ export default function CourseViewPage() {
     const dayRes = await fetch(dayUrl, { cache: "no-store" })
     const dayRows = dayRes.ok ? await dayRes.json() : []
     const next: Record<string, string> = {}
+    const rowsByStudent = new Map<string, Record<string, unknown>[]>()
     ;(Array.isArray(dayRows) ? dayRows : []).forEach((r: any) => {
-      if (r?.studentId) next[String(r.studentId)] = String(r.status || "")
+      const sid = String(r?.studentId || "").trim()
+      if (!sid) return
+      if (!rowsByStudent.has(sid)) rowsByStudent.set(sid, [])
+      rowsByStudent.get(sid)!.push(r as Record<string, unknown>)
     })
+    for (const [sid, rows] of rowsByStudent.entries()) {
+      const status = latestStudentStatusFromRows(rows)
+      if (status) next[sid] = status
+    }
     setAttendanceByStudent(next)
   }
 
@@ -1316,14 +1352,24 @@ export default function CourseViewPage() {
       ? Number(course?.price || 0) / allowedAttendanceDates.length
       : Number(course?.price || 0)
   const presentDatesByStudent = new Map<string, Set<string>>()
+  const rowsByStudentAndDate = new Map<string, Record<string, unknown>[]>()
   for (const row of attendanceList) {
     const sid = String((row as any)?.studentId || "").trim()
     if (!sid) continue
-    const st = String((row as any)?.status || "").trim().toLowerCase()
-    if (!(st === "present" || st === "נוכח")) continue
     const ymd = String((row as any)?.date || "").trim().slice(0, 10)
     if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) continue
     if (scheduleDatesSet.size > 0 && !scheduleDatesSet.has(ymd)) continue
+    const key = `${sid}__${ymd}`
+    if (!rowsByStudentAndDate.has(key)) rowsByStudentAndDate.set(key, [])
+    rowsByStudentAndDate.get(key)!.push(row as unknown as Record<string, unknown>)
+  }
+  for (const [key, rows] of rowsByStudentAndDate.entries()) {
+    const latest = latestStudentStatusFromRows(rows)
+    if (latest !== "present") continue
+    const idx = key.indexOf("__")
+    if (idx <= 0) continue
+    const sid = key.slice(0, idx)
+    const ymd = key.slice(idx + 2)
     const set = presentDatesByStudent.get(sid) || new Set<string>()
     set.add(ymd)
     presentDatesByStudent.set(sid, set)
@@ -2409,11 +2455,7 @@ tr:nth-child(even) td{background:#f9fafb}
                           const ymd = /^\d{4}-\d{2}-\d{2}$/.test(head) ? head : ""
                           return String(r.studentId || "") === studentId && ymd === date
                         })
-                        if (rows.some((r) => String(r.status || "").toLowerCase() === "present")) return "present"
-                        if (rows.some((r) => String(r.status || "").toLowerCase() === "sick")) return "sick"
-                        if (rows.some((r) => String(r.status || "").toLowerCase() === "vacation")) return "vacation"
-                        if (rows.some((r) => String(r.status || "").toLowerCase() === "absent")) return "absent"
-                        return ""
+                        return latestStudentStatusFromRows(rows as Array<Record<string, unknown>>)
                       }
                       const lbl = (s: string) => (s === "present" ? "נוכח" : s === "absent" ? "לא נכח" : s === "sick" ? "חולה" : s === "vacation" ? "חופש" : "—")
                       const presentByDate = new Map<string, number>()
@@ -2573,10 +2615,11 @@ tr:nth-child(even) td{background:#f9fafb}
                     }
                     return true
                   })
-                  if (rows.some((r) => String(r.status || "").toLowerCase() === "present")) return "נוכח"
-                  if (rows.some((r) => String(r.status || "").toLowerCase() === "absent")) return "לא נכח"
-                  if (rows.some((r) => String(r.status || "").toLowerCase() === "sick")) return "חולה"
-                  if (rows.some((r) => String(r.status || "").toLowerCase() === "vacation")) return "חופש"
+                  const latest = latestStudentStatusFromRows(rows as Array<Record<string, unknown>>)
+                  if (latest === "present") return "נוכח"
+                  if (latest === "absent") return "לא נכח"
+                  if (latest === "sick") return "חולה"
+                  if (latest === "vacation") return "חופש"
                   return "—"
                 }
                 const studentRows = students
