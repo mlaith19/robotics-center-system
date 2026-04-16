@@ -1687,14 +1687,6 @@ export default function CourseViewPage() {
   const filteredCampUnassignedEnrollments = campUnassignedEnrollments.filter((enrollment) =>
     matchesStudentSearchText(enrollmentSearchText(enrollment), campGroupsQuery),
   )
-  const filteredSiblingPackageGroups = siblingPackageGroups
-    .map((group) => ({
-      ...group,
-      members: group.members.filter((member) =>
-        matchesStudentSearchText(enrollmentSearchText(member), siblingPackagesQuery),
-      ),
-    }))
-    .filter((group) => group.members.length > 0)
   const filteredPaymentsForCourse = paymentsForCourse.filter((row) => {
     const student = row.studentId ? studentsById.get(String(row.studentId)) : null
     const searchText = [
@@ -1756,6 +1748,14 @@ export default function CourseViewPage() {
       totalDue: members.reduce((sum, m) => sum + Number((m as any).coursePrice || 0), 0),
     }))
     .sort((a, b) => a.packageName.localeCompare(b.packageName, "he", { sensitivity: "base" }))
+  const filteredSiblingPackageGroups = siblingPackageGroups
+    .map((group) => ({
+      ...group,
+      members: group.members.filter((member) =>
+        matchesStudentSearchText(enrollmentSearchText(member), siblingPackagesQuery),
+      ),
+    }))
+    .filter((group) => group.members.length > 0)
   const canTabSiblingPackages = !isStudentUser && canTabStudents && siblingPackageGroups.length > 0
 
   const daysOfWeek = Array.isArray(course.daysOfWeek) ? course.daysOfWeek : []
