@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Building2, Save, Upload, X, Loader2, Hash, Settings2, FolderOpen, Plus, Pencil, Trash2, FileSpreadsheet, Banknote } from "lucide-react"
+import { Building2, Upload, X, Loader2, Hash, Settings2, FolderOpen, Plus, Pencil, Trash2, FileSpreadsheet, Banknote } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { useToast } from "@/hooks/use-toast"
 import { useLanguage } from "@/lib/i18n/context"
@@ -128,6 +128,9 @@ export default function SettingsPage() {
   })
   const [logoPreview, setLogoPreview] = useState<string>("")
   const [isSaving, setIsSaving] = useState(false)
+  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle")
+  const hasHydratedSettingsRef = useRef(false)
+  const lastSavedSettingsRef = useRef("")
   const [categoryDialog, setCategoryDialog] = useState<{ open: boolean; edit: CourseCategoryRow | null; name: string }>({ open: false, edit: null, name: "" })
   const [categorySaving, setCategorySaving] = useState(false)
   const [siblingDialog, setSiblingDialog] = useState<{
@@ -194,7 +197,7 @@ export default function SettingsPage() {
   })
 
   useEffect(() => {
-    if (settingsData && !error) {
+    if (settingsData && !error && !hasHydratedSettingsRef.current) {
       setSettings({
         id: settingsData.id,
         center_name: settingsData.center_name || "",
@@ -224,6 +227,11 @@ export default function SettingsPage() {
       if (settingsData.logo) {
         setLogoPreview(settingsData.logo)
       }
+      hasHydratedSettingsRef.current = true
+      lastSavedSettingsRef.current = JSON.stringify({
+        ...settingsData,
+        camp_classrooms_count: Number(settingsData.camp_classrooms_count || 6),
+      })
     }
   }, [settingsData, error])
 
@@ -245,7 +253,7 @@ export default function SettingsPage() {
     setSettings({ ...settings, logo: "" })
   }
 
-  const handleSave = async () => {
+  const handleSave = async (options?: { silent?: boolean }) => {
     setIsSaving(true)
     try {
       const response = await fetch("/api/settings", {
@@ -264,10 +272,12 @@ export default function SettingsPage() {
       const savedSettings = await response.json()
       mutate(savedSettings)
       
-      toast({
-        title: "ההגדרות נשמרו בהצלחה",
-        description: "פרטי המרכז עודכנו במערכת",
-      })
+      if (!options?.silent) {
+        toast({
+          title: "ההגדרות נשמרו בהצלחה",
+          description: "פרטי המרכז עודכנו במערכת",
+        })
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "אנא נסה שנית"
       toast({
@@ -279,6 +289,25 @@ export default function SettingsPage() {
       setIsSaving(false)
     }
   }
+
+  useEffect(() => {
+    if (!hasHydratedSettingsRef.current) return
+    const serialized = JSON.stringify(settings)
+    if (serialized === lastSavedSettingsRef.current) return
+
+    const timer = setTimeout(async () => {
+      setAutoSaveStatus("saving")
+      try {
+        await handleSave({ silent: true })
+        lastSavedSettingsRef.current = serialized
+        setAutoSaveStatus("saved")
+      } catch {
+        setAutoSaveStatus("error")
+      }
+    }, 800)
+
+    return () => clearTimeout(timer)
+  }, [settings])
 
   const openAddCategory = () => {
     setCategoryDialog({ open: true, edit: null, name: "" })
@@ -541,19 +570,15 @@ export default function SettingsPage() {
     <div className="container mx-auto max-w-7xl space-y-6 p-3 sm:space-y-8 sm:p-6" dir="rtl">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <PageHeader title="הגדרות" description="הגדרות מערכת ותצורה" />
-        <Button onClick={handleSave} className="w-full shrink-0 gap-2 sm:w-auto" disabled={isSaving}>
-          {isSaving ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              שומר...
-            </>
-          ) : (
-            <>
-              <Save className="h-4 w-4" />
-              שמור הגדרות
-            </>
-          )}
-        </Button>
+        <div className="text-sm text-muted-foreground">
+          {autoSaveStatus === "saving"
+            ? "שומר אוטומטית..."
+            : autoSaveStatus === "saved"
+              ? "נשמר אוטומטית"
+              : autoSaveStatus === "error"
+                ? "שגיאה בשמירה אוטומטית"
+                : "שמירה אוטומטית פעילה"}
+        </div>
       </div>
 
       <Tabs defaultValue="general" className="w-full" dir="rtl">
@@ -701,11 +726,8 @@ export default function SettingsPage() {
                   dir="rtl"
                 />
               </div>
-              <div className="flex flex-col-reverse border-t pt-4 sm:flex-row sm:justify-end">
-                <Button onClick={handleSave} className="w-full gap-2 sm:w-auto" disabled={isSaving}>
-                  {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  {isSaving ? "שומר..." : "שמור הגדרות"}
-                </Button>
+              <div className="border-t pt-4 text-right text-xs text-muted-foreground">
+                השינויים נשמרים אוטומטית.
               </div>
             </CardContent>
           </Card>
@@ -903,11 +925,8 @@ export default function SettingsPage() {
                   dir="rtl"
                 />
               </div>
-              <div className="flex flex-col-reverse border-t pt-4 sm:flex-row sm:justify-end">
-                <Button onClick={handleSave} className="w-full gap-2 sm:w-auto" disabled={isSaving}>
-                  {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  {isSaving ? "שומר..." : "שמור הגדרות"}
-                </Button>
+              <div className="border-t pt-4 text-right text-xs text-muted-foreground">
+                השינויים נשמרים אוטומטית.
               </div>
             </CardContent>
           </Card>
@@ -1106,11 +1125,8 @@ export default function SettingsPage() {
                   dir="rtl"
                 />
               </div>
-              <div className="flex flex-col-reverse border-t pt-4 sm:flex-row sm:justify-end">
-                <Button onClick={handleSave} className="w-full gap-2 sm:w-auto" disabled={isSaving}>
-                  {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  {isSaving ? "שומר..." : "שמור הגדרות"}
-                </Button>
+              <div className="border-t pt-4 text-right text-xs text-muted-foreground">
+                השינויים נשמרים אוטומטית.
               </div>
             </CardContent>
           </Card>

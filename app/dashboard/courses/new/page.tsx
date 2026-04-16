@@ -457,10 +457,10 @@ export default function NewCoursePage() {
       <Tabs defaultValue="general" className="w-full" dir={isRtl ? "rtl" : "ltr"}>
         <TabsList className="mb-4 grid w-full grid-cols-2 gap-2 sm:grid-cols-5" dir={isRtl ? "rtl" : "ltr"}>
           <TabsTrigger value="general" className={isRtl ? "text-right" : ""}>{l("כללי", "General", "عام")}</TabsTrigger>
-          <TabsTrigger value="settings" className={isRtl ? "text-right" : ""}>{l("הגדרות", "Settings", "الإعدادات")}</TabsTrigger>
-          <TabsTrigger value="teachers" className={isRtl ? "text-right" : ""}>{l("מורים", "Teachers", "المعلمون")}</TabsTrigger>
           <TabsTrigger value="schedule" className={isRtl ? "text-right" : ""}>{l("זמנים", "Schedule", "الجدول")}</TabsTrigger>
+          <TabsTrigger value="teachers" className={isRtl ? "text-right" : ""}>{l("מורים", "Teachers", "المعلمون")}</TabsTrigger>
           <TabsTrigger value="pricing" className={isRtl ? "text-right" : ""}>{l("תמחור", "Pricing", "التسعير")}</TabsTrigger>
+          <TabsTrigger value="settings" className={isRtl ? "text-right" : ""}>{l("הגדרות", "Settings", "الإعدادات")}</TabsTrigger>
         </TabsList>
 
       {/* סטטוס הקורס */}

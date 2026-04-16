@@ -503,24 +503,33 @@ export default function EditCoursePage() {
 
   return (
     <div dir={isRtl ? "rtl" : "ltr"} className="container mx-auto max-w-4xl space-y-4 p-3 sm:space-y-6 sm:p-6">
-      <div className="flex items-start gap-3">
-        <Link href="/dashboard/courses" className="shrink-0">
-          <Button variant="ghost" size="icon">
-            <ArrowRight className="h-5 w-5" />
-          </Button>
-        </Link>
-        <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-bold sm:text-3xl">{l("עריכת קורס", "Edit Course", "تعديل الدورة")}</h1>
-          <p className="mt-1 text-sm text-muted-foreground sm:text-base">{l("עדכן את פרטי הקורס", "Update course details", "حدّث تفاصيل الدورة")}</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {autoSaveStatus === "saving"
-              ? l("שומר אוטומטית...", "Auto-saving...", "حفظ تلقائي...")
-              : autoSaveStatus === "saved"
-                ? l("נשמר אוטומטית", "Auto-saved", "تم الحفظ تلقائياً")
-                : autoSaveStatus === "error"
-                  ? l("שגיאה בשמירה אוטומטית", "Auto-save failed", "فشل الحفظ التلقائي")
-                  : l("שמירה אוטומטית פעילה", "Auto-save enabled", "الحفظ التلقائي مفعّل")}
-          </p>
+      <div className="flex items-start justify-between gap-3">
+        <Button
+          type="button"
+          onClick={() => router.back()}
+          className="shrink-0 bg-blue-600 text-white hover:bg-blue-700"
+        >
+          {l("סגור", "Close", "إغلاق")}
+        </Button>
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <Link href="/dashboard/courses" className="shrink-0">
+            <Button variant="ghost" size="icon">
+              <ArrowRight className="h-5 w-5" />
+            </Button>
+          </Link>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-2xl font-bold sm:text-3xl">{l("עריכת קורס", "Edit Course", "تعديل الدورة")}</h1>
+            <p className="mt-1 text-sm text-muted-foreground sm:text-base">{l("עדכן את פרטי הקורס", "Update course details", "حدّث تفاصيل الدورة")}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {autoSaveStatus === "saving"
+                ? l("שומר אוטומטית...", "Auto-saving...", "حفظ تلقائي...")
+                : autoSaveStatus === "saved"
+                  ? l("נשמר אוטומטית", "Auto-saved", "تم الحفظ تلقائياً")
+                  : autoSaveStatus === "error"
+                    ? l("שגיאה בשמירה אוטומטית", "Auto-save failed", "فشل الحفظ التلقائي")
+                    : l("שמירה אוטומטית פעילה", "Auto-save enabled", "الحفظ التلقائي مفعّل")}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -533,22 +542,15 @@ export default function EditCoursePage() {
       <Tabs defaultValue="general" className="w-full" dir={isRtl ? "rtl" : "ltr"}>
         <TabsList className="mb-4 grid w-full grid-cols-2 gap-2 sm:grid-cols-5" dir={isRtl ? "rtl" : "ltr"}>
           <TabsTrigger value="general" className={isRtl ? "text-right" : ""}>{l("כללי", "General", "عام")}</TabsTrigger>
-          <TabsTrigger value="settings" className={isRtl ? "text-right" : ""}>{l("הגדרות", "Settings", "الإعدادات")}</TabsTrigger>
-          <TabsTrigger value="teachers" className={isRtl ? "text-right" : ""}>{l("מורים", "Teachers", "المعلمون")}</TabsTrigger>
           <TabsTrigger value="schedule" className={isRtl ? "text-right" : ""}>{l("זמנים", "Schedule", "الجدول")}</TabsTrigger>
+          <TabsTrigger value="teachers" className={isRtl ? "text-right" : ""}>{l("מורים", "Teachers", "المعلمون")}</TabsTrigger>
           <TabsTrigger value="pricing" className={isRtl ? "text-right" : ""}>{l("תמחור", "Pricing", "التسعير")}</TabsTrigger>
+          <TabsTrigger value="settings" className={isRtl ? "text-right" : ""}>{l("הגדרות", "Settings", "الإعدادات")}</TabsTrigger>
         </TabsList>
 
       {/* סטטוס הקורס */}
       <TabsContent value="general" dir={isRtl ? "rtl" : "ltr"}>
       <Card className="border-blue-200 bg-blue-50/50">
-        <CardHeader className="text-right">
-          <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
-            <MessageSquare className="h-5 w-5 text-blue-600" />
-            {l("סטטוס הקורס", "Course Status", "حالة الدورة")}
-          </CardTitle>
-          <CardDescription className="text-right">{l("בחר את סטטוס הקורס והגדרות בסיסיות", "Choose course status and basic settings", "اختر حالة الدورة والإعدادات الأساسية")}</CardDescription>
-        </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div className="space-y-2">
@@ -1235,11 +1237,6 @@ export default function EditCoursePage() {
       </Tabs>
 
       {/* כפתורים */}
-      <div className="flex gap-3 justify-start">
-        <Button variant="outline" onClick={() => router.back()} className="bg-transparent">
-          {l("סגור", "Close", "إغلاق")}
-        </Button>
-      </div>
     </div>
   )
 }
