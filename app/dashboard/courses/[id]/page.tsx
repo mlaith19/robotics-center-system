@@ -923,7 +923,7 @@ export default function CourseViewPage() {
     const fetchData = async () => {
       try {
         const [courseRes, teachersRes, enrollmentsRes, settingsRes, studentsRes] = await Promise.all([
-          fetch(`/api/courses/${id}`),
+          fetch(`/api/courses/${id}?_ts=${Date.now()}`, { cache: "no-store" }),
           fetch("/api/teachers"),
           fetch(`/api/enrollments?courseId=${id}&_ts=${Date.now()}`, { cache: "no-store" }),
           fetch("/api/settings"),

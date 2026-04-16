@@ -442,15 +442,26 @@ export default function NewCoursePage() {
 
   return (
     <div dir={isRtl ? "rtl" : "ltr"} className="container mx-auto max-w-4xl space-y-4 p-3 sm:space-y-6 sm:p-6">
-      <div className="flex items-start gap-3">
-        <Link href="/dashboard/courses" className="shrink-0">
-          <Button variant="ghost" size="icon">
-            <ArrowRight className="h-5 w-5" />
+      <div className="flex items-start justify-between gap-3" dir="ltr">
+        <div className="flex shrink-0 items-center gap-2">
+          <Button onClick={save} disabled={!formData.name.trim() || saving} className="gap-2 bg-primary text-white">
+            <Save className="h-4 w-4" />
+            {saving ? l("שומר...", "Saving...", "جارٍ الحفظ...") : l("שמור", "Save", "حفظ")}
           </Button>
-        </Link>
-        <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-bold sm:text-3xl">{l("קורס חדש", "New Course", "دورة جديدة")}</h1>
-          <p className="mt-1 text-sm text-muted-foreground sm:text-base">{l("הוסף קורס חדש למערכת הרובוטיקה", "Add a new course to the system", "أضف دورة جديدة إلى النظام")}</p>
+          <Button variant="outline" onClick={() => router.back()} className="bg-transparent">
+            {l("סגור", "Close", "إغلاق")}
+          </Button>
+        </div>
+        <div className="flex min-w-0 flex-1 items-start gap-3" dir={isRtl ? "rtl" : "ltr"}>
+          <Link href="/dashboard/courses" className="shrink-0">
+            <Button variant="ghost" size="icon">
+              <ArrowRight className="h-5 w-5" />
+            </Button>
+          </Link>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-2xl font-bold sm:text-3xl">{l("קורס חדש", "New Course", "دورة جديدة")}</h1>
+            <p className="mt-1 text-sm text-muted-foreground sm:text-base">{l("הוסף קורס חדש למערכת הרובוטיקה", "Add a new course to the system", "أضف دورة جديدة إلى النظام")}</p>
+          </div>
         </div>
       </div>
 
@@ -1244,16 +1255,6 @@ export default function NewCoursePage() {
   </TabsContent>
   </Tabs>
 
-      {/* כפתורים */}
-      <div className="flex gap-3 justify-start">
-        <Button onClick={save} disabled={!formData.name.trim() || saving} className="gap-2 bg-primary">
-          <Save className="h-4 w-4" />
-          {saving ? l("שומר...", "Saving...", "جارٍ الحفظ...") : l("הוסף קורס חדש", "Add New Course", "إضافة دورة جديدة")}
-        </Button>
-        <Button variant="outline" onClick={() => router.back()} className="bg-transparent">
-          {l("ביטול", "Cancel", "إلغاء")}
-        </Button>
-      </div>
     </div>
   )
 }

@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ArrowRight, BookOpen, Calendar, Users, MessageSquare, Loader2 } from "lucide-react"
+import { ArrowRight, BookOpen, Calendar, Users, MessageSquare, Loader2, Save } from "lucide-react"
 import { courseTimeToInputValue, normalizeCourseCalendarYmd } from "@/lib/course-db-fields"
 import { listCampSessionDates } from "@/lib/camp-kaytana"
 import { PerSessionPriceList } from "@/components/course/per-session-price-list"
@@ -108,8 +108,6 @@ export default function EditCoursePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  const [isFormReady, setIsFormReady] = useState(false)
-  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle")
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [schools, setSchools] = useState<School[]>([])
   const [gafanPrograms, setGafanPrograms] = useState<GafanProgram[]>([])
@@ -337,7 +335,6 @@ export default function EditCoursePage() {
         if (Array.isArray(categoryList)) setCourseCategories(categoryList)
         if (Array.isArray(siblingPackageList)) setSiblingPackages(siblingPackageList.filter((p: any) => p?.isActive !== false))
         if (Array.isArray(tariffList)) setTariffProfiles(tariffList)
-        setIsFormReady(true)
         setLoading(false)
       })
       .catch(err => {
@@ -477,6 +474,18 @@ export default function EditCoursePage() {
         const j = await res.json().catch(() => ({}))
         throw new Error(j?.error ?? `Failed (${res.status})`)
       }
+      const verifyRes = await fetch(`/api/courses/${id}?_ts=${Date.now()}`, {
+        credentials: "include",
+        cache: "no-store",
+      })
+      if (verifyRes.ok) {
+        const verifyCourse = await verifyRes.json().catch(() => null)
+        const savedStatus = String((verifyCourse as { status?: unknown })?.status || "").trim()
+        const expectedStatus = String(formData.status || "").trim()
+        if (savedStatus && expectedStatus && savedStatus !== expectedStatus) {
+          throw new Error("השינוי לא נשמר עדיין. נסה לשמור שוב.")
+        }
+      }
       if (navigateOnSuccess) {
         router.push("/dashboard/courses")
       }
@@ -489,17 +498,6 @@ export default function EditCoursePage() {
     }
   }
 
-  useEffect(() => {
-    if (loading || !isFormReady || saving) return
-    const timer = setTimeout(async () => {
-      setAutoSaveStatus("saving")
-      const ok = await save(false)
-      setAutoSaveStatus(ok ? "saved" : "error")
-    }, 800)
-
-    return () => clearTimeout(timer)
-  }, [loading, isFormReady, saving, formData, teacherTariffByTeacherId, sessionPricesByDate])
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
@@ -511,13 +509,24 @@ export default function EditCoursePage() {
   return (
     <div dir={isRtl ? "rtl" : "ltr"} className="container mx-auto max-w-4xl space-y-4 p-3 sm:space-y-6 sm:p-6">
       <div className="flex items-start justify-between gap-3" dir="ltr">
-        <Button
-          type="button"
-          onClick={() => router.back()}
-          className="shrink-0 bg-blue-600 text-white hover:bg-blue-700"
-        >
-          {l("סגור", "Close", "إغلاق")}
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            type="button"
+            onClick={save}
+            disabled={!formData.name.trim() || saving}
+            className="gap-2 bg-primary text-white"
+          >
+            <Save className="h-4 w-4" />
+            {saving ? l("שומר...", "Saving...", "جارٍ الحفظ...") : l("שמור", "Save", "حفظ")}
+          </Button>
+          <Button
+            type="button"
+            onClick={() => router.back()}
+            className="bg-blue-600 text-white hover:bg-blue-700"
+          >
+            {l("סגור", "Close", "إغلاق")}
+          </Button>
+        </div>
         <div className="flex min-w-0 flex-1 items-start gap-3" dir={isRtl ? "rtl" : "ltr"}>
           <Link href="/dashboard/courses" className="shrink-0">
             <Button variant="ghost" size="icon">
@@ -527,15 +536,6 @@ export default function EditCoursePage() {
           <div className="min-w-0 flex-1">
             <h1 className="text-2xl font-bold sm:text-3xl">{l("עריכת קורס", "Edit Course", "تعديل الدورة")}</h1>
             <p className="mt-1 text-sm text-muted-foreground sm:text-base">{l("עדכן את פרטי הקורס", "Update course details", "حدّث تفاصيل الدورة")}</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {autoSaveStatus === "saving"
-                ? l("שומר אוטומטית...", "Auto-saving...", "حفظ تلقائي...")
-                : autoSaveStatus === "saved"
-                  ? l("נשמר אוטומטית", "Auto-saved", "تم الحفظ تلقائياً")
-                  : autoSaveStatus === "error"
-                    ? l("שגיאה בשמירה אוטומטית", "Auto-save failed", "فشل الحفظ التلقائي")
-                    : l("שמירה אוטומטית פעילה", "Auto-save enabled", "الحفظ التلقائي مفعّل")}
-            </p>
           </div>
         </div>
       </div>
