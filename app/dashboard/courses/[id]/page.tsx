@@ -900,6 +900,7 @@ export default function CourseViewPage() {
       const res = await fetch(`/api/enrollments/${enrollmentId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ billingPlanChoice }),
       })
       if (!res.ok) return

@@ -119,7 +119,13 @@ export async function applySiblingAndAttendancePricingToEnrollmentRows(
     const pkg = packageId ? packagesMap.get(packageId) : undefined
 
     let effectivePrice = Number(r.coursePrice || 0)
-    const billingSelectionMode = String((r as Record<string, unknown>).billingPlanSelectionMode || "").trim()
+    const rawBillingSelectionMode = String((r as Record<string, unknown>).billingPlanSelectionMode || "").trim()
+    const billingSelectionMode =
+      rawBillingSelectionMode === "billing" || rawBillingSelectionMode === "pricing"
+        ? rawBillingSelectionMode
+        : (r as Record<string, unknown>).billingPlanChoice != null
+          ? "billing"
+          : ""
     const selectedBillingPlan = normalizeBillingPlan((r as Record<string, unknown>).billingPlanChoice ?? r.billingPlan)
     if (billingSelectionMode === "billing") {
       if (selectedBillingPlan === "summer") {
