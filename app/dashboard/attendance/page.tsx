@@ -57,8 +57,6 @@ export default function AttendancePage() {
   const isAdmin =
     hasFullAccessRole(currentUser?.roleKey) ||
     hasFullAccessRole(currentUser?.role)
-  const roleToken = (currentUser?.roleKey ?? currentUser?.role ?? "").toString().trim().toLowerCase()
-  const isTeacherSession = roleToken === "teacher" || roleToken.includes("teacher") || roleToken.includes("מורה")
   const [attendanceType, setAttendanceType] = useState<AttendanceType>("course")
   const [selectedId, setSelectedId] = useState<string>("")
   const [selectedCourseId, setSelectedCourseId] = useState<string>("") // For student type - which course
@@ -93,21 +91,8 @@ export default function AttendancePage() {
   const teachers = Array.isArray(rawTeachers) ? rawTeachers : []
   const courses  = Array.isArray(rawCourses)  ? rawCourses  : []
   const schoolNameById = new Map((Array.isArray(rawSchools) ? rawSchools : []).map((s) => [s.id, s.name]))
-  const teacherScopedCourseIds = Array.isArray(currentUser?.teacherCourseIds)
-    ? (currentUser?.teacherCourseIds as string[])
-    : null
-  const teacherScopedSchools = new Set(
-    (teacherScopedCourseIds
-      ? courses.filter((c) => teacherScopedCourseIds.includes(String(c.id)))
-      : courses
-    )
-      .map((c) => c.schoolId)
-      .filter((id): id is string => !!id)
-  )
   const availableSchools = schools.filter((school) =>
-    teacherScopedSchools.size > 0
-      ? teacherScopedSchools.has(school.id)
-      : courses.some((course) => (course.schoolId ?? null) === school.id)
+    courses.some((course) => (course.schoolId ?? null) === school.id)
   )
   const coursesForSelectedSchool =
     attendanceType === "school" && selectedId
@@ -386,9 +371,7 @@ export default function AttendancePage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="course">קורס</SelectItem>
-                    {(!isTeacherSession || availableSchools.length > 0) && (
-                      <SelectItem value="school">בתי ספר</SelectItem>
-                    )}
+                    <SelectItem value="school">בתי ספר</SelectItem>
                     {isAdmin && <SelectItem value="teacher">מורה</SelectItem>}
                     <SelectItem value="student">תלמיד</SelectItem>
                   </SelectContent>
