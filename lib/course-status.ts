@@ -1,4 +1,15 @@
 import type { Sql } from "postgres"
+async function ensureCourseManualStatusOverrideColumn(db: Sql): Promise<void> {
+  try {
+    await db.unsafe(`
+      ALTER TABLE "Course"
+      ADD COLUMN IF NOT EXISTS "statusManualOverride" boolean NOT NULL DEFAULT false
+    `)
+  } catch (e) {
+    console.warn("[course-status] ensure statusManualOverride column:", e)
+  }
+}
+
 
 function startOfTodayLocal(): Date {
   const n = new Date()
@@ -35,7 +46,9 @@ function isActiveLikeStatus(status: string | null | undefined): boolean {
 export function shouldTreatCourseAsCompleted(course: {
   status?: string | null
   endDate?: string | null
+  statusManualOverride?: boolean | null
 }): boolean {
+  if (course.statusManualOverride === true) return false
   const raw = (course.status || "").toString().trim()
   const s = raw.toLowerCase()
   if (s === "completed" || raw === "הושלם") return true
@@ -111,6 +124,7 @@ export function getCourseStatusPresentation(course: {
  */
 export async function runAutoCompleteExpiredCourses(db: Sql): Promise<void> {
   try {
+    await ensureCourseManualStatusOverrideColumn(db)
     await db.unsafe(`
       WITH completed_courses AS (
         UPDATE "Course"
@@ -120,6 +134,7 @@ export async function runAutoCompleteExpiredCourses(db: Sql): Promise<void> {
           AND LENGTH(TRIM("endDate")) >= 10
           AND LEFT(TRIM("endDate"), 10) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
           AND (LEFT(TRIM("endDate"), 10))::date < CURRENT_DATE
+          AND COALESCE("statusManualOverride", false) = false
           AND (
             LOWER(TRIM(COALESCE(status, ''))) IN ('active', '')
             OR TRIM(COALESCE(status, '')) = 'פעיל'

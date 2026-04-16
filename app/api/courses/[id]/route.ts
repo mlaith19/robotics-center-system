@@ -7,6 +7,7 @@ import { getCourseRegistrationVisibilityMap, setCourseRegistrationVisibility } f
 import { ensureSiblingDiscountTables } from "@/lib/sibling-discount"
 import { ensureTeacherTariffTables, loadCourseTeacherTariffMap, syncCourseTeacherTariffs } from "@/lib/teacher-tariff-profiles"
 import { ensureCourseBillingPlanColumns } from "@/lib/course-billing-plan"
+import { sessionRolesGrantFullAccess } from "@/lib/permissions"
 import {
   ensureCourseSessionPricesColumn,
   ensureCourseNoAttendanceChargeColumn,
@@ -41,6 +42,10 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
     await ensureCourseSessionPricesColumn(db)
     await ensureCourseNoAttendanceChargeColumn(db)
     await ensureCourseBillingPlanColumns(db)
+    await db.unsafe(`
+      ALTER TABLE "Course"
+      ADD COLUMN IF NOT EXISTS "statusManualOverride" boolean NOT NULL DEFAULT false
+    `)
     await runAutoCompleteExpiredCourses(db)
     const result = await db`
       SELECT
@@ -159,6 +164,11 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
           "billingPlanDiscountedLabel" = ${cleanStr(body.billingPlanDiscountedLabel)},
           "billingPlanPerSessionLabel" = ${cleanStr(body.billingPlanPerSessionLabel)},
           "billingPlanSelectionMode" = ${String(body.billingPlanSelectionMode || "").trim() === "billing" ? "billing" : "pricing"},
+          "statusManualOverride" = CASE
+            WHEN ${body.status !== undefined && sessionRolesGrantFullAccess(session.roleKey, session.role)}
+              THEN ${isCompletedStatusValue(body.status) ? false : true}
+            ELSE COALESCE("statusManualOverride", false)
+          END,
           "updatedAt" = ${now}
       WHERE id = ${id}
       RETURNING *
