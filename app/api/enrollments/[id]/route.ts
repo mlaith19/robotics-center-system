@@ -11,6 +11,10 @@ async function ensureEnrollmentBillingPlanColumn(db: any) {
       ALTER TABLE "Enrollment"
       ADD COLUMN IF NOT EXISTS "billingPlanChoice" TEXT
     `
+    await db`
+      ALTER TABLE "Enrollment"
+      ADD COLUMN IF NOT EXISTS "siblingDiscountDisabled" BOOLEAN NOT NULL DEFAULT false
+    `
   } catch (err) {
     console.warn("[enrollments/[id]] ensure billingPlanChoice skipped:", err)
   }
@@ -46,7 +50,7 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
     await ensureEnrollmentBillingPlanColumn(db)
     const { id } = await params
     const body   = await req.json()
-    const { sessionsLeft, status, campGroupLabel, campGroupId, billingPlanChoice } = body
+    const { sessionsLeft, status, campGroupLabel, campGroupId, billingPlanChoice, siblingDiscountDisabled } = body
 
     if (campGroupLabel !== undefined || campGroupId !== undefined) {
       const denied = requirePerm(session, "courses.edit")
@@ -92,6 +96,15 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
       const result = await db`
         UPDATE "Enrollment"
         SET "billingPlanChoice" = ${normalizedBillingPlanChoice}
+        WHERE id = ${id}
+        RETURNING *
+      `
+      return Response.json(result[0])
+    }
+    if (siblingDiscountDisabled !== undefined) {
+      const result = await db`
+        UPDATE "Enrollment"
+        SET "siblingDiscountDisabled" = ${siblingDiscountDisabled === true}
         WHERE id = ${id}
         RETURNING *
       `

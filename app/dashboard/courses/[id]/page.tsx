@@ -67,6 +67,7 @@ interface Enrollment {
   siblingRank?: number | null
   siblingRankLabel?: string | null
   siblingAmountForRank?: number | null
+  siblingDiscountDisabled?: boolean | null
   billingPlanChoice?: "summer" | "discounted" | "perSession" | null
   /** קבוצת אחים מ־Student — למיון רציף ברשימת נוכחות */
   siblingGroupId?: string | null
@@ -76,6 +77,12 @@ interface StudentOption {
   id: string
   name: string
   status?: string | null
+  idNumber?: string | null
+  father?: string | null
+  mother?: string | null
+  phone?: string | null
+  additionalPhone?: string | null
+  email?: string | null
 }
 
 interface CourseSessionFeedback {
@@ -187,6 +194,19 @@ function attendanceHoursToNumber(
   if (str === "—") return 0
   const n = Number(str)
   return Number.isNaN(n) || n < 0 ? 0 : n
+}
+
+function normalizeSearchText(raw: unknown): string {
+  return String(raw ?? "").toLowerCase().trim()
+}
+
+function matchesStudentSearchText(searchText: string, query: string): boolean {
+  const normalizedQuery = normalizeSearchText(query)
+  if (!normalizedQuery) return true
+  const haystack = normalizeSearchText(searchText)
+  if (!haystack) return false
+  const parts = normalizedQuery.split(/\s+/).filter(Boolean)
+  return parts.every((part) => haystack.includes(part))
 }
 
 const TEACHER_HOURS_CHIP_STYLES = [
@@ -461,6 +481,13 @@ export default function CourseViewPage() {
   const [enrollments, setEnrollments] = useState<Enrollment[]>([])
   const [students, setStudents] = useState<StudentOption[]>([])
   const [assignStudentsQuery, setAssignStudentsQuery] = useState("")
+  const [sessionsStudentsQuery, setSessionsStudentsQuery] = useState("")
+  const [studentsTabQuery, setStudentsTabQuery] = useState("")
+  const [campGroupsQuery, setCampGroupsQuery] = useState("")
+  const [siblingPackagesQuery, setSiblingPackagesQuery] = useState("")
+  const [paymentsQuery, setPaymentsQuery] = useState("")
+  const [debtorsQuery, setDebtorsQuery] = useState("")
+  const [attendanceStudentsQuery, setAttendanceStudentsQuery] = useState("")
   const [selectedStudentIdsToAssign, setSelectedStudentIdsToAssign] = useState<string[]>([])
   const [isAssigningStudents, setIsAssigningStudents] = useState(false)
   const [assignStudentsMessage, setAssignStudentsMessage] = useState<string | null>(null)
@@ -576,7 +603,9 @@ export default function CourseViewPage() {
   const [feedbackDrafts, setFeedbackDrafts] = useState<Record<string, Record<string, string>>>({})
   const [savingFeedbackBySession, setSavingFeedbackBySession] = useState<Record<string, boolean>>({})
   const [isAddPaymentOpen, setIsAddPaymentOpen] = useState(false)
+  const [payTargetMode, setPayTargetMode] = useState<"single" | "multi">("single")
   const [payStudentId, setPayStudentId] = useState("")
+  const [payStudentIds, setPayStudentIds] = useState<string[]>([])
   const [payAmount, setPayAmount] = useState("")
   const [payMethod, setPayMethod] = useState<"cash" | "credit" | "transfer" | "check" | "bit">("cash")
   const [payDate, setPayDate] = useState(() => new Date().toISOString().split("T")[0])
@@ -600,6 +629,35 @@ export default function CourseViewPage() {
     if (!q) return studentsAvailableToAssign
     return studentsAvailableToAssign.filter((s) => String(s.name || "").toLowerCase().includes(q))
   }, [studentsAvailableToAssign, assignStudentsQuery])
+  const studentsById = useMemo(
+    () => new Map(students.map((s) => [String(s.id), s])),
+    [students],
+  )
+
+  const studentSearchPlaceholder =
+    locale === "ar"
+      ? "بحث: اسم الطالب/العائلة/رقم الهوية..."
+      : locale === "en"
+        ? "Search student/family/ID..."
+        : "חיפוש תלמיד/משפחה/ת״ז..."
+
+  const enrollmentSearchText = (enrollment: Enrollment): string => {
+    const student = studentsById.get(String(enrollment.studentId || ""))
+    return [
+      enrollment.studentName,
+      student?.name,
+      student?.idNumber,
+      student?.father,
+      student?.mother,
+      student?.phone,
+      student?.additionalPhone,
+      student?.email,
+      enrollment.siblingDiscountPackageName,
+    ]
+      .map((v) => String(v || "").trim())
+      .filter(Boolean)
+      .join(" ")
+  }
 
   const campGroupTabsData = useMemo(() => {
     if (!isCampCourse) return [] as { label: string; members: Enrollment[] }[]
@@ -897,12 +955,35 @@ export default function CourseViewPage() {
   }
 
   async function saveEnrollmentBillingPlanChoice(enrollmentId: string, billingPlanChoice: "summer" | "discounted" | "perSession") {
+    const prevEnrollments = enrollments
+    setEnrollments((prev) =>
+      prev.map((e) => (String(e.id) === String(enrollmentId) ? { ...e, billingPlanChoice } : e)),
+    )
     try {
       const res = await fetch(`/api/enrollments/${enrollmentId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ billingPlanChoice }),
+      })
+      if (!res.ok) {
+        setEnrollments(prevEnrollments)
+        return
+      }
+      await loadCourseEnrollments()
+      await loadCoursePayments()
+    } catch {
+      setEnrollments(prevEnrollments)
+    }
+  }
+
+  async function saveEnrollmentSiblingDiscountDisabled(enrollmentId: string, disabled: boolean) {
+    try {
+      const res = await fetch(`/api/enrollments/${enrollmentId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ siblingDiscountDisabled: disabled }),
       })
       if (!res.ok) return
       await loadCourseEnrollments()
@@ -950,6 +1031,12 @@ export default function CourseViewPage() {
                   id: String(s.id || ""),
                   name: String(s.name || ""),
                   status: s.status ? String(s.status) : null,
+                  idNumber: s.idNumber ? String(s.idNumber) : null,
+                  father: s.father ? String(s.father) : null,
+                  mother: s.mother ? String(s.mother) : null,
+                  phone: s.phone ? String(s.phone) : null,
+                  additionalPhone: s.additionalPhone ? String(s.additionalPhone) : null,
+                  email: s.email ? String(s.email) : null,
                 }))
               : [],
           )
@@ -1303,36 +1390,76 @@ export default function CourseViewPage() {
   }
 
   async function addCoursePayment() {
-    if (!canEditPaymentsTab || !payStudentId || !payAmount || Number(payAmount) <= 0) return
+    if (!canEditPaymentsTab || !payAmount || Number(payAmount) <= 0) return
     const amount = Number(payAmount)
     const dateYmd = String(payDate || "").trim().split("T")[0]
-    const hasDuplicatePayment = paymentsForCourse.some((row) => {
-      const rowDateYmd = String(row.paymentDate || "").trim().split("T")[0]
-      return (
-        String(row.studentId || "") === String(payStudentId) &&
-        Number(row.amount || 0) === amount &&
-        rowDateYmd === dateYmd
-      )
-    })
-    if (hasDuplicatePayment && !window.confirm(tr.duplicatePaymentConfirm)) return
+    const targetStudentIds =
+      payTargetMode === "single"
+        ? [String(payStudentId || "").trim()].filter(Boolean)
+        : Array.from(new Set(payStudentIds.map((x) => String(x || "").trim()).filter(Boolean)))
+    if (targetStudentIds.length === 0) return
+
+    type Allocation = { studentId: string; amount: number }
+    const allocations: Allocation[] = []
+    if (payTargetMode === "single") {
+      const hasDuplicatePayment = paymentsForCourse.some((row) => {
+        const rowDateYmd = String(row.paymentDate || "").trim().split("T")[0]
+        return (
+          String(row.studentId || "") === String(targetStudentIds[0]) &&
+          Number(row.amount || 0) === amount &&
+          rowDateYmd === dateYmd
+        )
+      })
+      if (hasDuplicatePayment && !window.confirm(tr.duplicatePaymentConfirm)) return
+      allocations.push({ studentId: targetStudentIds[0], amount })
+    } else {
+      const balances = targetStudentIds.map((sid) => Math.max(0, Number(balanceByStudent.get(sid) || 0)))
+      const totalBalance = balances.reduce((s, n) => s + n, 0)
+      let remaining = Math.round(amount * 100) / 100
+      targetStudentIds.forEach((sid, idx) => {
+        let share = 0
+        if (idx === targetStudentIds.length - 1) {
+          share = remaining
+        } else if (totalBalance > 0) {
+          share = Math.round((amount * (balances[idx] / totalBalance)) * 100) / 100
+          if (share > remaining) share = remaining
+        } else {
+          share = Math.round((amount / targetStudentIds.length) * 100) / 100
+          if (share > remaining) share = remaining
+        }
+        remaining = Math.round((remaining - share) * 100) / 100
+        if (share > 0) allocations.push({ studentId: sid, amount: share })
+      })
+    }
+
     setIsAddingPayment(true)
     try {
-      const res = await fetch("/api/payments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          studentId: payStudentId,
-          courseId: id,
-          amount,
-          date: payDate,
-          paymentMethod: payMethod,
-          description: payDescription.trim() || `תשלום לקורס: ${course?.name || ""}`,
+      await Promise.all(
+        allocations.map(async (a) => {
+          const res = await fetch("/api/payments", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              studentId: a.studentId,
+              courseId: id,
+              amount: a.amount,
+              date: payDate,
+              paymentMethod: payMethod,
+              description:
+                payDescription.trim() ||
+                (payTargetMode === "multi"
+                  ? `תשלום מרוכז (${allocations.length} תלמידים): ${course?.name || ""}`
+                  : `תשלום לקורס: ${course?.name || ""}`),
+            }),
+          })
+          if (!res.ok) throw new Error("Failed to create payment")
         }),
-      })
-      if (!res.ok) throw new Error("Failed to create payment")
+      )
       await loadCoursePayments()
       setIsAddPaymentOpen(false)
+      setPayTargetMode("single")
       setPayStudentId("")
+      setPayStudentIds([])
       setPayAmount("")
       setPayMethod("cash")
       setPayDate(new Date().toISOString().split("T")[0])
@@ -1496,19 +1623,114 @@ export default function CourseViewPage() {
       enrollmentId: enrollment?.id || studentId,
       studentId,
       studentName: due.studentName,
+      siblingDiscountPackageName: String((enrollment as any)?.siblingDiscountPackageName || "").trim(),
+      siblingDiscountDisabled: (enrollment as any)?.siblingDiscountDisabled === true,
       totalDue: due.totalDue,
       paid,
       balance,
       billingPlanChoice: normalizeBillingPlanChoice(enrollment?.billingPlanChoice ?? (course as any)?.billingPlan),
     }
   })
+  const balanceByStudent = new Map<string, number>(
+    debtRowsAll.map((r) => [String(r.studentId), Number(r.balance || 0)]),
+  )
+  const paymentPreviewAllocations = useMemo(() => {
+    if (payTargetMode !== "multi") return [] as Array<{ studentId: string; studentName: string; amount: number }>
+    const total = Number(payAmount || 0)
+    if (!Number.isFinite(total) || total <= 0) return [] as Array<{ studentId: string; studentName: string; amount: number }>
+    const targetStudentIds = Array.from(new Set(payStudentIds.map((x) => String(x || "").trim()).filter(Boolean)))
+    if (targetStudentIds.length === 0) return [] as Array<{ studentId: string; studentName: string; amount: number }>
+
+    const balances = targetStudentIds.map((sid) => Math.max(0, Number(balanceByStudent.get(sid) || 0)))
+    const totalBalance = balances.reduce((s, n) => s + n, 0)
+    let remaining = Math.round(total * 100) / 100
+    return targetStudentIds.map((sid, idx) => {
+      let share = 0
+      if (idx === targetStudentIds.length - 1) {
+        share = remaining
+      } else if (totalBalance > 0) {
+        share = Math.round((total * (balances[idx] / totalBalance)) * 100) / 100
+        if (share > remaining) share = remaining
+      } else {
+        share = Math.round((total / targetStudentIds.length) * 100) / 100
+        if (share > remaining) share = remaining
+      }
+      remaining = Math.round((remaining - share) * 100) / 100
+      const studentName =
+        enrollments.find((e) => String(e.studentId || "") === sid)?.studentName ||
+        students.find((s) => String(s.id || "") === sid)?.name ||
+        "—"
+      return { studentId: sid, studentName, amount: Math.max(0, share) }
+    })
+  }, [payTargetMode, payAmount, payStudentIds, balanceByStudent, enrollments, students])
+  const canSubmitPayment =
+    payTargetMode === "single"
+      ? !!payStudentId && Number(payAmount || 0) > 0
+      : paymentPreviewAllocations.length > 0
   const debtRows = debtRowsAll
     .filter((r) => r.balance > 0.009)
     .sort((a, b) => b.balance - a.balance || a.studentName.localeCompare(b.studentName, "he"))
+  const filteredSessionFeedbackEnrollments = enrollments.filter((enrollment) =>
+    matchesStudentSearchText(enrollmentSearchText(enrollment), sessionsStudentsQuery),
+  )
+  const filteredStudentsTabEnrollments = enrollments.filter((enrollment) =>
+    matchesStudentSearchText(enrollmentSearchText(enrollment), studentsTabQuery),
+  )
+  const filteredCampGroupTabsData = campGroupTabsData
+    .map((group) => ({
+      ...group,
+      members: group.members.filter((enrollment) =>
+        matchesStudentSearchText(enrollmentSearchText(enrollment), campGroupsQuery),
+      ),
+    }))
+    .filter((group) => group.members.length > 0)
+  const filteredCampUnassignedEnrollments = campUnassignedEnrollments.filter((enrollment) =>
+    matchesStudentSearchText(enrollmentSearchText(enrollment), campGroupsQuery),
+  )
+  const filteredSiblingPackageGroups = siblingPackageGroups
+    .map((group) => ({
+      ...group,
+      members: group.members.filter((member) =>
+        matchesStudentSearchText(enrollmentSearchText(member), siblingPackagesQuery),
+      ),
+    }))
+    .filter((group) => group.members.length > 0)
+  const filteredPaymentsForCourse = paymentsForCourse.filter((row) => {
+    const student = row.studentId ? studentsById.get(String(row.studentId)) : null
+    const searchText = [
+      row.studentName,
+      row.description,
+      row.siblingDiscountPackageName,
+      student?.idNumber,
+      student?.father,
+      student?.mother,
+    ]
+      .map((v) => String(v || "").trim())
+      .filter(Boolean)
+      .join(" ")
+    return matchesStudentSearchText(searchText, paymentsQuery)
+  })
+  const filteredDebtRows = debtRows.filter((row) => {
+    const student = studentsById.get(String(row.studentId || ""))
+    const searchText = [
+      row.studentName,
+      row.siblingDiscountPackageName,
+      student?.idNumber,
+      student?.father,
+      student?.mother,
+    ]
+      .map((v) => String(v || "").trim())
+      .filter(Boolean)
+      .join(" ")
+    return matchesStudentSearchText(searchText, debtorsQuery)
+  })
+  const filteredAttendanceEnrollments = sortedEnrollmentsForAttendanceTab.filter((enrollment) =>
+    matchesStudentSearchText(enrollmentSearchText(enrollment), attendanceStudentsQuery),
+  )
   // כותרת חייבים מחושבת לפי העמודות של הטבלה המוצגת (רק תלמידים עם יתרה)
-  const debtRowsTotalDue = debtRows.reduce((sum, r) => sum + r.totalDue, 0)
-  const debtRowsTotalPaid = debtRows.reduce((sum, r) => sum + r.paid, 0)
-  const totalDebtAmount = debtRows.reduce((sum, r) => sum + r.balance, 0)
+  const debtRowsTotalDue = filteredDebtRows.reduce((sum, r) => sum + r.totalDue, 0)
+  const debtRowsTotalPaid = filteredDebtRows.reduce((sum, r) => sum + r.paid, 0)
+  const totalDebtAmount = filteredDebtRows.reduce((sum, r) => sum + r.balance, 0)
 
   const courseTeachers = teachers.filter(t => 
     course.teacherIds && course.teacherIds.includes(t.id)
@@ -1847,7 +2069,14 @@ export default function CourseViewPage() {
                       </div>
                     ) : (
                       <div className="space-y-3">
-                        {enrollments.map((enr) => (
+                        <Input
+                          value={sessionsStudentsQuery}
+                          onChange={(e) => setSessionsStudentsQuery(e.target.value)}
+                          placeholder={studentSearchPlaceholder}
+                          className="h-8 max-w-xs text-right"
+                          dir={isRtl ? "rtl" : "ltr"}
+                        />
+                        {filteredSessionFeedbackEnrollments.map((enr) => (
                           <div key={`${s.id}-${enr.studentId}`}>
                             <div className="text-sm mb-1">{enr.studentName}</div>
                             <Textarea
@@ -1881,12 +2110,12 @@ export default function CourseViewPage() {
         {!isStudentUser && canTabStudents && (
         <TabsContent value="students">
           {canEditCourses && statusPres.key !== "completed" && (
-          <Card className="mb-4">
+          <Card className="mb-4" dir={isRtl ? "rtl" : "ltr"}>
             <CardHeader
               className="cursor-pointer"
               onClick={() => setIsAssignStudentsCardOpen((prev) => !prev)}
             >
-              <div className="flex items-center justify-between">
+              <div className={`flex items-center justify-between ${isRtl ? "flex-row-reverse" : ""}`}>
                 <span className="text-sm text-muted-foreground">
                   {isAssignStudentsCardOpen ? tr.collapse : tr.expand}
                 </span>
@@ -1894,7 +2123,7 @@ export default function CourseViewPage() {
               </div>
             </CardHeader>
             {isAssignStudentsCardOpen && (
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-3 text-right">
               {studentsAvailableToAssign.length > 0 ? (
                 <>
                   <Input
@@ -1904,7 +2133,7 @@ export default function CourseViewPage() {
                     className="max-w-md text-right"
                     dir={isRtl ? "rtl" : "ltr"}
                   />
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className={`flex flex-wrap items-center gap-2 ${isRtl ? "flex-row-reverse justify-end" : ""}`}>
                     <Button
                       type="button"
                       variant="outline"
@@ -1935,7 +2164,7 @@ export default function CourseViewPage() {
                         return (
                           <label
                             key={student.id}
-                            className="flex cursor-pointer items-center justify-between rounded border px-3 py-2 hover:bg-muted/40"
+                            className={`flex cursor-pointer items-center justify-between rounded border px-3 py-2 hover:bg-muted/40 ${isRtl ? "flex-row-reverse" : ""}`}
                           >
                             <span className="font-medium">{student.name}</span>
                             <input
@@ -1983,6 +2212,15 @@ export default function CourseViewPage() {
             <CardContent>
               {enrollments.length > 0 ? (
                 <div className="overflow-x-auto rounded-md border">
+                  <div className="border-b p-2">
+                    <Input
+                      value={studentsTabQuery}
+                      onChange={(e) => setStudentsTabQuery(e.target.value)}
+                      placeholder={studentSearchPlaceholder}
+                      className="h-8 max-w-xs text-right"
+                      dir={isRtl ? "rtl" : "ltr"}
+                    />
+                  </div>
                   <Table className="min-w-[640px]">
                     <TableHeader>
                       <TableRow className="bg-muted/50">
@@ -1990,6 +2228,7 @@ export default function CourseViewPage() {
                         <TableHead className="text-right">{tr.status}</TableHead>
                         <TableHead className="text-right">{tr.enrollmentDate}</TableHead>
                         <TableHead className="text-right">{tr.siblingPackage}</TableHead>
+                        <TableHead className="text-right">תוכנית חיוב</TableHead>
                         <TableHead className="text-right">{tr.siblingRank}</TableHead>
                         <TableHead className="text-right">{tr.packageSource}</TableHead>
                         <TableHead className="text-right">{tr.performedBy}</TableHead>
@@ -2001,7 +2240,7 @@ export default function CourseViewPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {enrollments.map((enrollment) => (
+                      {filteredStudentsTabEnrollments.map((enrollment) => (
                         <TableRow key={enrollment.id}>
                           <TableCell className="font-medium text-right">{enrollment.studentName || (locale === "en" ? "Unknown student" : locale === "ar" ? "طالب غير معروف" : "תלמיד לא ידוע")}</TableCell>
                           <TableCell className="text-right">
@@ -2013,6 +2252,37 @@ export default function CourseViewPage() {
                             {enrollment.enrollmentDate ? new Date(enrollment.enrollmentDate).toLocaleDateString(localeTag) : "-"}
                           </TableCell>
                           <TableCell className="text-right text-muted-foreground">{enrollment.siblingDiscountPackageName || "—"}</TableCell>
+                          <TableCell className="text-right">
+                            {String((course as any)?.billingPlanSelectionMode || "").trim() === "billing" && canTabDebtors && statusPres.key !== "completed" ? (
+                              <Select
+                                value={
+                                  enrollment.billingPlanChoice === "discounted" || enrollment.billingPlanChoice === "perSession"
+                                    ? enrollment.billingPlanChoice
+                                    : "summer"
+                                }
+                                onValueChange={(v: "summer" | "discounted" | "perSession") =>
+                                  saveEnrollmentBillingPlanChoice(enrollment.id, v)
+                                }
+                              >
+                                <SelectTrigger className="w-[min(100%,220px)]">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="summer">תוכנית קיץ</SelectItem>
+                                  <SelectItem value="discounted">תוכנית מוזלת</SelectItem>
+                                  <SelectItem value="perSession">לפי מפגש</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <span className="text-muted-foreground">
+                                {enrollment.billingPlanChoice === "discounted"
+                                  ? "תוכנית מוזלת"
+                                  : enrollment.billingPlanChoice === "perSession"
+                                    ? "לפי מפגש"
+                                    : "תוכנית קיץ"}
+                              </span>
+                            )}
+                          </TableCell>
                           <TableCell className="text-right text-muted-foreground">{enrollment.siblingRankLabel || "—"}</TableCell>
                           <TableCell className="text-right text-muted-foreground">
                             {enrollment.siblingDiscountPackageSource === "course"
@@ -2084,8 +2354,17 @@ export default function CourseViewPage() {
                     dir={isRtl ? "rtl" : "ltr"}
                   >
                     <div className="-mx-1 overflow-x-auto px-1 pb-2 sm:mx-0 sm:px-0">
+                      <div className="mb-3 px-1">
+                        <Input
+                          value={campGroupsQuery}
+                          onChange={(e) => setCampGroupsQuery(e.target.value)}
+                          placeholder={studentSearchPlaceholder}
+                          className="h-8 max-w-xs text-right"
+                          dir={isRtl ? "rtl" : "ltr"}
+                        />
+                      </div>
                       <TabsList className="inline-flex h-auto min-h-9 w-max max-w-full flex-wrap justify-start gap-1 p-1">
-                        {campGroupTabsData.map(({ label, members }) => (
+                        {filteredCampGroupTabsData.map(({ label, members }) => (
                           <TabsTrigger
                             key={label}
                             value={label}
@@ -2099,21 +2378,21 @@ export default function CourseViewPage() {
                             </Badge>
                           </TabsTrigger>
                         ))}
-                        {campUnassignedEnrollments.length > 0 && (
+                        {filteredCampUnassignedEnrollments.length > 0 && (
                           <TabsTrigger
                             value="__unassigned__"
                             className="gap-1.5 px-3 py-2 data-[state=active]:shadow-sm"
                           >
                             <span className="font-medium">{tr.unassignedCampGroup}</span>
                             <Badge variant="secondary" className="tabular-nums">
-                              {campUnassignedEnrollments.length}
+                              {filteredCampUnassignedEnrollments.length}
                             </Badge>
                           </TabsTrigger>
                         )}
                       </TabsList>
                     </div>
 
-                    {campGroupTabsData.map(({ label, members }) => (
+                    {filteredCampGroupTabsData.map(({ label, members }) => (
                       <TabsContent key={label} value={label} className="mt-4 space-y-3">
                         <p className="text-sm text-muted-foreground">
                           {tr.studentsInGroup}:{" "}
@@ -2174,12 +2453,12 @@ export default function CourseViewPage() {
                       </TabsContent>
                     ))}
 
-                    {campUnassignedEnrollments.length > 0 && (
+                    {filteredCampUnassignedEnrollments.length > 0 && (
                       <TabsContent value="__unassigned__" className="mt-4 space-y-3">
                         <p className="text-sm text-muted-foreground">
                           {tr.studentsInGroup}:{" "}
                           <span className="font-semibold text-foreground">
-                            {campUnassignedEnrollments.length}
+                            {filteredCampUnassignedEnrollments.length}
                           </span>
                         </p>
                         <div className="overflow-x-auto rounded-md border">
@@ -2192,7 +2471,7 @@ export default function CourseViewPage() {
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {campUnassignedEnrollments.map((enrollment) => (
+                              {filteredCampUnassignedEnrollments.map((enrollment) => (
                                 <TableRow key={enrollment.id}>
                                   <TableCell className="text-right font-medium">
                                     <Link
@@ -2246,10 +2525,17 @@ export default function CourseViewPage() {
                 <CardTitle className="text-lg">{tr.siblingPackagesTab}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {siblingPackageGroups.length === 0 ? (
+                <Input
+                  value={siblingPackagesQuery}
+                  onChange={(e) => setSiblingPackagesQuery(e.target.value)}
+                  placeholder={studentSearchPlaceholder}
+                  className="h-8 max-w-xs text-right"
+                  dir={isRtl ? "rtl" : "ltr"}
+                />
+                {filteredSiblingPackageGroups.length === 0 ? (
                   <p className="py-8 text-center text-muted-foreground">{tr.noSiblingPackagesLinked}</p>
                 ) : (
-                  siblingPackageGroups.map((group) => (
+                  filteredSiblingPackageGroups.map((group) => (
                     <div key={group.packageName} className="rounded-lg border p-3">
                       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                         <h3 className="text-base font-semibold">{group.packageName}</h3>
@@ -2363,6 +2649,13 @@ export default function CourseViewPage() {
               <div className="text-center text-muted-foreground">
                 {tr.paymentInfoPlaceholder}
               </div>
+              <Input
+                value={paymentsQuery}
+                onChange={(e) => setPaymentsQuery(e.target.value)}
+                placeholder={studentSearchPlaceholder}
+                className="h-8 max-w-xs text-right"
+                dir={isRtl ? "rtl" : "ltr"}
+              />
               <div className="overflow-x-auto rounded-md border">
                 <Table className="min-w-[980px]">
                   <TableHeader>
@@ -2376,7 +2669,7 @@ export default function CourseViewPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paymentsForCourse.length > 0 ? paymentsForCourse.map((p) => (
+                    {filteredPaymentsForCourse.length > 0 ? filteredPaymentsForCourse.map((p) => (
                       <TableRow key={p.id}>
                         <TableCell className="text-right">{p.studentName || "—"}</TableCell>
                         <TableCell className="text-right">{p.paymentDate ? new Date(p.paymentDate).toLocaleDateString(localeTag) : "—"}</TableCell>
@@ -2404,19 +2697,58 @@ export default function CourseViewPage() {
               </DialogHeader>
               <div className="space-y-3">
                 <div>
-                  <div className="mb-1 text-sm text-muted-foreground">תלמיד משויך</div>
-                  <Select value={payStudentId} onValueChange={setPayStudentId}>
+                  <div className="mb-1 text-sm text-muted-foreground">סוג יעד לתשלום</div>
+                  <Select value={payTargetMode} onValueChange={(v: "single" | "multi") => setPayTargetMode(v)}>
                     <SelectTrigger>
-                      <SelectValue placeholder="בחר תלמיד" />
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {enrollments.map((e) => (
-                        <SelectItem key={e.studentId} value={e.studentId}>
-                          {e.studentName || "—"}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="single">תלמיד יחיד</SelectItem>
+                      <SelectItem value="multi">מספר תלמידים</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                <div>
+                  <div className="mb-1 text-sm text-muted-foreground">
+                    {payTargetMode === "single" ? "תלמיד משויך" : "תלמידים לתשלום מרוכז"}
+                  </div>
+                  {payTargetMode === "single" ? (
+                    <Select value={payStudentId} onValueChange={setPayStudentId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="בחר תלמיד" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {enrollments.map((e) => (
+                          <SelectItem key={e.studentId} value={e.studentId}>
+                            {e.studentName || "—"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border p-2">
+                      {enrollments.map((e) => {
+                        const sid = String(e.studentId || "")
+                        const isSelected = payStudentIds.includes(sid)
+                        return (
+                          <button
+                            key={sid}
+                            type="button"
+                            className={`w-full rounded-md border px-3 py-2 text-right text-sm ${
+                              isSelected ? "border-primary bg-primary/10" : "border-border hover:bg-muted/50"
+                            }`}
+                            onClick={() =>
+                              setPayStudentIds((prev) =>
+                                prev.includes(sid) ? prev.filter((x) => x !== sid) : [...prev, sid],
+                              )
+                            }
+                          >
+                            {e.studentName || "—"}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -2447,7 +2779,37 @@ export default function CourseViewPage() {
                   <div className="mb-1 text-sm text-muted-foreground">תיאור</div>
                   <Input value={payDescription} onChange={(e) => setPayDescription(e.target.value)} placeholder={`תשלום לקורס: ${course?.name || ""}`} />
                 </div>
-                <Button className="w-full bg-emerald-600 hover:bg-emerald-700" onClick={addCoursePayment} disabled={isAddingPayment}>
+                {payTargetMode === "multi" && (
+                  <div className="space-y-2 rounded-md border p-3">
+                    <div className="text-sm font-medium">תצוגה מקדימה לחלוקה</div>
+                    {paymentPreviewAllocations.length > 0 ? (
+                      <>
+                        <div className="space-y-1 text-sm">
+                          {paymentPreviewAllocations.map((row) => (
+                            <div key={row.studentId} className="flex items-center justify-between">
+                              <span className="text-muted-foreground">{row.studentName}</span>
+                              <span className="font-medium">₪{row.amount.toLocaleString()}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="border-t pt-2 text-sm font-semibold flex items-center justify-between">
+                          <span>סה"כ חלוקה</span>
+                          <span>
+                            ₪
+                            {paymentPreviewAllocations
+                              .reduce((sum, row) => sum + Number(row.amount || 0), 0)
+                              .toLocaleString()}
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">
+                        בחר תלמידים וסכום כדי לראות חלוקה.
+                      </div>
+                    )}
+                  </div>
+                )}
+                <Button className="w-full bg-emerald-600 hover:bg-emerald-700" onClick={addCoursePayment} disabled={isAddingPayment || !canSubmitPayment}>
                   {isAddingPayment ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                   שמירת תשלום
                 </Button>
@@ -2511,11 +2873,19 @@ export default function CourseViewPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-2 pt-0">
+              <Input
+                value={debtorsQuery}
+                onChange={(e) => setDebtorsQuery(e.target.value)}
+                placeholder={studentSearchPlaceholder}
+                className="h-8 max-w-xs text-right"
+                dir={isRtl ? "rtl" : "ltr"}
+              />
               <div className="overflow-x-auto rounded-md border">
                 <Table className="min-w-[760px]">
                   <TableHeader>
                     <TableRow className="bg-muted/50">
                       <TableHead className="text-right">{tr.student}</TableHead>
+                      <TableHead className="text-right">חבילה</TableHead>
                       <TableHead className="text-right">תוכנית חיוב</TableHead>
                       <TableHead className="text-right">סה&quot;כ לתשלום</TableHead>
                       <TableHead className="text-right">שולם</TableHead>
@@ -2523,9 +2893,36 @@ export default function CourseViewPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {debtRows.length > 0 ? debtRows.map((r) => (
+                    {filteredDebtRows.length > 0 ? filteredDebtRows.map((r) => (
                       <TableRow key={r.enrollmentId}>
                         <TableCell className="text-right">{r.studentName}</TableCell>
+                        <TableCell className="text-right">
+                          {r.siblingDiscountPackageName ? (
+                            <div className="flex flex-col items-end gap-1">
+                              <span className={r.siblingDiscountDisabled ? "text-muted-foreground line-through" : ""}>
+                                {r.siblingDiscountPackageName}
+                              </span>
+                              {canTabDebtors && statusPres.key !== "completed" ? (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={r.siblingDiscountDisabled ? "default" : "outline"}
+                                  className="h-7 px-2 text-xs"
+                                  onClick={() =>
+                                    saveEnrollmentSiblingDiscountDisabled(
+                                      r.enrollmentId,
+                                      !r.siblingDiscountDisabled,
+                                    )
+                                  }
+                                >
+                                  {r.siblingDiscountDisabled ? "הפעל חבילה" : "בטל חבילה"}
+                                </Button>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-right">
                           {String((course as any)?.billingPlanSelectionMode || "").trim() === "billing" && canTabDebtors && statusPres.key !== "completed" ? (
                             <Select
@@ -2559,7 +2956,7 @@ export default function CourseViewPage() {
                       </TableRow>
                     )) : (
                       <TableRow>
-                        <TableCell className="text-center text-muted-foreground" colSpan={5}>
+                        <TableCell className="text-center text-muted-foreground" colSpan={6}>
                           אין תלמידים עם חוב בקורס זה
                         </TableCell>
                       </TableRow>
@@ -2778,21 +3175,28 @@ tr:nth-child(even) td{background:#f9fafb}
               ) : null}
             </CardHeader>
             <CardContent>
+              <Input
+                value={attendanceStudentsQuery}
+                onChange={(e) => setAttendanceStudentsQuery(e.target.value)}
+                placeholder={studentSearchPlaceholder}
+                className="mb-3 h-8 max-w-xs text-right"
+                dir={isRtl ? "rtl" : "ltr"}
+              />
               {(() => {
-                const total = enrollmentsForAttendanceTab.length
-                const present = enrollmentsForAttendanceTab.filter((e) => {
+                const total = filteredAttendanceEnrollments.length
+                const present = filteredAttendanceEnrollments.filter((e) => {
                   const st = attendanceByStudent[e.studentId]
                   return st === "present" || st === "PRESENT"
                 }).length
-                const absent = enrollmentsForAttendanceTab.filter((e) => {
+                const absent = filteredAttendanceEnrollments.filter((e) => {
                   const st = attendanceByStudent[e.studentId]
                   return st === "absent" || st === "ABSENT"
                 }).length
-                const sick = enrollmentsForAttendanceTab.filter((e) => {
+                const sick = filteredAttendanceEnrollments.filter((e) => {
                   const st = attendanceByStudent[e.studentId]
                   return st === "sick" || st === "SICK"
                 }).length
-                const vacation = enrollmentsForAttendanceTab.filter((e) => {
+                const vacation = filteredAttendanceEnrollments.filter((e) => {
                   const st = attendanceByStudent[e.studentId]
                   return st === "vacation" || st === "VACATION"
                 }).length
@@ -2816,7 +3220,7 @@ tr:nth-child(even) td{background:#f9fafb}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sortedEnrollmentsForAttendanceTab.length > 0 ? sortedEnrollmentsForAttendanceTab.map((enrollment) => (
+                    {filteredAttendanceEnrollments.length > 0 ? filteredAttendanceEnrollments.map((enrollment) => (
                       <TableRow key={enrollment.id}>
                         <TableCell className="max-w-[40%] break-words text-right font-medium sm:max-w-none">{enrollment.studentName || "—"}</TableCell>
                         <TableCell className="align-top">
@@ -2840,7 +3244,7 @@ tr:nth-child(even) td{background:#f9fafb}
               </div>
               {(() => {
                 const dates = [...allowedAttendanceDates].sort((a, b) => a.localeCompare(b))
-                const students = [...sortedEnrollmentsForAttendanceTab]
+                const students = [...filteredAttendanceEnrollments]
                 const statusFor = (studentId: string, date: string) => {
                   const rows = attendanceList.filter((r) => {
                     const head = String(r.date ?? "").trim().slice(0, 10)
@@ -2979,7 +3383,7 @@ tr:nth-child(even) td{background:#f9fafb}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {sortedEnrollmentsForAttendanceTab.map((enrollment) => {
+                      {filteredAttendanceEnrollments.map((enrollment) => {
                         const selected = bulkAttendanceByStudent[enrollment.studentId] || ""
                         const itemBtn = (
                           status: "present" | "absent" | "sick" | "vacation",

@@ -100,6 +100,57 @@ export async function applySiblingAndAttendancePricingToEnrollmentRows(
   }
 
   const rankCache = new Map<string, number | null>()
+  const effectiveRankByStudentCourse = new Map<string, number>()
+  const groupedRows: Array<{
+    studentId: string
+    courseId: string
+    packageId: string
+    groupId: string
+    studentName: string
+  }> = []
+  for (const r of rows) {
+    const studentIdVal = String(r.studentId || "").trim()
+    const courseIdVal = String(r.courseId || "").trim()
+    if (!studentIdVal || !courseIdVal) continue
+    const disabled = (r as Record<string, unknown>).siblingDiscountDisabled === true
+    if (disabled) continue
+    const coursePackageId = r.siblingDiscountPackageId ? String(r.siblingDiscountPackageId) : null
+    const studentPackageId = packageByStudent.get(studentIdVal) || null
+    const allowStudentSiblingDiscount = courseAllowStudentSiblingDiscountMap.get(courseIdVal) !== false
+    const packageId = coursePackageId || (allowStudentSiblingDiscount ? studentPackageId : null)
+    if (!packageId || !packagesMap.has(packageId)) continue
+    const groupId = groupByStudent.get(studentIdVal) || ""
+    if (!groupId) continue
+    groupedRows.push({
+      studentId: studentIdVal,
+      courseId: courseIdVal,
+      packageId,
+      groupId,
+      studentName: String((r as Record<string, unknown>).studentName || ""),
+    })
+  }
+  for (const g of groupedRows) {
+    if (rankCache.has(g.studentId)) continue
+    const baseRank = await getSiblingRank(db, g.studentId)
+    rankCache.set(g.studentId, baseRank)
+  }
+  const groupedByKey = new Map<string, typeof groupedRows>()
+  for (const g of groupedRows) {
+    const key = `${g.courseId}|${g.packageId}|${g.groupId}`
+    if (!groupedByKey.has(key)) groupedByKey.set(key, [])
+    groupedByKey.get(key)!.push(g)
+  }
+  for (const members of groupedByKey.values()) {
+    const sorted = [...members].sort((a, b) => {
+      const ra = rankCache.get(a.studentId) ?? 9999
+      const rb = rankCache.get(b.studentId) ?? 9999
+      if (ra !== rb) return ra - rb
+      return a.studentName.localeCompare(b.studentName, "he", { sensitivity: "base" })
+    })
+    sorted.forEach((m, idx) => {
+      effectiveRankByStudentCourse.set(`${m.studentId}|${m.courseId}`, idx + 1)
+    })
+  }
   const finalRows: Record<string, unknown>[] = []
 
   const normalizeBillingPlan = (raw: unknown): "summer" | "discounted" | "perSession" => {
@@ -116,7 +167,8 @@ export async function applySiblingAndAttendancePricingToEnrollmentRows(
     const studentPackageId = packageByStudent.get(studentIdVal) || null
     const allowStudentSiblingDiscount = courseAllowStudentSiblingDiscountMap.get(courseIdVal) !== false
     const packageId = coursePackageId || (allowStudentSiblingDiscount ? studentPackageId : null)
-    const pkg = packageId ? packagesMap.get(packageId) : undefined
+    const siblingDiscountDisabled = (r as Record<string, unknown>).siblingDiscountDisabled === true
+    const pkg = !siblingDiscountDisabled && packageId ? packagesMap.get(packageId) : undefined
 
     let effectivePrice = Number(r.coursePrice || 0)
     const rawBillingSelectionMode = String((r as Record<string, unknown>).billingPlanSelectionMode || "").trim()
@@ -170,14 +222,15 @@ export async function applySiblingAndAttendancePricingToEnrollmentRows(
       } else {
         effectivePrice = perSessionSummary.attendedChargeSum
       }
-    } else if (perSessionSummary !== null) {
+    } else if (perSessionSummary !== null && billingSelectionMode !== "billing") {
       effectivePrice = perSessionSummary.attendedChargeSum
     }
 
     if (pkg && studentIdVal) {
       siblingDiscountPackageName = String(pkg.name || "")
       siblingDiscountPackageSource = coursePackageId ? "course" : studentPackageId ? "student" : null
-      let rank = rankCache.get(studentIdVal)
+      let rank = effectiveRankByStudentCourse.get(`${studentIdVal}|${courseIdVal}`) ?? null
+      if (rank == null) rank = rankCache.get(studentIdVal) ?? null
       if (rank === undefined) {
         rank = await getSiblingRank(db, studentIdVal)
         rankCache.set(studentIdVal, rank)
@@ -230,6 +283,7 @@ export async function applySiblingAndAttendancePricingToEnrollmentRows(
       siblingRankLabel,
       siblingAmountForRank,
       siblingGroupId: siblingGroupIdOut,
+      siblingDiscountDisabled,
       billingPlanChoice: billingSelectionMode === "billing" ? selectedBillingPlan : null,
     })
   }

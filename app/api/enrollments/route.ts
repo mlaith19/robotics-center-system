@@ -47,6 +47,12 @@ async function ensureEnrollmentBillingPlanColumn(db: any) {
       ADD COLUMN IF NOT EXISTS "billingPlanChoice" TEXT
     `,
   )
+  await safe(
+    db`
+      ALTER TABLE "Enrollment"
+      ADD COLUMN IF NOT EXISTS "siblingDiscountDisabled" BOOLEAN NOT NULL DEFAULT false
+    `,
+  )
 }
 
 export const GET = withTenantAuth(async (req, session) => {
@@ -63,7 +69,7 @@ export const GET = withTenantAuth(async (req, session) => {
   const runWithUserJoin = async () => {
     if (schoolIdParam) {
       return db`
-        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice", u.name as "createdByUserName"
+        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice", c."billingPlanSelectionMode", u.name as "createdByUserName"
         FROM "Enrollment" e
         LEFT JOIN "Student" s ON e."studentId" = s.id
         LEFT JOIN "Course" c ON e."courseId" = c.id
@@ -74,7 +80,7 @@ export const GET = withTenantAuth(async (req, session) => {
     }
     if (courseId && studentId) {
       return db`
-        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice", u.name as "createdByUserName"
+        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice", c."billingPlanSelectionMode", u.name as "createdByUserName"
         FROM "Enrollment" e
         LEFT JOIN "Student" s ON e."studentId" = s.id
         LEFT JOIN "Course" c ON e."courseId" = c.id
@@ -85,7 +91,7 @@ export const GET = withTenantAuth(async (req, session) => {
     }
     if (courseId) {
       return db`
-        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice", u.name as "createdByUserName"
+        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice", c."billingPlanSelectionMode", u.name as "createdByUserName"
         FROM "Enrollment" e
         LEFT JOIN "Student" s ON e."studentId" = s.id
         LEFT JOIN "Course" c ON e."courseId" = c.id
@@ -96,7 +102,7 @@ export const GET = withTenantAuth(async (req, session) => {
     }
     if (studentId) {
       return db`
-        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice", u.name as "createdByUserName"
+        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice", c."billingPlanSelectionMode", u.name as "createdByUserName"
         FROM "Enrollment" e
         LEFT JOIN "Student" s ON e."studentId" = s.id
         LEFT JOIN "Course" c ON e."courseId" = c.id
@@ -106,7 +112,7 @@ export const GET = withTenantAuth(async (req, session) => {
       `
     }
     return db`
-      SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice", u.name as "createdByUserName"
+      SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice", c."billingPlanSelectionMode", u.name as "createdByUserName"
       FROM "Enrollment" e
       LEFT JOIN "Student" s ON e."studentId" = s.id
       LEFT JOIN "Course" c ON e."courseId" = c.id
@@ -118,7 +124,7 @@ export const GET = withTenantAuth(async (req, session) => {
   const runWithoutUserJoin = async () => {
     if (schoolIdParam) {
       return db`
-        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice"
+        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice", c."billingPlanSelectionMode"
         FROM "Enrollment" e
         LEFT JOIN "Student" s ON e."studentId" = s.id
         LEFT JOIN "Course" c ON e."courseId" = c.id
@@ -128,7 +134,7 @@ export const GET = withTenantAuth(async (req, session) => {
     }
     if (courseId && studentId) {
       return db`
-        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice"
+        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice", c."billingPlanSelectionMode"
         FROM "Enrollment" e
         LEFT JOIN "Student" s ON e."studentId" = s.id
         LEFT JOIN "Course" c ON e."courseId" = c.id
@@ -138,7 +144,7 @@ export const GET = withTenantAuth(async (req, session) => {
     }
     if (courseId) {
       return db`
-        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice"
+        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice", c."billingPlanSelectionMode"
         FROM "Enrollment" e
         LEFT JOIN "Student" s ON e."studentId" = s.id
         LEFT JOIN "Course" c ON e."courseId" = c.id
@@ -148,7 +154,7 @@ export const GET = withTenantAuth(async (req, session) => {
     }
     if (studentId) {
       return db`
-        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice"
+        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice", c."billingPlanSelectionMode"
         FROM "Enrollment" e
         LEFT JOIN "Student" s ON e."studentId" = s.id
         LEFT JOIN "Course" c ON e."courseId" = c.id
@@ -157,7 +163,7 @@ export const GET = withTenantAuth(async (req, session) => {
       `
     }
     return db`
-      SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice"
+      SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice", c."billingPlanSelectionMode"
       FROM "Enrollment" e
       LEFT JOIN "Student" s ON e."studentId" = s.id
       LEFT JOIN "Course" c ON e."courseId" = c.id
