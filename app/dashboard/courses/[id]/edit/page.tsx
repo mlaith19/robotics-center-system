@@ -474,18 +474,6 @@ export default function EditCoursePage() {
         const j = await res.json().catch(() => ({}))
         throw new Error(j?.error ?? `Failed (${res.status})`)
       }
-      const verifyRes = await fetch(`/api/courses/${id}?_ts=${Date.now()}`, {
-        credentials: "include",
-        cache: "no-store",
-      })
-      if (verifyRes.ok) {
-        const verifyCourse = await verifyRes.json().catch(() => null)
-        const savedStatus = String((verifyCourse as { status?: unknown })?.status || "").trim()
-        const expectedStatus = String(formData.status || "").trim()
-        if (savedStatus && expectedStatus && savedStatus !== expectedStatus) {
-          throw new Error("השינוי לא נשמר עדיין. נסה לשמור שוב.")
-        }
-      }
       if (navigateOnSuccess) {
         router.push("/dashboard/courses")
       }
