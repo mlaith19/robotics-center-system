@@ -19,6 +19,7 @@ function RegisterStudentContent() {
   const [lastName, setLastName] = useState("")
   const [gender, setGender] = useState("")
   const [idNumber, setIdNumber] = useState("")
+  const [className, setClassName] = useState("")
   const [father, setFather] = useState("")
   const [mother, setMother] = useState("")
   const [birthDate, setBirthDate] = useState("")
@@ -48,6 +49,17 @@ function RegisterStudentContent() {
     const mm = m[2].padStart(2, "0")
     const yyyy = m[3]
     return `${yyyy}-${mm}-${dd}`
+  }
+  function ageFromBirthDate(value: string): string {
+    const normalized = normalizeBirthDateInput(value)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return "—"
+    const birth = new Date(normalized)
+    if (Number.isNaN(birth.getTime())) return "—"
+    const today = new Date()
+    let age = today.getFullYear() - birth.getFullYear()
+    const m = today.getMonth() - birth.getMonth()
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age -= 1
+    return age >= 0 ? String(age) : "—"
   }
 
   const selectedCourseId = searchParams.get("courseId")?.trim() || ""
@@ -79,6 +91,7 @@ function RegisterStudentContent() {
         setFirstName(rawFirst || fallbackFirst || "")
         setLastName(rawLast || rest.join(" ").trim())
         setGender(String((s as { gender?: string | null }).gender ?? ""))
+        setClassName(String((s as { className?: string | null }).className ?? ""))
         setFather(String(s.father ?? ""))
         setMother(String(s.mother ?? ""))
         setPhone(String(s.phone ?? ""))
@@ -154,6 +167,7 @@ function RegisterStudentContent() {
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           gender: gender || null,
+          className: className.trim() || null,
           idNumber: idNumber.trim() || null,
           father: father.trim() || null,
           mother: mother.trim() || null,
@@ -181,6 +195,7 @@ function RegisterStudentContent() {
       setFirstName("")
       setLastName("")
       setGender("")
+      setClassName("")
       setIdNumber("")
       setFather("")
       setMother("")
@@ -265,6 +280,37 @@ function RegisterStudentContent() {
             )}
             {activeStep === 1 && (
               <>
+                <div className="space-y-2">
+                  <Label htmlFor="profileImageUpload">תמונת פרופיל (לא חובה)</Label>
+                  <div className="flex items-center justify-between rounded-lg border bg-muted/20 p-3">
+                    <div className="flex items-center gap-3">
+                      {profileImage ? (
+                        <img src={profileImage} alt="profile preview" className="h-16 w-16 rounded-full border bg-white object-cover" />
+                      ) : (
+                        <div className="h-16 w-16 rounded-full border-2 border-dashed bg-muted" />
+                      )}
+                      <div className="space-y-1">
+                        <div className="text-sm text-muted-foreground">גיל</div>
+                        <div className="text-lg font-semibold">{ageFromBirthDate(birthDate)}</div>
+                      </div>
+                    </div>
+                    <div className="min-w-0 flex-1 space-y-2 ps-3">
+                      <Input
+                        id="profileImageUpload"
+                        type="file"
+                        accept="image/*"
+                        className="text-xs sm:text-sm"
+                        onChange={handleProfileImageUpload}
+                        disabled={isSubmitting}
+                      />
+                      {profileImage && (
+                        <Button type="button" variant="outline" size="sm" onClick={() => setProfileImage("")} disabled={isSubmitting}>
+                          הסר תמונה
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="lastName">שם משפחה *</Label>
@@ -275,72 +321,66 @@ function RegisterStudentContent() {
                     <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} required disabled={isSubmitting} />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="gender">מין *</Label>
-                  <Select value={gender} onValueChange={setGender} disabled={isSubmitting}>
-                    <SelectTrigger id="gender">
-                      <SelectValue placeholder="בחר מין" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="male">זכר</SelectItem>
-                      <SelectItem value="female">נקבה</SelectItem>
-                      <SelectItem value="other">אחר</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="gender">מין *</Label>
+                    <Select value={gender} onValueChange={setGender} disabled={isSubmitting}>
+                      <SelectTrigger id="gender">
+                        <SelectValue placeholder="בחר מין" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="male">זכר</SelectItem>
+                        <SelectItem value="female">נקבה</SelectItem>
+                        <SelectItem value="other">אחר</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="idNumber">תעודת זהות *</Label>
+                    <Input
+                      id="idNumber"
+                      value={idNumber}
+                      onChange={(e) => setIdNumber(e.target.value.replace(/\D/g, "").slice(0, 9))}
+                      placeholder="9 ספרות"
+                      disabled={isSubmitting}
+                      inputMode="numeric"
+                      maxLength={9}
+                      required
+                    />
+                  </div>
                 </div>
-            <div className="space-y-2">
-              <Label htmlFor="idNumber">תעודת זהות</Label>
-              <Input
-                id="idNumber"
-                value={idNumber}
-                onChange={(e) => setIdNumber(e.target.value)}
-                placeholder="הכנס תעודת זהות"
-                disabled={isSubmitting}
-                required
-              />
-              {isLookupLoading && (
-                <p className="text-xs text-muted-foreground">בודק אם תלמיד כבר קיים...</p>
-              )}
-              {foundExisting && !isLookupLoading && (
-                <p className="text-xs text-blue-700">נמצא תלמיד קיים. הטופס מולא אוטומטית לפי ת״ז.</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="birthDate">תאריך לידה</Label>
-              <Input
-                id="birthDate"
-                type="text"
-                value={birthDate}
-                onChange={(e) => setBirthDate(e.target.value)}
-                placeholder="YYYY-MM-DD או DD/MM/YYYY"
-                disabled={isSubmitting}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="profileImageUpload">תמונת פרופיל (לא חובה)</Label>
-              <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
-                {profileImage ? (
-                  <img src={profileImage} alt="profile preview" className="mx-auto h-16 w-16 rounded-full border bg-white object-cover sm:mx-0" />
-                ) : (
-                  <div className="mx-auto h-16 w-16 rounded-full border-2 border-dashed bg-muted sm:mx-0" />
+                {(isLookupLoading || foundExisting) && (
+                  <div className="text-xs">
+                    {isLookupLoading ? (
+                      <p className="text-muted-foreground">בודק אם תלמיד כבר קיים...</p>
+                    ) : (
+                      <p className="text-blue-700">נמצא תלמיד קיים. הטופס מולא אוטומטית לפי ת״ז.</p>
+                    )}
+                  </div>
                 )}
-                <div className="min-w-0 flex-1 space-y-2">
-                  <Input
-                    id="profileImageUpload"
-                    type="file"
-                    accept="image/*"
-                    className="text-xs sm:text-sm"
-                    onChange={handleProfileImageUpload}
-                    disabled={isSubmitting}
-                  />
-                  {profileImage && (
-                    <Button type="button" variant="outline" size="sm" onClick={() => setProfileImage("")} disabled={isSubmitting}>
-                      הסר תמונה
-                    </Button>
-                  )}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="birthDate">תאריך לידה</Label>
+                    <Input
+                      id="birthDate"
+                      type="text"
+                      value={birthDate}
+                      onChange={(e) => setBirthDate(e.target.value)}
+                      placeholder="YYYY-MM-DD או DD/MM/YYYY"
+                      disabled={isSubmitting}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="className">כיתה</Label>
+                    <Input
+                      id="className"
+                      value={className}
+                      onChange={(e) => setClassName(e.target.value)}
+                      placeholder="לדוגמה: ה׳2"
+                      disabled={isSubmitting}
+                    />
+                  </div>
                 </div>
-              </div>
-            </div>
               </>
             )}
             {activeStep === 2 && <div className="space-y-2">

@@ -27,6 +27,7 @@ async function ensureStudentExtendedIdentityColumns(
   await db`ALTER TABLE "Student" ADD COLUMN IF NOT EXISTS "firstName" TEXT`
   await db`ALTER TABLE "Student" ADD COLUMN IF NOT EXISTS "lastName" TEXT`
   await db`ALTER TABLE "Student" ADD COLUMN IF NOT EXISTS "gender" TEXT`
+  await db`ALTER TABLE "Student" ADD COLUMN IF NOT EXISTS "className" TEXT`
 }
 
 export async function GET(req: Request) {
@@ -41,7 +42,7 @@ export async function GET(req: Request) {
     if (!idNumber) return Response.json({ error: "idNumber is required" }, { status: 400 })
 
     const rows = await db`
-      SELECT id, name, "firstName", "lastName", "gender", email, phone, "birthDate", father, mother, "healthFund", allergies, "idNumber", "userId", "profileImage", "registrationInterest"
+      SELECT id, name, "firstName", "lastName", "gender", "className", email, phone, "birthDate", father, mother, "healthFund", allergies, "idNumber", "userId", "profileImage", "registrationInterest"
       FROM "Student"
       WHERE "idNumber" = ${idNumber}
       LIMIT 1
@@ -69,6 +70,7 @@ export async function POST(req: Request) {
     const name = [firstName, lastName].filter(Boolean).join(" ").trim() || String(body.name ?? "").trim()
     const idNumber = String(body.idNumber ?? "").trim()
     const gender = body.gender ? String(body.gender).trim() : null
+    const className = body.className ? String(body.className).trim() : null
     const phone = body.phone ? String(body.phone).trim() : null
     const email = body.email ? String(body.email).trim() : null
     const father = body.father ? String(body.father).trim() : null
@@ -115,6 +117,7 @@ export async function POST(req: Request) {
           "firstName" = ${firstName || null},
           "lastName" = ${lastName || null},
           "gender" = ${gender},
+          "className" = ${className},
           email = ${email},
           phone = ${phone},
           father = ${father},
@@ -172,11 +175,11 @@ export async function POST(req: Request) {
     await db`
       INSERT INTO "Student" (
         id, name, email, phone, status, "birthDate", "idNumber", father, mother, "healthFund", allergies,
-        "totalSessions", "courseIds", "courseSessions", "profileImage", "registrationInterest", "firstName", "lastName", "gender", "userId", "createdAt", "updatedAt"
+        "totalSessions", "courseIds", "courseSessions", "profileImage", "registrationInterest", "firstName", "lastName", "gender", "className", "userId", "createdAt", "updatedAt"
       )
       VALUES (
         ${studentId}, ${name}, ${email}, ${phone}, 'מתעניין', ${birthDate}, ${idNumber}, ${father}, ${mother}, ${healthFund}, ${allergies},
-        12, ${JSON.stringify(courseIds)}::jsonb, ${JSON.stringify({})}::jsonb, ${profileImageFallback}, ${interestStoredNew}, ${firstName || null}, ${lastName || null}, ${gender}, ${userId}, ${now}, ${now}
+        12, ${JSON.stringify(courseIds)}::jsonb, ${JSON.stringify({})}::jsonb, ${profileImageFallback}, ${interestStoredNew}, ${firstName || null}, ${lastName || null}, ${gender}, ${className}, ${userId}, ${now}, ${now}
       )
     `
 
