@@ -37,6 +37,7 @@ interface Course {
   campChargeFirstSessionIfNoAttendance?: boolean | null
   useStudentSiblingDiscountInCourse?: boolean | null
   billingPlanSelectionMode?: "pricing" | "billing" | null
+  statusManualOverride?: boolean | null
 }
 
 function isTruthyCourseFlag(raw: unknown): boolean {
@@ -1546,6 +1547,7 @@ export default function CourseViewPage() {
   const statusPres = getCourseStatusPresentation({
     status: course.status,
     endDate: course.endDate,
+    statusManualOverride: (course as any).statusManualOverride === true,
   })
   const visibleTabCount = [
     canTabGeneral,
