@@ -1634,7 +1634,7 @@ export default function CourseViewPage() {
   const balanceByStudent = new Map<string, number>(
     debtRowsAll.map((r) => [String(r.studentId), Number(r.balance || 0)]),
   )
-  const paymentPreviewAllocations = useMemo(() => {
+  const paymentPreviewAllocations = (() => {
     if (payTargetMode !== "multi") return [] as Array<{ studentId: string; studentName: string; amount: number }>
     const total = Number(payAmount || 0)
     if (!Number.isFinite(total) || total <= 0) return [] as Array<{ studentId: string; studentName: string; amount: number }>
@@ -1662,7 +1662,7 @@ export default function CourseViewPage() {
         "—"
       return { studentId: sid, studentName, amount: Math.max(0, share) }
     })
-  }, [payTargetMode, payAmount, payStudentIds, balanceByStudent, enrollments, students])
+  })()
   const canSubmitPayment =
     payTargetMode === "single"
       ? !!payStudentId && Number(payAmount || 0) > 0

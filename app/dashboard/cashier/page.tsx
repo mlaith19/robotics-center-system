@@ -188,6 +188,10 @@ export default function CashierPage() {
   const [isEnvelopeCreateDialogOpen, setIsEnvelopeCreateDialogOpen] = useState(false)
   const [editEnvelopeMonthKey, setEditEnvelopeMonthKey] = useState("")
   const [editEnvelopeTargetAmount, setEditEnvelopeTargetAmount] = useState("")
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null)
+  const [isExpenseEditOpen, setIsExpenseEditOpen] = useState(false)
+  const [editingIncome, setEditingIncome] = useState<Payment | null>(null)
+  const [isIncomeEditOpen, setIsIncomeEditOpen] = useState(false)
 
   // Fetch data from API
   const { data: rawExpenses, isLoading: expensesLoading } = useSWR<Expense[]>("/api/expenses", fetcher)
@@ -376,6 +380,63 @@ export default function CashierPage() {
       }
     } catch (error) {
       console.error("Failed to delete income:", error)
+    }
+  }
+
+  const openEditExpense = (expense: Expense) => {
+    setEditingExpense(expense)
+    setIsExpenseEditOpen(true)
+  }
+
+  const saveExpenseEdit = async () => {
+    if (!editingExpense) return
+    try {
+      const response = await fetch(`/api/expenses/${editingExpense.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          description: editingExpense.description,
+          amount: Number(editingExpense.amount || 0),
+          date: editingExpense.date,
+          category: editingExpense.category,
+          paymentMethod: editingExpense.paymentMethod,
+          isRecurring: Boolean(editingExpense.isRecurring),
+          recurringDay: editingExpense.isRecurring ? Number(editingExpense.recurringDay || 1) : null,
+        }),
+      })
+      if (response.ok) {
+        mutate("/api/expenses")
+        setIsExpenseEditOpen(false)
+      }
+    } catch (error) {
+      console.error("Failed to update expense:", error)
+    }
+  }
+
+  const openEditIncome = (income: Payment) => {
+    setEditingIncome(income)
+    setIsIncomeEditOpen(true)
+  }
+
+  const saveIncomeEdit = async () => {
+    if (!editingIncome) return
+    try {
+      const response = await fetch(`/api/payments/${editingIncome.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: Number(editingIncome.amount || 0),
+          paymentDate: editingIncome.paymentDate,
+          paymentType: editingIncome.paymentType,
+          description: editingIncome.description || "",
+        }),
+      })
+      if (response.ok) {
+        mutate("/api/payments")
+        setIsIncomeEditOpen(false)
+      }
+    } catch (error) {
+      console.error("Failed to update income:", error)
     }
   }
 
@@ -1114,14 +1175,24 @@ export default function CashierPage() {
                           <div className="text-sm text-muted-foreground">
                             בוצע על ידי: {expense.createdByUserName ?? "—"}
                           </div>
-                          <Button
-                            variant="outline"
-                            className="w-full gap-2 text-red-600 hover:bg-red-50"
-                            onClick={() => deleteExpense(expense.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                            מחק הוצאה
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              className="w-full gap-2"
+                              onClick={() => openEditExpense(expense)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                              ערוך הוצאה
+                            </Button>
+                            <Button
+                              variant="outline"
+                              className="w-full gap-2 text-red-600 hover:bg-red-50"
+                              onClick={() => deleteExpense(expense.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              מחק הוצאה
+                            </Button>
+                          </div>
                         </CardContent>
                       </Card>
                     ))}
@@ -1161,9 +1232,14 @@ export default function CashierPage() {
                             <TableCell>{getPaymentMethodLabel(expense.paymentMethod)}</TableCell>
                             <TableCell className="text-muted-foreground">{expense.createdByUserName ?? "—"}</TableCell>
                             <TableCell>
-                              <Button variant="ghost" size="icon" onClick={() => deleteExpense(expense.id)}>
-                                <Trash2 className="h-4 w-4 text-red-600" />
-                              </Button>
+                              <div className="flex items-center justify-end gap-1">
+                                <Button variant="ghost" size="icon" onClick={() => openEditExpense(expense)}>
+                                  <Pencil className="h-4 w-4 text-blue-600" />
+                                </Button>
+                                <Button variant="ghost" size="icon" onClick={() => deleteExpense(expense.id)}>
+                                  <Trash2 className="h-4 w-4 text-red-600" />
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -1456,14 +1532,24 @@ export default function CashierPage() {
                             </div>
                             <div className="text-xl font-bold text-green-600">₪{Number(payment.amount).toLocaleString()}</div>
                             <div className="text-sm text-muted-foreground">בוצע על ידי: {payment.createdByUserName ?? "—"}</div>
-                            <Button
-                              variant="outline"
-                              className="w-full gap-2 text-red-600 hover:bg-red-50"
-                              onClick={() => deleteIncome(payment.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                              מחק הכנסה
-                            </Button>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="outline"
+                                className="w-full gap-2"
+                                onClick={() => openEditIncome(payment)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                                ערוך הכנסה
+                              </Button>
+                              <Button
+                                variant="outline"
+                                className="w-full gap-2 text-red-600 hover:bg-red-50"
+                                onClick={() => deleteIncome(payment.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                מחק הכנסה
+                              </Button>
+                            </div>
                           </CardContent>
                         </Card>
                       )
@@ -1502,9 +1588,14 @@ export default function CashierPage() {
                             </TableCell>
                             <TableCell className="text-muted-foreground">{payment.createdByUserName ?? "—"}</TableCell>
                             <TableCell>
-                              <Button variant="ghost" size="icon" onClick={() => deleteIncome(payment.id)}>
-                                <Trash2 className="h-4 w-4 text-red-600" />
-                              </Button>
+                              <div className="flex items-center justify-end gap-1">
+                                <Button variant="ghost" size="icon" onClick={() => openEditIncome(payment)}>
+                                  <Pencil className="h-4 w-4 text-blue-600" />
+                                </Button>
+                                <Button variant="ghost" size="icon" onClick={() => deleteIncome(payment.id)}>
+                                  <Trash2 className="h-4 w-4 text-red-600" />
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -1789,6 +1880,64 @@ export default function CashierPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={isExpenseEditOpen} onOpenChange={setIsExpenseEditOpen}>
+        <DialogContent dir="rtl" className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>עריכת הוצאה</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              value={editingExpense?.description || ""}
+              onChange={(e) => setEditingExpense((prev) => (prev ? { ...prev, description: e.target.value } : prev))}
+              placeholder="תיאור"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                type="number"
+                value={editingExpense?.amount ?? ""}
+                onChange={(e) => setEditingExpense((prev) => (prev ? { ...prev, amount: Number(e.target.value || 0) } : prev))}
+                placeholder="סכום"
+              />
+              <Input
+                type="date"
+                value={editingExpense?.date || ""}
+                onChange={(e) => setEditingExpense((prev) => (prev ? { ...prev, date: e.target.value } : prev))}
+              />
+            </div>
+            <Button onClick={saveExpenseEdit}>שמור שינויים</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isIncomeEditOpen} onOpenChange={setIsIncomeEditOpen}>
+        <DialogContent dir="rtl" className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>עריכת הכנסה</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              value={editingIncome?.description || ""}
+              onChange={(e) => setEditingIncome((prev) => (prev ? { ...prev, description: e.target.value } : prev))}
+              placeholder="תיאור"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                type="number"
+                value={editingIncome?.amount ?? ""}
+                onChange={(e) => setEditingIncome((prev) => (prev ? { ...prev, amount: Number(e.target.value || 0) } : prev))}
+                placeholder="סכום"
+              />
+              <Input
+                type="date"
+                value={editingIncome?.paymentDate || ""}
+                onChange={(e) => setEditingIncome((prev) => (prev ? { ...prev, paymentDate: e.target.value } : prev))}
+              />
+            </div>
+            <Button onClick={saveIncomeEdit}>שמור שינויים</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
