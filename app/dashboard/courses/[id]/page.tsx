@@ -1479,6 +1479,13 @@ export default function CourseViewPage() {
     }
   }
 
+  function normalizeBillingPlanChoice(raw: unknown): "summer" | "discounted" | "perSession" {
+    const v = String(raw || "").trim()
+    if (v === "discounted") return "discounted"
+    if (v === "perSession") return "perSession"
+    return "summer"
+  }
+
   const debtRowsAll = Array.from(dueByStudent.entries()).map(([studentId, due]) => {
     const enrollment = firstEnrollmentByStudent.get(studentId)
     const paid = paidByStudent.get(studentId) || 0
@@ -1539,13 +1546,6 @@ export default function CourseViewPage() {
     status: course.status,
     endDate: course.endDate,
   })
-  const normalizeBillingPlanChoice = (raw: unknown): "summer" | "discounted" | "perSession" => {
-    const v = String(raw || "").trim()
-    if (v === "discounted") return "discounted"
-    if (v === "perSession") return "perSession"
-    return "summer"
-  }
-
   const visibleTabCount = [
     canTabGeneral,
     canTabSessionsFeedback,
