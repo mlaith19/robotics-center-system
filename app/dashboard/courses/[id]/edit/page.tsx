@@ -150,7 +150,7 @@ export default function EditCoursePage() {
   })
   useEffect(() => {
     if (formData.billingPlanSelectionMode === "billing") {
-      setPricingDropdownValue(`billing:${formData.billingPlan}`)
+      setPricingDropdownValue("billing:enabled")
       return
     }
     setPricingDropdownValue(`pricing:${formData.pricingMode}`)
@@ -284,7 +284,7 @@ export default function EditCoursePage() {
           })
           setPricingDropdownValue(
             String(course.billingPlanSelectionMode || "").trim() === "billing"
-              ? `billing:${course.billingPlan === "discounted" || course.billingPlan === "perSession" ? course.billingPlan : "summer"}`
+              ? "billing:enabled"
               : `pricing:${
                   isTotalCoursePricingType(course.courseType || "")
                     ? "perCourse"
@@ -982,6 +982,24 @@ export default function EditCoursePage() {
         <CardContent>
           {formData.billingPlanSelectionMode === "billing" && (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 mb-4">
+            <div className="space-y-2 sm:col-span-3">
+              <Label className="text-right block">ברירת מחדל לתלמיד בקורס</Label>
+              <Select
+                value={formData.billingPlan}
+                onValueChange={(value: "summer" | "discounted" | "perSession") =>
+                  setFormData({ ...formData, billingPlan: value })
+                }
+              >
+                <SelectTrigger className="text-right" dir="rtl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="summer">תוכנית קיץ</SelectItem>
+                  <SelectItem value="discounted">תוכנית מוזלת</SelectItem>
+                  <SelectItem value="perSession">לפי מפגש</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2">
               <Label className="text-right block">מחיר תוכנית קיץ (ש"ח)</Label>
               <Input
@@ -1032,9 +1050,8 @@ export default function EditCoursePage() {
                     setFormData({ ...formData, pricingMode, billingPlanSelectionMode: "pricing" })
                     return
                   }
-                  if (value.startsWith("billing:")) {
-                    const billingPlan = value.replace("billing:", "") as "summer" | "discounted" | "perSession"
-                    setFormData({ ...formData, billingPlan, billingPlanSelectionMode: "billing" })
+                  if (value === "billing:enabled") {
+                    setFormData({ ...formData, billingPlanSelectionMode: "billing" })
                   }
                 }}
               >
@@ -1046,9 +1063,7 @@ export default function EditCoursePage() {
                   <SelectItem value="pricing:perCourse">מחיר כולל לקורס</SelectItem>
                   <SelectItem value="pricing:perSession">מחיר לפי מפגש</SelectItem>
                   <SelectItem value="pricing:perHour">מחיר לפי שעה</SelectItem>
-                  <SelectItem value="billing:summer">תוכנית חיוב: קיץ</SelectItem>
-                  <SelectItem value="billing:discounted">תוכנית חיוב: מוזלת</SelectItem>
-                  <SelectItem value="billing:perSession">תוכנית חיוב: לפי מפגש</SelectItem>
+                  <SelectItem value="billing:enabled">תוכנית חיוב</SelectItem>
                 </SelectContent>
               </Select>
             </div>
