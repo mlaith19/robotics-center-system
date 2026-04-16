@@ -391,20 +391,20 @@ export default function EditCoursePage() {
     })
   }
 
-  async function save(navigateOnSuccess = true) {
+  async function save(navigateOnSuccess = true): Promise<boolean> {
     if (!formData.name.trim()) {
       setErr(l("שם הקורס הוא שדה חובה", "Course name is required", "اسم الدورة مطلوب"))
-      return
+      return false
     }
     if (formData.teacherIds.length > 0) {
       if (tariffProfiles.length === 0) {
         setErr("יש להגדיר פרופיל תעריף מורה בהגדרות המרכז (תעריפי מורים) לפני שמירת קורס עם מורים")
-        return
+        return false
       }
       for (const tid of formData.teacherIds) {
         if (!String(teacherTariffByTeacherId[tid] || "").trim()) {
           setErr("יש לבחור פרופיל תעריף לכל מורה משויך לקורס")
-          return
+          return false
         }
       }
     }
@@ -412,23 +412,23 @@ export default function EditCoursePage() {
     if (needsSessionCount) {
       if (!formData.startDate || !formData.endDate) {
         setErr("לתמחור לפי מפגש/שעה יש למלא תאריך התחלה ותאריך סיום")
-        return
+        return false
       }
       if (formData.daysOfWeek.length === 0) {
         setErr("לתמחור לפי מפגש/שעה יש לבחור לפחות יום אחד בשבוע")
-        return
+        return false
       }
       if (computedSessionCount === 0) {
         setErr("לא נמצאו מפגשים בטווח התאריכים שנבחר")
-        return
+        return false
       }
       if (needsHourlyRange && (hoursPerSession == null || hoursPerSession <= 0)) {
         setErr("בתמחור לפי שעה יש למלא שעת התחלה/סיום תקינות")
-        return
+        return false
       }
       if (formData.pricingMode === "perSession" && computedCoursePrice <= 0) {
         setErr("הזן מחיר חיובי לכל מפגש או מחיר ברירת מחדל למפגש")
-        return
+        return false
       }
     }
     
@@ -480,27 +480,25 @@ export default function EditCoursePage() {
       if (navigateOnSuccess) {
         router.push("/dashboard/courses")
       }
+      return true
     } catch (e: any) {
       setErr(e?.message ?? l("שגיאה בעדכון קורס", "Failed to update", "فشل تحديث الدورة"))
+      return false
     } finally {
       setSaving(false)
     }
   }
 
   useEffect(() => {
-    if (loading || !isFormReady) return
+    if (loading || !isFormReady || saving) return
     const timer = setTimeout(async () => {
       setAutoSaveStatus("saving")
-      try {
-        await save(false)
-        setAutoSaveStatus("saved")
-      } catch {
-        setAutoSaveStatus("error")
-      }
+      const ok = await save(false)
+      setAutoSaveStatus(ok ? "saved" : "error")
     }, 800)
 
     return () => clearTimeout(timer)
-  }, [loading, isFormReady, formData, teacherTariffByTeacherId, sessionPricesByDate])
+  }, [loading, isFormReady, saving, formData, teacherTariffByTeacherId, sessionPricesByDate])
 
   if (loading) {
     return (
