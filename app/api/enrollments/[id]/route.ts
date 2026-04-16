@@ -5,11 +5,23 @@ import { ensureCampTables, HEBREW_GROUP_LETTERS, isCampCourseType } from "@/lib/
 
 type Ctx = { params: Promise<{ id: string }> }
 
+async function ensureEnrollmentBillingPlanColumn(db: any) {
+  try {
+    await db`
+      ALTER TABLE "Enrollment"
+      ADD COLUMN IF NOT EXISTS "billingPlanChoice" TEXT
+    `
+  } catch (err) {
+    console.warn("[enrollments/[id]] ensure billingPlanChoice skipped:", err)
+  }
+}
+
 export const GET = withTenantAuth(async (req, _session, { params }: Ctx) => {
   const [tenant, tenantErr] = await requireTenant(req)
   if (tenantErr) return tenantErr
   const db = tenant.db
   try {
+    await ensureEnrollmentBillingPlanColumn(db)
     const { id } = await params
     const result = await db`
       SELECT e.*, s.name as "studentName", c.name as "courseName"
@@ -31,9 +43,10 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
   if (tenantErr) return tenantErr
   const db = tenant.db
   try {
+    await ensureEnrollmentBillingPlanColumn(db)
     const { id } = await params
     const body   = await req.json()
-    const { sessionsLeft, status, campGroupLabel, campGroupId } = body
+    const { sessionsLeft, status, campGroupLabel, campGroupId, billingPlanChoice } = body
 
     if (campGroupLabel !== undefined || campGroupId !== undefined) {
       const denied = requirePerm(session, "courses.edit")
@@ -72,6 +85,16 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
     }
     if (status !== undefined) {
       const result = await db`UPDATE "Enrollment" SET status = ${status} WHERE id = ${id} RETURNING *`
+      return Response.json(result[0])
+    }
+    if (billingPlanChoice !== undefined) {
+      const normalizedBillingPlanChoice = String(billingPlanChoice || "").trim() || null
+      const result = await db`
+        UPDATE "Enrollment"
+        SET "billingPlanChoice" = ${normalizedBillingPlanChoice}
+        WHERE id = ${id}
+        RETURNING *
+      `
       return Response.json(result[0])
     }
     return Response.json({ error: "No valid fields to update" }, { status: 400 })

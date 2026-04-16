@@ -65,6 +65,7 @@ interface Enrollment {
   siblingRank?: number | null
   siblingRankLabel?: string | null
   siblingAmountForRank?: number | null
+  billingPlanChoice?: "summer" | "discounted" | "perSession" | null
   /** קבוצת אחים מ־Student — למיון רציף ברשימת נוכחות */
   siblingGroupId?: string | null
 }
@@ -417,6 +418,8 @@ export default function CourseViewPage() {
         : locale === "en"
           ? "Students were assigned successfully."
           : "התלמידים שויכו בהצלחה.",
+    expand: locale === "ar" ? "فتح" : locale === "en" ? "Expand" : "פתח",
+    collapse: locale === "ar" ? "إغلاق" : locale === "en" ? "Collapse" : "סגור",
     noStudentAttendance: locale === "ar" ? "لا توجد سجلات حضور طلاب لهذه الدورة بعد." : locale === "en" ? "No student attendance records for this course yet." : "אין עדיין רשומות נוכחות תלמידים לקורס זה.",
     noTeacherAttendance: locale === "ar" ? "لا توجد سجلات حضور معلمين لهذه الدورة." : locale === "en" ? "No teacher attendance records for this course." : "אין רשומות נוכחות מורים לקורס זה.",
     teacherHoursGrandTotal:
@@ -459,6 +462,7 @@ export default function CourseViewPage() {
   const [selectedStudentIdsToAssign, setSelectedStudentIdsToAssign] = useState<string[]>([])
   const [isAssigningStudents, setIsAssigningStudents] = useState(false)
   const [assignStudentsMessage, setAssignStudentsMessage] = useState<string | null>(null)
+  const [isAssignStudentsCardOpen, setIsAssignStudentsCardOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [isStudentUser, setIsStudentUser] = useState(false)
 
@@ -856,6 +860,11 @@ export default function CourseViewPage() {
     if (!id || candidateIds.length === 0 || isAssigningStudents) return
     setIsAssigningStudents(true)
     setAssignStudentsMessage(null)
+    const defaultBillingPlan =
+      String((course as any)?.billingPlan || "").trim() === "discounted" ||
+      String((course as any)?.billingPlan || "").trim() === "perSession"
+        ? String((course as any)?.billingPlan || "").trim()
+        : "summer"
     try {
       const results = await Promise.allSettled(
         candidateIds.map((studentId) =>
@@ -866,6 +875,7 @@ export default function CourseViewPage() {
               studentId,
               courseId: id,
               status: "active",
+              billingPlanChoice: defaultBillingPlan,
             }),
           }),
         ),
@@ -880,6 +890,21 @@ export default function CourseViewPage() {
       }
     } finally {
       setIsAssigningStudents(false)
+    }
+  }
+
+  async function saveEnrollmentBillingPlanChoice(enrollmentId: string, billingPlanChoice: "summer" | "discounted" | "perSession") {
+    try {
+      const res = await fetch(`/api/enrollments/${enrollmentId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ billingPlanChoice }),
+      })
+      if (!res.ok) return
+      await loadCourseEnrollments()
+      await loadCoursePayments()
+    } catch {
+      // ignore
     }
   }
 
@@ -1840,11 +1865,20 @@ export default function CourseViewPage() {
 
         {!isStudentUser && canTabStudents && (
         <TabsContent value="students">
-          {canEditCourses && (
+          {canEditCourses && statusPres.key !== "completed" && (
           <Card className="mb-4">
-            <CardHeader>
-              <CardTitle className="text-base">{tr.assignStudentsTitle}</CardTitle>
+            <CardHeader
+              className="cursor-pointer"
+              onClick={() => setIsAssignStudentsCardOpen((prev) => !prev)}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">
+                  {isAssignStudentsCardOpen ? tr.collapse : tr.expand}
+                </span>
+                <CardTitle className="text-base">{tr.assignStudentsTitle}</CardTitle>
+              </div>
             </CardHeader>
+            {isAssignStudentsCardOpen && (
             <CardContent className="space-y-3">
               {studentsAvailableToAssign.length > 0 ? (
                 <>
@@ -1924,6 +1958,7 @@ export default function CourseViewPage() {
                 <p className="text-sm text-muted-foreground">{tr.assignStudentsNoneLeft}</p>
               )}
             </CardContent>
+            )}
           </Card>
           )}
           <Card>
@@ -1941,6 +1976,7 @@ export default function CourseViewPage() {
                         <TableHead className="text-right">{tr.enrollmentDate}</TableHead>
                         <TableHead className="text-right">{tr.siblingPackage}</TableHead>
                         <TableHead className="text-right">{tr.siblingRank}</TableHead>
+                        <TableHead className="text-right">תוכנית חיוב</TableHead>
                         <TableHead className="text-right">{tr.packageSource}</TableHead>
                         <TableHead className="text-right">{tr.performedBy}</TableHead>
                         {isCampCourse && (
@@ -1964,6 +2000,37 @@ export default function CourseViewPage() {
                           </TableCell>
                           <TableCell className="text-right text-muted-foreground">{enrollment.siblingDiscountPackageName || "—"}</TableCell>
                           <TableCell className="text-right text-muted-foreground">{enrollment.siblingRankLabel || "—"}</TableCell>
+                          <TableCell className="text-right">
+                            {canEditCourses && statusPres.key !== "completed" ? (
+                              <Select
+                                value={
+                                  enrollment.billingPlanChoice === "discounted" || enrollment.billingPlanChoice === "perSession"
+                                    ? enrollment.billingPlanChoice
+                                    : "summer"
+                                }
+                                onValueChange={(v: "summer" | "discounted" | "perSession") =>
+                                  saveEnrollmentBillingPlanChoice(enrollment.id, v)
+                                }
+                              >
+                                <SelectTrigger className="w-[min(100%,220px)]">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="summer">תוכנית קיץ</SelectItem>
+                                  <SelectItem value="discounted">תוכנית מוזלת</SelectItem>
+                                  <SelectItem value="perSession">לפי מפגש</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <span className="text-muted-foreground">
+                                {enrollment.billingPlanChoice === "discounted"
+                                  ? "תוכנית מוזלת"
+                                  : enrollment.billingPlanChoice === "perSession"
+                                    ? "לפי מפגש"
+                                    : "תוכנית קיץ"}
+                              </span>
+                            )}
+                          </TableCell>
                           <TableCell className="text-right text-muted-foreground">
                             {enrollment.siblingDiscountPackageSource === "course"
                               ? tr.sourceCourse

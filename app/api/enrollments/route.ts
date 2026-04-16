@@ -33,6 +33,22 @@ async function ensureEnrollmentAuditColumns(db: any) {
   )
 }
 
+async function ensureEnrollmentBillingPlanColumn(db: any) {
+  const safe = async (q: Promise<unknown>) => {
+    try {
+      await q
+    } catch (err) {
+      console.warn("[enrollments] ensure billing plan column skipped:", err)
+    }
+  }
+  await safe(
+    db`
+      ALTER TABLE "Enrollment"
+      ADD COLUMN IF NOT EXISTS "billingPlanChoice" TEXT
+    `,
+  )
+}
+
 export const GET = withTenantAuth(async (req, session) => {
   const [tenant, tenantErr] = await requireTenant(req)
   if (tenantErr) return tenantErr
@@ -47,7 +63,7 @@ export const GET = withTenantAuth(async (req, session) => {
   const runWithUserJoin = async () => {
     if (schoolIdParam) {
       return db`
-        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", u.name as "createdByUserName"
+        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice", u.name as "createdByUserName"
         FROM "Enrollment" e
         LEFT JOIN "Student" s ON e."studentId" = s.id
         LEFT JOIN "Course" c ON e."courseId" = c.id
@@ -58,7 +74,7 @@ export const GET = withTenantAuth(async (req, session) => {
     }
     if (courseId && studentId) {
       return db`
-        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", u.name as "createdByUserName"
+        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice", u.name as "createdByUserName"
         FROM "Enrollment" e
         LEFT JOIN "Student" s ON e."studentId" = s.id
         LEFT JOIN "Course" c ON e."courseId" = c.id
@@ -69,7 +85,7 @@ export const GET = withTenantAuth(async (req, session) => {
     }
     if (courseId) {
       return db`
-        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", u.name as "createdByUserName"
+        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice", u.name as "createdByUserName"
         FROM "Enrollment" e
         LEFT JOIN "Student" s ON e."studentId" = s.id
         LEFT JOIN "Course" c ON e."courseId" = c.id
@@ -80,7 +96,7 @@ export const GET = withTenantAuth(async (req, session) => {
     }
     if (studentId) {
       return db`
-        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", u.name as "createdByUserName"
+        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice", u.name as "createdByUserName"
         FROM "Enrollment" e
         LEFT JOIN "Student" s ON e."studentId" = s.id
         LEFT JOIN "Course" c ON e."courseId" = c.id
@@ -90,7 +106,7 @@ export const GET = withTenantAuth(async (req, session) => {
       `
     }
     return db`
-      SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", u.name as "createdByUserName"
+      SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice", u.name as "createdByUserName"
       FROM "Enrollment" e
       LEFT JOIN "Student" s ON e."studentId" = s.id
       LEFT JOIN "Course" c ON e."courseId" = c.id
@@ -102,7 +118,7 @@ export const GET = withTenantAuth(async (req, session) => {
   const runWithoutUserJoin = async () => {
     if (schoolIdParam) {
       return db`
-        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices"
+        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice"
         FROM "Enrollment" e
         LEFT JOIN "Student" s ON e."studentId" = s.id
         LEFT JOIN "Course" c ON e."courseId" = c.id
@@ -112,7 +128,7 @@ export const GET = withTenantAuth(async (req, session) => {
     }
     if (courseId && studentId) {
       return db`
-        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices"
+        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice"
         FROM "Enrollment" e
         LEFT JOIN "Student" s ON e."studentId" = s.id
         LEFT JOIN "Course" c ON e."courseId" = c.id
@@ -122,7 +138,7 @@ export const GET = withTenantAuth(async (req, session) => {
     }
     if (courseId) {
       return db`
-        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices"
+        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice"
         FROM "Enrollment" e
         LEFT JOIN "Student" s ON e."studentId" = s.id
         LEFT JOIN "Course" c ON e."courseId" = c.id
@@ -132,7 +148,7 @@ export const GET = withTenantAuth(async (req, session) => {
     }
     if (studentId) {
       return db`
-        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices"
+        SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice"
         FROM "Enrollment" e
         LEFT JOIN "Student" s ON e."studentId" = s.id
         LEFT JOIN "Course" c ON e."courseId" = c.id
@@ -141,7 +157,7 @@ export const GET = withTenantAuth(async (req, session) => {
       `
     }
     return db`
-      SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices"
+      SELECT e.*, s.name as "studentName", c.name as "courseName", c.price as "coursePrice", c.duration as "courseDuration", c.id as "courseIdRef", c."startTime" as "startTime", c."endTime" as "endTime", c."siblingDiscountPackageId" as "siblingDiscountPackageId", c."courseType", c."startDate", c."endDate", c."daysOfWeek", c."sessionPrices", c."billingPlan", c."billingPlanSummerPrice", c."billingPlanDiscountedPrice", c."billingPlanPerSessionPrice"
       FROM "Enrollment" e
       LEFT JOIN "Student" s ON e."studentId" = s.id
       LEFT JOIN "Course" c ON e."courseId" = c.id
@@ -151,6 +167,7 @@ export const GET = withTenantAuth(async (req, session) => {
 
   try {
     await ensureEnrollmentAuditColumns(db)
+    await ensureEnrollmentBillingPlanColumn(db)
     await ensureCourseSessionPricesColumn(db)
     let result: Record<string, unknown>[]
     try {
@@ -217,8 +234,9 @@ export const POST = withTenantAuth(async (req, session) => {
   const db = tenant.db
   try {
     await ensureEnrollmentAuditColumns(db)
+    await ensureEnrollmentBillingPlanColumn(db)
     const body = await req.json()
-    const { studentId, courseId, status, sessionsLeft } = body
+    const { studentId, courseId, status, sessionsLeft, billingPlanChoice } = body
 
     if (!studentId || !courseId) return Response.json({ error: "studentId and courseId are required" }, { status: 400 })
 
@@ -238,6 +256,15 @@ export const POST = withTenantAuth(async (req, session) => {
         VALUES (${id}, ${studentId}, ${courseId}, ${enrollmentDate}, ${status || 'active'}, ${sessions}, ${createdByUserId}, ${now})
         RETURNING *
       `
+      if (billingPlanChoice !== undefined) {
+        const normalizedBillingPlanChoice = String(billingPlanChoice || "").trim() || null
+        result = await db`
+          UPDATE "Enrollment"
+          SET "billingPlanChoice" = ${normalizedBillingPlanChoice}
+          WHERE id = ${id}
+          RETURNING *
+        `
+      }
     } catch (insertErr) {
       if (isMissingColumnError(insertErr)) {
         result = await db`

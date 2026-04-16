@@ -102,6 +102,13 @@ export async function applySiblingAndAttendancePricingToEnrollmentRows(
   const rankCache = new Map<string, number | null>()
   const finalRows: Record<string, unknown>[] = []
 
+  const normalizeBillingPlan = (raw: unknown): "summer" | "discounted" | "perSession" => {
+    const v = String(raw || "").trim()
+    if (v === "discounted") return "discounted"
+    if (v === "perSession") return "perSession"
+    return "summer"
+  }
+
   for (const r of rows) {
     const studentIdVal = String(r.studentId || "")
     const courseIdVal = String(r.courseId || "")
@@ -112,6 +119,17 @@ export async function applySiblingAndAttendancePricingToEnrollmentRows(
     const pkg = packageId ? packagesMap.get(packageId) : undefined
 
     let effectivePrice = Number(r.coursePrice || 0)
+    const selectedBillingPlan = normalizeBillingPlan((r as Record<string, unknown>).billingPlanChoice ?? r.billingPlan)
+    if (selectedBillingPlan === "summer") {
+      const n = Number((r as Record<string, unknown>).billingPlanSummerPrice)
+      if (Number.isFinite(n) && n >= 0) effectivePrice = n
+    } else if (selectedBillingPlan === "discounted") {
+      const n = Number((r as Record<string, unknown>).billingPlanDiscountedPrice)
+      if (Number.isFinite(n) && n >= 0) effectivePrice = n
+    } else if (selectedBillingPlan === "perSession") {
+      const n = Number((r as Record<string, unknown>).billingPlanPerSessionPrice)
+      if (Number.isFinite(n) && n >= 0) effectivePrice = n
+    }
     let siblingDiscountPackageName: string | null = null
     let siblingDiscountPackageSource: "course" | "student" | null = null
     let siblingRank: number | null = null
@@ -191,6 +209,7 @@ export async function applySiblingAndAttendancePricingToEnrollmentRows(
       siblingRankLabel,
       siblingAmountForRank,
       siblingGroupId: siblingGroupIdOut,
+      billingPlanChoice: selectedBillingPlan,
     })
   }
 
