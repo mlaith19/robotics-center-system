@@ -152,6 +152,9 @@ export const POST = withTenantAuth(async (req, session) => {
     const billingPlanSummerPrice = body.billingPlanSummerPrice != null ? Number(body.billingPlanSummerPrice) : null
     const billingPlanDiscountedPrice = body.billingPlanDiscountedPrice != null ? Number(body.billingPlanDiscountedPrice) : null
     const billingPlanPerSessionPrice = body.billingPlanPerSessionPrice != null ? Number(body.billingPlanPerSessionPrice) : null
+    const billingPlanSummerLabel = body.billingPlanSummerLabel ? String(body.billingPlanSummerLabel).trim() : null
+    const billingPlanDiscountedLabel = body.billingPlanDiscountedLabel ? String(body.billingPlanDiscountedLabel).trim() : null
+    const billingPlanPerSessionLabel = body.billingPlanPerSessionLabel ? String(body.billingPlanPerSessionLabel).trim() : null
     const rawTariffPost = body.teacherTariffByTeacherId
     const tariffMapPost =
       rawTariffPost && typeof rawTariffPost === "object" && !Array.isArray(rawTariffPost)
@@ -190,7 +193,8 @@ export const POST = withTenantAuth(async (req, session) => {
         "startDate", "endDate", "startTime", "endTime",
         "daysOfWeek", "teacherIds", "schoolId", "gafanProgramId", "siblingDiscountPackageId",
         "sessionPrices", "campChargeFirstSessionIfNoAttendance", "useStudentSiblingDiscountInCourse",
-        "billingPlan", "billingPlanSummerPrice", "billingPlanDiscountedPrice", "billingPlanPerSessionPrice", "billingPlanSelectionMode",
+        "billingPlan", "billingPlanSummerPrice", "billingPlanDiscountedPrice", "billingPlanPerSessionPrice",
+        "billingPlanSummerLabel", "billingPlanDiscountedLabel", "billingPlanPerSessionLabel", "billingPlanSelectionMode",
         "createdAt", "updatedAt"
       )
       VALUES (
@@ -199,7 +203,8 @@ export const POST = withTenantAuth(async (req, session) => {
         ${startDate}, ${endDate}, ${startTimeVal}::timestamp, ${endTimeVal}::timestamp,
         ${daysOfWeek}, ${teacherIds}, ${schoolId}, ${gafanProgramId}, ${siblingDiscountPackageId},
         ${db.json(sessionPricesJson)}, ${campChargeFirstSessionIfNoAttendance}, ${useStudentSiblingDiscountInCourse},
-        ${billingPlan}, ${billingPlanSummerPrice}, ${billingPlanDiscountedPrice}, ${billingPlanPerSessionPrice}, ${billingPlanSelectionMode},
+        ${billingPlan}, ${billingPlanSummerPrice}, ${billingPlanDiscountedPrice}, ${billingPlanPerSessionPrice},
+        ${billingPlanSummerLabel}, ${billingPlanDiscountedLabel}, ${billingPlanPerSessionLabel}, ${billingPlanSelectionMode},
         ${now}, ${now}
       )
       RETURNING *

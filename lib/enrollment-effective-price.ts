@@ -152,7 +152,19 @@ export async function applySiblingAndAttendancePricingToEnrollmentRows(
       attendanceRows,
     })
 
-    if (perSessionSummary !== null) {
+    const isBillingPerSessionMode =
+      billingSelectionMode === "billing" &&
+      selectedBillingPlan === "perSession" &&
+      perSessionSummary !== null
+
+    if (isBillingPerSessionMode) {
+      const perSessionPlanPrice = Number((r as Record<string, unknown>).billingPlanPerSessionPrice)
+      if (Number.isFinite(perSessionPlanPrice) && perSessionPlanPrice >= 0) {
+        effectivePrice = Math.round(perSessionSummary.presentSessionCount * perSessionPlanPrice * 100) / 100
+      } else {
+        effectivePrice = perSessionSummary.attendedChargeSum
+      }
+    } else if (perSessionSummary !== null) {
       effectivePrice = perSessionSummary.attendedChargeSum
     }
 

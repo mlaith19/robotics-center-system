@@ -147,6 +147,9 @@ export default function EditCoursePage() {
     pricingMode: "perStudent" as "perStudent" | "perCourse" | "perSession" | "perHour",
     billingPlan: "summer" as "summer" | "discounted" | "perSession",
     billingPlanSelectionMode: "pricing" as "pricing" | "billing",
+    billingPlanSummerLabel: "תוכנית קיץ",
+    billingPlanDiscountedLabel: "תוכנית מוזלת",
+    billingPlanPerSessionLabel: "לפי מפגש",
     billingPlanSummerPrice: "",
     billingPlanDiscountedPrice: "",
     billingPlanPerSessionPrice: "",
@@ -280,6 +283,9 @@ export default function EditCoursePage() {
             siblingDiscountPackageId: course.siblingDiscountPackageId || "",
             billingPlan: course.billingPlan === "discounted" || course.billingPlan === "perSession" ? course.billingPlan : "summer",
             billingPlanSelectionMode: String(course.billingPlanSelectionMode || "").trim() === "billing" ? "billing" : "pricing",
+            billingPlanSummerLabel: String(course.billingPlanSummerLabel || "תוכנית קיץ"),
+            billingPlanDiscountedLabel: String(course.billingPlanDiscountedLabel || "תוכנית מוזלת"),
+            billingPlanPerSessionLabel: String(course.billingPlanPerSessionLabel || "לפי מפגש"),
             billingPlanSummerPrice: course.billingPlanSummerPrice?.toString() || "",
             billingPlanDiscountedPrice: course.billingPlanDiscountedPrice?.toString() || "",
             billingPlanPerSessionPrice: course.billingPlanPerSessionPrice?.toString() || "",
@@ -447,6 +453,9 @@ export default function EditCoursePage() {
           billingPlanSummerPrice: formData.billingPlanSummerPrice ? Number(formData.billingPlanSummerPrice) : null,
           billingPlanDiscountedPrice: formData.billingPlanDiscountedPrice ? Number(formData.billingPlanDiscountedPrice) : null,
           billingPlanPerSessionPrice: formData.billingPlanPerSessionPrice ? Number(formData.billingPlanPerSessionPrice) : null,
+          billingPlanSummerLabel: formData.billingPlanSummerLabel?.trim() || null,
+          billingPlanDiscountedLabel: formData.billingPlanDiscountedLabel?.trim() || null,
+          billingPlanPerSessionLabel: formData.billingPlanPerSessionLabel?.trim() || null,
           billingPlanSelectionMode: formData.billingPlanSelectionMode,
           teacherTariffByTeacherId,
           courseType:
@@ -503,7 +512,7 @@ export default function EditCoursePage() {
 
   return (
     <div dir={isRtl ? "rtl" : "ltr"} className="container mx-auto max-w-4xl space-y-4 p-3 sm:space-y-6 sm:p-6">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-3" dir="ltr">
         <Button
           type="button"
           onClick={() => router.back()}
@@ -511,7 +520,7 @@ export default function EditCoursePage() {
         >
           {l("סגור", "Close", "إغلاق")}
         </Button>
-        <div className="flex min-w-0 flex-1 items-start gap-3">
+        <div className="flex min-w-0 flex-1 items-start gap-3" dir={isRtl ? "rtl" : "ltr"}>
           <Link href="/dashboard/courses" className="shrink-0">
             <Button variant="ghost" size="icon">
               <ArrowRight className="h-5 w-5" />
@@ -1090,7 +1099,12 @@ export default function EditCoursePage() {
             <div className="mb-4 space-y-2">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:items-end">
                 <div className="space-y-2">
-                  <Label className="text-right block">שיטות תמחור ותוכנית חיוב</Label>
+                  <Label
+                    className="text-right block cursor-help underline decoration-dotted underline-offset-4"
+                    title="תוכנית 1/2: מחיר קבוע לכל הקורס לתלמיד. תוכנית 3 (לפי מפגש): החיוב מחושב לפי נוכחות התלמיד."
+                  >
+                    שיטות תמחור ותוכנית חיוב
+                  </Label>
                   <Select
                     value={pricingDropdownValue}
                     onValueChange={(value) => {
@@ -1130,9 +1144,9 @@ export default function EditCoursePage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="summer">תוכנית קיץ</SelectItem>
-                        <SelectItem value="discounted">תוכנית מוזלת</SelectItem>
-                        <SelectItem value="perSession">לפי מפגש</SelectItem>
+                        <SelectItem value="summer">{formData.billingPlanSummerLabel || "תוכנית קיץ"}</SelectItem>
+                        <SelectItem value="discounted">{formData.billingPlanDiscountedLabel || "תוכנית מוזלת"}</SelectItem>
+                        <SelectItem value="perSession">{formData.billingPlanPerSessionLabel || "לפי מפגש"}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1142,6 +1156,33 @@ export default function EditCoursePage() {
           )}
           {formData.billingPlanSelectionMode === "billing" && (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 mb-4">
+            <div className="space-y-2">
+              <Label className="text-right block">שם תוכנית קיץ</Label>
+              <Input
+                value={formData.billingPlanSummerLabel}
+                onChange={(e) => setFormData({ ...formData, billingPlanSummerLabel: e.target.value })}
+                className="text-right"
+                dir="rtl"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-right block">שם תוכנית מוזלת</Label>
+              <Input
+                value={formData.billingPlanDiscountedLabel}
+                onChange={(e) => setFormData({ ...formData, billingPlanDiscountedLabel: e.target.value })}
+                className="text-right"
+                dir="rtl"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-right block">שם תוכנית לפי מפגש</Label>
+              <Input
+                value={formData.billingPlanPerSessionLabel}
+                onChange={(e) => setFormData({ ...formData, billingPlanPerSessionLabel: e.target.value })}
+                className="text-right"
+                dir="rtl"
+              />
+            </div>
             <div className="space-y-2">
               <Label className="text-right block">מחיר תוכנית קיץ (ש"ח)</Label>
               <Input

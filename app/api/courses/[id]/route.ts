@@ -155,6 +155,9 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
           "billingPlanSummerPrice" = ${body.billingPlanSummerPrice != null ? Number(body.billingPlanSummerPrice) : null},
           "billingPlanDiscountedPrice" = ${body.billingPlanDiscountedPrice != null ? Number(body.billingPlanDiscountedPrice) : null},
           "billingPlanPerSessionPrice" = ${body.billingPlanPerSessionPrice != null ? Number(body.billingPlanPerSessionPrice) : null},
+          "billingPlanSummerLabel" = ${cleanStr(body.billingPlanSummerLabel)},
+          "billingPlanDiscountedLabel" = ${cleanStr(body.billingPlanDiscountedLabel)},
+          "billingPlanPerSessionLabel" = ${cleanStr(body.billingPlanPerSessionLabel)},
           "billingPlanSelectionMode" = ${String(body.billingPlanSelectionMode || "").trim() === "billing" ? "billing" : "pricing"},
           "updatedAt" = ${now}
       WHERE id = ${id}

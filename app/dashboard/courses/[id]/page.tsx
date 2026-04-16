@@ -1490,10 +1490,7 @@ export default function CourseViewPage() {
       totalDue: due.totalDue,
       paid,
       balance,
-      billingPlanChoice:
-        enrollment?.billingPlanChoice === "discounted" || enrollment?.billingPlanChoice === "perSession"
-          ? enrollment.billingPlanChoice
-          : "summer",
+      billingPlanChoice: normalizeBillingPlanChoice(enrollment?.billingPlanChoice ?? (course as any)?.billingPlan),
     }
   })
   const debtRows = debtRowsAll
@@ -1542,6 +1539,12 @@ export default function CourseViewPage() {
     status: course.status,
     endDate: course.endDate,
   })
+  const normalizeBillingPlanChoice = (raw: unknown): "summer" | "discounted" | "perSession" => {
+    const v = String(raw || "").trim()
+    if (v === "discounted") return "discounted"
+    if (v === "perSession") return "perSession"
+    return "summer"
+  }
 
   const visibleTabCount = [
     canTabGeneral,
@@ -2454,14 +2457,17 @@ export default function CourseViewPage() {
         {!isStudentUser && canTabDebtors && (
         <TabsContent value="debtors">
           <Card>
-            <CardHeader className="pb-4">
+            <CardHeader className="pb-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <div className="rounded-lg bg-rose-100 p-2">
                     <BarChart3 className="h-5 w-5 text-rose-600" />
                   </div>
-                  <CardTitle className="text-lg font-bold tracking-tight text-rose-700">
-                    {tr.debtors}
+                  <CardTitle
+                    className="text-lg font-bold tracking-tight text-rose-700"
+                    title="מוצגים רק תלמידים עם יתרה לתשלום. תלמיד שסיים לשלם לא יופיע ברשימה."
+                  >
+                    <span className="cursor-help underline decoration-dotted underline-offset-4">{tr.debtors}</span>
                   </CardTitle>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -2501,10 +2507,7 @@ export default function CourseViewPage() {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="text-sm text-muted-foreground">
-                מוצגים רק תלמידים עם יתרה לתשלום. תלמיד שסיים לשלם לא יופיע ברשימה.
-              </div>
+            <CardContent className="space-y-2 pt-0">
               <div className="overflow-x-auto rounded-md border">
                 <Table className="min-w-[760px]">
                   <TableHeader>
@@ -2521,7 +2524,7 @@ export default function CourseViewPage() {
                       <TableRow key={r.enrollmentId}>
                         <TableCell className="text-right">{r.studentName}</TableCell>
                         <TableCell className="text-right">
-                          {String((course as any)?.billingPlanSelectionMode || "").trim() === "billing" && canEditCourses && statusPres.key !== "completed" ? (
+                          {String((course as any)?.billingPlanSelectionMode || "").trim() === "billing" && canTabDebtors && statusPres.key !== "completed" ? (
                             <Select
                               value={r.billingPlanChoice}
                               onValueChange={(v: "summer" | "discounted" | "perSession") =>

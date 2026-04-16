@@ -19,6 +19,18 @@ export async function ensureCourseBillingPlanColumns(db: Sql): Promise<void> {
   `)
   await db.unsafe(`
     ALTER TABLE "Course"
+    ADD COLUMN IF NOT EXISTS "billingPlanSummerLabel" text
+  `)
+  await db.unsafe(`
+    ALTER TABLE "Course"
+    ADD COLUMN IF NOT EXISTS "billingPlanDiscountedLabel" text
+  `)
+  await db.unsafe(`
+    ALTER TABLE "Course"
+    ADD COLUMN IF NOT EXISTS "billingPlanPerSessionLabel" text
+  `)
+  await db.unsafe(`
+    ALTER TABLE "Course"
     ADD COLUMN IF NOT EXISTS "billingPlanSelectionMode" text NOT NULL DEFAULT 'pricing'
   `)
 }
