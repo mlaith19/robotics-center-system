@@ -64,6 +64,7 @@ interface Enrollment {
   siblingDiscountPackageSource?: "course" | "student" | null
   siblingRank?: number | null
   siblingRankLabel?: string | null
+  siblingAmountForRank?: number | null
   /** קבוצת אחים מ־Student — למיון רציף ברשימת נוכחות */
   siblingGroupId?: string | null
 }
@@ -2229,7 +2230,7 @@ export default function CourseViewPage() {
                                       : "—"}
                                 </TableCell>
                                 <TableCell className="text-right font-semibold">
-                                  ₪{Number((member as any).coursePrice || 0).toLocaleString()}
+                                  ₪{Number(member.siblingAmountForRank ?? (member as any).coursePrice ?? 0).toLocaleString()}
                                 </TableCell>
                               </TableRow>
                             ))}

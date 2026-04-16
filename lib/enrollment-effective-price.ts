@@ -116,6 +116,7 @@ export async function applySiblingAndAttendancePricingToEnrollmentRows(
     let siblingDiscountPackageSource: "course" | "student" | null = null
     let siblingRank: number | null = null
     let siblingRankLabel: string | null = null
+    let siblingAmountForRank: number | null = null
 
     const attKey = `${studentIdVal}|${courseIdVal}`
     const attendanceRows = attendanceMap.get(attKey) || []
@@ -148,6 +149,7 @@ export async function applySiblingAndAttendancePricingToEnrollmentRows(
       const amountForRank = resolveSiblingAmountByRank(pkg, resolvedRank)
 
       if (amountForRank != null) {
+        siblingAmountForRank = Number(amountForRank)
         if (perSessionSummary !== null) {
           if (pkg.pricingMode === "perSession") {
             effectivePrice = resolveEffectiveCoursePriceByPackage("perSession", amountForRank, {
@@ -187,6 +189,7 @@ export async function applySiblingAndAttendancePricingToEnrollmentRows(
       siblingDiscountPackageSource,
       siblingRank,
       siblingRankLabel,
+      siblingAmountForRank,
       siblingGroupId: siblingGroupIdOut,
     })
   }

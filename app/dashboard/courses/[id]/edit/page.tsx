@@ -115,6 +115,7 @@ export default function EditCoursePage() {
   const [tariffProfiles, setTariffProfiles] = useState<TariffProfile[]>([])
   const [teacherTariffByTeacherId, setTeacherTariffByTeacherId] = useState<Record<string, string>>({})
   const [sessionPricesByDate, setSessionPricesByDate] = useState<Record<string, string>>({})
+  const [pricingDropdownValue, setPricingDropdownValue] = useState("pricing:perStudent")
 
   const [formData, setFormData] = useState({
     name: "",
@@ -146,6 +147,10 @@ export default function EditCoursePage() {
     billingPlanDiscountedPrice: "",
     billingPlanPerSessionPrice: "",
   })
+  useEffect(() => {
+    if (pricingDropdownValue.startsWith("billing:")) return
+    setPricingDropdownValue(`pricing:${formData.pricingMode}`)
+  }, [formData.pricingMode, pricingDropdownValue])
   const needsSessionCount = formData.pricingMode === "perSession" || formData.pricingMode === "perHour"
   const needsHourlyRange = formData.pricingMode === "perHour"
   const computedSessionCount = useMemo(
@@ -272,6 +277,7 @@ export default function EditCoursePage() {
                   ? "perHour"
                   : "perStudent",
           })
+          setPricingDropdownValue(`billing:${course.billingPlan === "discounted" || course.billingPlan === "perSession" ? course.billingPlan : "summer"}`)
           const sd = normalizeCourseCalendarYmd(course.startDate) || ""
           const ed = normalizeCourseCalendarYmd(course.endDate) || ""
           const dow = Array.isArray(course.daysOfWeek) ? course.daysOfWeek : []
@@ -956,24 +962,6 @@ export default function EditCoursePage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {formData.courseType !== "gafan" && (
-            <div className="space-y-2 mb-4">
-              <Label className="text-right block">תוכנית חיוב</Label>
-              <Select
-                value={formData.billingPlan}
-                onValueChange={(value: "summer" | "discounted" | "perSession") => setFormData({ ...formData, billingPlan: value })}
-              >
-                <SelectTrigger className="text-right" dir="rtl">
-                  <SelectValue placeholder="בחר תוכנית חיוב" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="summer">תוכנית קיץ</SelectItem>
-                  <SelectItem value="discounted">תוכנית מוזלת</SelectItem>
-                  <SelectItem value="perSession">לפי מפגש</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 mb-4">
             <div className="space-y-2">
               <Label className="text-right block">מחיר תוכנית קיץ (ש"ח)</Label>
@@ -1014,19 +1002,33 @@ export default function EditCoursePage() {
           </div>
           {formData.courseType !== "gafan" && (
             <div className="space-y-2 mb-4">
-              <Label className="text-right block">שיטת תמחור</Label>
+              <Label className="text-right block">שיטות תמחור ותוכנית חיוב</Label>
               <Select
-                value={formData.pricingMode}
-                onValueChange={(value: "perStudent" | "perCourse" | "perSession" | "perHour") => setFormData({ ...formData, pricingMode: value })}
+                value={pricingDropdownValue}
+                onValueChange={(value) => {
+                  setPricingDropdownValue(value)
+                  if (value.startsWith("pricing:")) {
+                    const pricingMode = value.replace("pricing:", "") as "perStudent" | "perCourse" | "perSession" | "perHour"
+                    setFormData({ ...formData, pricingMode })
+                    return
+                  }
+                  if (value.startsWith("billing:")) {
+                    const billingPlan = value.replace("billing:", "") as "summer" | "discounted" | "perSession"
+                    setFormData({ ...formData, billingPlan })
+                  }
+                }}
               >
                 <SelectTrigger className="text-right" dir="rtl">
-                  <SelectValue placeholder="בחר שיטת תמחור" />
+                  <SelectValue placeholder="בחר שיטה" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="perStudent">מחיר לכל תלמיד</SelectItem>
-                  <SelectItem value="perCourse">מחיר כולל לקורס</SelectItem>
-                  <SelectItem value="perSession">מחיר לפי מפגש</SelectItem>
-                  <SelectItem value="perHour">מחיר לפי שעה</SelectItem>
+                  <SelectItem value="pricing:perStudent">מחיר לכל תלמיד</SelectItem>
+                  <SelectItem value="pricing:perCourse">מחיר כולל לקורס</SelectItem>
+                  <SelectItem value="pricing:perSession">מחיר לפי מפגש</SelectItem>
+                  <SelectItem value="pricing:perHour">מחיר לפי שעה</SelectItem>
+                  <SelectItem value="billing:summer">תוכנית חיוב: קיץ</SelectItem>
+                  <SelectItem value="billing:discounted">תוכנית חיוב: מוזלת</SelectItem>
+                  <SelectItem value="billing:perSession">תוכנית חיוב: לפי מפגש</SelectItem>
                 </SelectContent>
               </Select>
             </div>
