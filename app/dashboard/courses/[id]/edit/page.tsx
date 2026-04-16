@@ -141,6 +141,10 @@ export default function EditCoursePage() {
     useStudentSiblingDiscountInCourse: true,
     siblingDiscountPackageId: "",
     pricingMode: "perStudent" as "perStudent" | "perCourse" | "perSession" | "perHour",
+    billingPlan: "summer" as "summer" | "discounted" | "perSession",
+    billingPlanSummerPrice: "",
+    billingPlanDiscountedPrice: "",
+    billingPlanPerSessionPrice: "",
   })
   const needsSessionCount = formData.pricingMode === "perSession" || formData.pricingMode === "perHour"
   const needsHourlyRange = formData.pricingMode === "perHour"
@@ -256,6 +260,10 @@ export default function EditCoursePage() {
             campChargeFirstSessionIfNoAttendance: course.campChargeFirstSessionIfNoAttendance === true,
             useStudentSiblingDiscountInCourse: course.useStudentSiblingDiscountInCourse !== false,
             siblingDiscountPackageId: course.siblingDiscountPackageId || "",
+            billingPlan: course.billingPlan === "discounted" || course.billingPlan === "perSession" ? course.billingPlan : "summer",
+            billingPlanSummerPrice: course.billingPlanSummerPrice?.toString() || "",
+            billingPlanDiscountedPrice: course.billingPlanDiscountedPrice?.toString() || "",
+            billingPlanPerSessionPrice: course.billingPlanPerSessionPrice?.toString() || "",
             pricingMode: isTotalCoursePricingType(course.courseType || "")
               ? "perCourse"
               : isSessionPricingType(course.courseType || "")
@@ -403,6 +411,9 @@ export default function EditCoursePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
+          billingPlanSummerPrice: formData.billingPlanSummerPrice ? Number(formData.billingPlanSummerPrice) : null,
+          billingPlanDiscountedPrice: formData.billingPlanDiscountedPrice ? Number(formData.billingPlanDiscountedPrice) : null,
+          billingPlanPerSessionPrice: formData.billingPlanPerSessionPrice ? Number(formData.billingPlanPerSessionPrice) : null,
           teacherTariffByTeacherId,
           courseType:
             formData.courseType === "gafan"
@@ -945,6 +956,62 @@ export default function EditCoursePage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {formData.courseType !== "gafan" && (
+            <div className="space-y-2 mb-4">
+              <Label className="text-right block">תוכנית חיוב</Label>
+              <Select
+                value={formData.billingPlan}
+                onValueChange={(value: "summer" | "discounted" | "perSession") => setFormData({ ...formData, billingPlan: value })}
+              >
+                <SelectTrigger className="text-right" dir="rtl">
+                  <SelectValue placeholder="בחר תוכנית חיוב" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="summer">תוכנית קיץ</SelectItem>
+                  <SelectItem value="discounted">תוכנית מוזלת</SelectItem>
+                  <SelectItem value="perSession">לפי מפגש</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 mb-4">
+            <div className="space-y-2">
+              <Label className="text-right block">מחיר תוכנית קיץ (ש"ח)</Label>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={formData.billingPlanSummerPrice}
+                onChange={(e) => setFormData({ ...formData, billingPlanSummerPrice: e.target.value })}
+                className="text-right"
+                dir="rtl"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-right block">מחיר תוכנית מוזלת (ש"ח)</Label>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={formData.billingPlanDiscountedPrice}
+                onChange={(e) => setFormData({ ...formData, billingPlanDiscountedPrice: e.target.value })}
+                className="text-right"
+                dir="rtl"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-right block">מחיר לפי מפגש (ש"ח)</Label>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={formData.billingPlanPerSessionPrice}
+                onChange={(e) => setFormData({ ...formData, billingPlanPerSessionPrice: e.target.value })}
+                className="text-right"
+                dir="rtl"
+              />
+            </div>
+          </div>
           {formData.courseType !== "gafan" && (
             <div className="space-y-2 mb-4">
               <Label className="text-right block">שיטת תמחור</Label>

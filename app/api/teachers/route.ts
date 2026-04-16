@@ -8,6 +8,7 @@ import {
   normalizeTeacherAttendanceHourKind,
 } from "@/lib/teacher-attendance-hour-kind"
 import { ensureTeacherTariffTables, resolveHourlyRateForAttendance } from "@/lib/teacher-tariff-profiles"
+import { syncTeacherWeeklyActivityStatus } from "@/lib/teacher-weekly-activity-status"
 
 export const GET = withTenantAuth(async (req, session) => {
   const featureErr = await requireFeatureFromRequest(req, "teachers", session)
@@ -19,6 +20,7 @@ export const GET = withTenantAuth(async (req, session) => {
   const withAggregate = searchParams.get("aggregate") === "1"
   try {
     await ensureTeacherTariffTables(db)
+    await syncTeacherWeeklyActivityStatus(db)
     const [teachers, expenses, attendances, enrollments, tariffLinks, monthlyTeacherPayRow] = await Promise.all([
       db`SELECT * FROM "Teacher" ORDER BY "createdAt" DESC`,
       db`SELECT "teacherId", SUM(amount) as total_paid FROM "Expense" WHERE "teacherId" IS NOT NULL GROUP BY "teacherId"`,

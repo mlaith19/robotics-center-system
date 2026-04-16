@@ -17,6 +17,7 @@ import {
 } from "@/lib/camp-attendance"
 import { ensureAttendanceHourKindColumn } from "@/lib/teacher-attendance-hour-kind"
 import { enrichTeacherAttendanceRowsWithRates } from "@/lib/teacher-tariff-profiles"
+import { syncTeacherWeeklyActivityStatus } from "@/lib/teacher-weekly-activity-status"
 
 function extractAttendanceDateYmd(raw: unknown): string {
   const s = String(raw ?? "").trim()
@@ -496,6 +497,7 @@ export const POST = withTenantAuth(async (req, session) => {
           await syncTeacherAttendanceForCourseDate(db, courseId, date, createdByUserId, now)
         }
       }
+      await syncTeacherWeeklyActivityStatus(db)
       return Response.json(saved)
     }
 
@@ -522,6 +524,7 @@ export const POST = withTenantAuth(async (req, session) => {
         await syncTeacherAttendanceForCourseDate(db, courseId, date, createdByUserId, now)
       }
     }
+    await syncTeacherWeeklyActivityStatus(db)
     return Response.json(saved, { status: 201 })
   } catch (err) {
     return handleDbError(err, "POST /api/attendance")
@@ -596,6 +599,7 @@ export const DELETE = withTenantAuth(async (req, _session) => {
         )
       }
       await db`DELETE FROM "Attendance" WHERE id = ${id}`
+      await syncTeacherWeeklyActivityStatus(db)
       return Response.json({ success: true })
     }
     if (studentId && courseId && date) {
@@ -635,6 +639,7 @@ export const DELETE = withTenantAuth(async (req, _session) => {
         const now = new Date().toISOString()
         await resyncCampTeacherAttendanceForCourseDate(db, courseId, dateYmd, now)
       }
+      await syncTeacherWeeklyActivityStatus(db)
       return Response.json({ success: true })
     }
     if (teacherId && courseId && date) {
@@ -645,6 +650,7 @@ export const DELETE = withTenantAuth(async (req, _session) => {
         )
       }
       await db`DELETE FROM "Attendance" WHERE "teacherId" = ${teacherId} AND "courseId" = ${courseId} AND "date" = ${date}`
+      await syncTeacherWeeklyActivityStatus(db)
       return Response.json({ success: true })
     }
     return Response.json({ error: "id or (studentId/teacherId + courseId + date) required" }, { status: 400 })

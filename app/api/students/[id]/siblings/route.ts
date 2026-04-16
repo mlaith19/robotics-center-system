@@ -31,7 +31,10 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
       WHERE "siblingGroupId" = ${groupId}
       ORDER BY "createdAt" ASC, id ASC
     `
-    return Response.json({ siblingGroupId: groupId, siblings })
+    return Response.json({
+      siblingGroupId: groupId,
+      siblings: (siblings as any[]).map((s, idx) => ({ ...s, siblingOrder: idx + 1 })),
+    })
   } catch (err) {
     console.error("GET /api/students/[id]/siblings error:", err)
     return Response.json({ error: "Failed to load siblings" }, { status: 500 })
@@ -80,7 +83,10 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
       WHERE "siblingGroupId" = ${groupId}
       ORDER BY "createdAt" ASC, id ASC
     `
-    return Response.json({ siblingGroupId: groupId, siblings })
+    return Response.json({
+      siblingGroupId: groupId,
+      siblings: (siblings as any[]).map((s, idx) => ({ ...s, siblingOrder: idx + 1 })),
+    })
   } catch (err) {
     console.error("PUT /api/students/[id]/siblings error:", err)
     return Response.json({ error: "Failed to save siblings" }, { status: 500 })

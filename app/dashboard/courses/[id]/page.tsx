@@ -302,6 +302,14 @@ export default function CourseViewPage() {
     editCourse: locale === "ar" ? "تعديل الدورة" : locale === "en" ? "Edit Course" : "ערוך קורס",
     general: locale === "ar" ? "عام" : locale === "en" ? "General" : "כללי",
     linkedStudents: locale === "ar" ? "الطلاب المرتبطون" : locale === "en" ? "Linked Students" : "ילדים משויכים",
+    siblingPackagesTab: locale === "ar" ? "حزم الإخوة" : locale === "en" ? "Sibling Packages" : "חבילות",
+    noSiblingPackagesLinked:
+      locale === "ar"
+        ? "لا توجد حزم إخوة مرتبطة بطلاب هذا المساق."
+        : locale === "en"
+          ? "No sibling packages are linked to students in this course."
+          : "אין חבילות אחים משויכות לתלמידים בקורס זה.",
+    packageStudents: locale === "ar" ? "الطلاب في الحزمة" : locale === "en" ? "Students in package" : "ילדים בחבילה",
     campGroupsTab: locale === "ar" ? "المجموعات" : locale === "en" ? "Groups" : "קבוצות",
     campGroupsTabTitle:
       locale === "ar" ? "الطلاب حسب مجموعة المخيّم" : locale === "en" ? "Students by camp group" : "תלמידים לפי קבוצת קייטנה",
@@ -831,7 +839,9 @@ export default function CourseViewPage() {
 
   async function loadCourseEnrollments() {
     try {
-      const enrollmentsRes = await fetch(`/api/enrollments?courseId=${id}`)
+      const enrollmentsRes = await fetch(`/api/enrollments?courseId=${id}&_ts=${Date.now()}`, {
+        cache: "no-store",
+      })
       if (!enrollmentsRes.ok) return
       const data = await enrollmentsRes.json()
       setEnrollments(Array.isArray(data) ? data : [])
@@ -886,7 +896,7 @@ export default function CourseViewPage() {
         const [courseRes, teachersRes, enrollmentsRes, settingsRes, studentsRes] = await Promise.all([
           fetch(`/api/courses/${id}`),
           fetch("/api/teachers"),
-          fetch(`/api/enrollments?courseId=${id}`),
+          fetch(`/api/enrollments?courseId=${id}&_ts=${Date.now()}`, { cache: "no-store" }),
           fetch("/api/settings"),
           fetch("/api/students"),
         ])
@@ -1463,6 +1473,24 @@ export default function CourseViewPage() {
     course.teacherIds && course.teacherIds.includes(t.id)
   )
   const expectedTotalByEnrollments = enrollments.reduce((sum, e) => sum + Number((e as any).coursePrice || 0), 0)
+  const siblingPackageGroups = Array.from(
+    enrollments.reduce((map, enrollment) => {
+      const pkgName = String(enrollment.siblingDiscountPackageName || "").trim()
+      if (!pkgName) return map
+      if (!map.has(pkgName)) map.set(pkgName, [])
+      map.get(pkgName)!.push(enrollment)
+      return map
+    }, new Map<string, Enrollment[]>()),
+  )
+    .map(([packageName, members]) => ({
+      packageName,
+      members: [...members].sort((a, b) =>
+        String(a.studentName || "").localeCompare(String(b.studentName || ""), "he", { sensitivity: "base" }),
+      ),
+      totalDue: members.reduce((sum, m) => sum + Number((m as any).coursePrice || 0), 0),
+    }))
+    .sort((a, b) => a.packageName.localeCompare(b.packageName, "he", { sensitivity: "base" }))
+  const canTabSiblingPackages = !isStudentUser && canTabStudents && siblingPackageGroups.length > 0
 
   const daysOfWeek = Array.isArray(course.daysOfWeek) ? course.daysOfWeek : []
   const isTotalPriceMode =
@@ -1481,6 +1509,7 @@ export default function CourseViewPage() {
     canTabGeneral,
     canTabSessionsFeedback,
     !isStudentUser && canTabStudents,
+    canTabSiblingPackages,
     !isStudentUser && canTabCampGroups,
     canTabCamp,
     !isStudentUser && canTabPayments,
@@ -1520,7 +1549,7 @@ export default function CourseViewPage() {
       </div>
 
       {/* Tabs - לפי הרשאות טאב בכרטסת קורס */}
-      <Tabs defaultValue={canTabGeneral ? "general" : canTabSessionsFeedback ? "sessions-feedback" : !isStudentUser && canTabStudents ? "students" : !isStudentUser && canTabCampGroups ? "camp-groups" : canTabCamp ? "camp" : !isStudentUser && canTabPayments ? "payments" : !isStudentUser && canTabDebtors ? "debtors" : canTabAttendanceStudents ? "attendance-students" : "attendance-teachers"} className="w-full" dir={isRtl ? "rtl" : "ltr"}>
+      <Tabs defaultValue={canTabGeneral ? "general" : canTabSessionsFeedback ? "sessions-feedback" : !isStudentUser && canTabStudents ? "students" : canTabSiblingPackages ? "sibling-packages" : !isStudentUser && canTabCampGroups ? "camp-groups" : canTabCamp ? "camp" : !isStudentUser && canTabPayments ? "payments" : !isStudentUser && canTabDebtors ? "debtors" : canTabAttendanceStudents ? "attendance-students" : "attendance-teachers"} className="w-full" dir={isRtl ? "rtl" : "ltr"}>
         <div className="-mx-1 overflow-x-auto px-1 pb-1 sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0">
           <TabsList
             className="mb-4 flex h-auto min-h-10 w-max min-w-full max-w-none flex-nowrap justify-start gap-1 overflow-x-auto p-[3px] sm:mb-6 md:grid md:w-full md:max-w-full md:overflow-visible"
@@ -1544,6 +1573,11 @@ export default function CourseViewPage() {
             {!isStudentUser && canTabStudents && (
               <TabsTrigger value="students" className="shrink-0 px-2 text-xs sm:text-sm md:min-w-0">
                 {tr.linkedStudents} ({enrollments.length})
+              </TabsTrigger>
+            )}
+            {canTabSiblingPackages && (
+              <TabsTrigger value="sibling-packages" className="shrink-0 px-2 text-xs sm:text-sm md:min-w-0">
+                {tr.siblingPackagesTab}
               </TabsTrigger>
             )}
             {!isStudentUser && canTabCampGroups && (
@@ -2145,6 +2179,65 @@ export default function CourseViewPage() {
                       </TabsContent>
                     )}
                   </Tabs>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {canTabSiblingPackages && (
+          <TabsContent value="sibling-packages">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">{tr.siblingPackagesTab}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {siblingPackageGroups.length === 0 ? (
+                  <p className="py-8 text-center text-muted-foreground">{tr.noSiblingPackagesLinked}</p>
+                ) : (
+                  siblingPackageGroups.map((group) => (
+                    <div key={group.packageName} className="rounded-lg border p-3">
+                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                        <h3 className="text-base font-semibold">{group.packageName}</h3>
+                        <Badge variant="outline" className="font-semibold">
+                          ₪{Math.round(group.totalDue * 100) / 100}
+                        </Badge>
+                      </div>
+                      <div className="mb-2 text-sm text-muted-foreground">
+                        {tr.packageStudents}: {group.members.length}
+                      </div>
+                      <div className="overflow-x-auto rounded-md border">
+                        <Table className="min-w-[560px]">
+                          <TableHeader>
+                            <TableRow className="bg-muted/50">
+                              <TableHead className="text-right">{tr.student}</TableHead>
+                              <TableHead className="text-right">{tr.siblingRank}</TableHead>
+                              <TableHead className="text-right">{tr.packageSource}</TableHead>
+                              <TableHead className="text-right">סכום לתשלום</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {group.members.map((member) => (
+                              <TableRow key={member.id}>
+                                <TableCell className="text-right font-medium">{member.studentName || "—"}</TableCell>
+                                <TableCell className="text-right">{member.siblingRankLabel || "—"}</TableCell>
+                                <TableCell className="text-right">
+                                  {member.siblingDiscountPackageSource === "course"
+                                    ? tr.sourceCourse
+                                    : member.siblingDiscountPackageSource === "student"
+                                      ? tr.sourceStudent
+                                      : "—"}
+                                </TableCell>
+                                <TableCell className="text-right font-semibold">
+                                  ₪{Number((member as any).coursePrice || 0).toLocaleString()}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  ))
                 )}
               </CardContent>
             </Card>

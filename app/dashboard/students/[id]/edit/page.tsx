@@ -34,7 +34,7 @@ import {
 type SiblingPackage = {
   id: string
   name: string
-  pricingMode: "perStudent" | "perCourse" | "perSession" | "perHour"
+  pricingMode: "perStudent" | "perCourse" | "perSession" | "perHour" | "custom"
   isActive: boolean
 }
 
@@ -126,6 +126,23 @@ export default function EditStudentPage() {
   const [createUserAccount, setCreateUserAccount] = useState(false)
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
+  const siblingRankMap = useMemo(() => {
+    const selectedIds = [id, ...siblingStudentIds].filter(Boolean)
+    if (selectedIds.length === 0) return new Map<string, number>()
+    const unique = [...new Set(selectedIds)]
+    const rows = unique
+      .map((sid) => allStudents.find((s: any) => String(s?.id) === sid))
+      .filter(Boolean)
+      .sort((a: any, b: any) => {
+        const at = a?.createdAt ? new Date(String(a.createdAt)).getTime() : 0
+        const bt = b?.createdAt ? new Date(String(b.createdAt)).getTime() : 0
+        if (at !== bt) return at - bt
+        return String(a?.id || "").localeCompare(String(b?.id || ""))
+      })
+    const map = new Map<string, number>()
+    rows.forEach((row: any, idx: number) => map.set(String(row.id), idx + 1))
+    return map
+  }, [id, siblingStudentIds, allStudents])
 
   // Update local state when student data is fetched
   useEffect(() => {
@@ -788,7 +805,7 @@ export default function EditStudentPage() {
                     .filter((p) => p.isActive !== false)
                     .map((p) => (
                       <SelectItem key={p.id} value={p.id}>
-                        {p.name} ({p.pricingMode === "perStudent" ? "לפי ילד" : p.pricingMode === "perCourse" ? "לפי קורס" : p.pricingMode === "perSession" ? "לפי מפגש" : "לפי שעה"})
+                        {p.name} ({p.pricingMode === "perStudent" ? "לפי ילד" : p.pricingMode === "perCourse" ? "לפי קורס" : p.pricingMode === "perSession" ? "לפי מפגש" : p.pricingMode === "custom" ? "מותאם אישי" : "לפי שעה"})
                       </SelectItem>
                     ))}
                 </SelectContent>
@@ -804,6 +821,11 @@ export default function EditStudentPage() {
                       <label key={sid} className="flex items-center gap-2 rounded-md border px-3 py-2 cursor-pointer hover:bg-amber-50">
                         <Checkbox checked={siblingStudentIds.includes(sid)} onCheckedChange={() => toggleSibling(sid)} />
                         <span className="text-sm">{s.name}</span>
+                        {siblingStudentIds.includes(sid) && (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
+                            אח {siblingRankMap.get(sid) || "—"}
+                          </span>
+                        )}
                       </label>
                     )
                   })}
@@ -811,6 +833,11 @@ export default function EditStudentPage() {
             ) : (
               <p className="text-sm text-muted-foreground">אין תלמידים נוספים לשיוך.</p>
             )}
+            {(id && siblingRankMap.get(id)) ? (
+              <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm">
+                התלמיד הנוכחי: אח {siblingRankMap.get(id)}
+              </div>
+            ) : null}
           </div>
         </Card>
 

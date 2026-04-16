@@ -4,7 +4,7 @@ export type SiblingDiscountPackage = {
   id: string
   name: string
   description: string | null
-  pricingMode: "perStudent" | "perCourse" | "perSession" | "perHour"
+  pricingMode: "perStudent" | "perCourse" | "perSession" | "perHour" | "custom"
   firstAmount: number
   secondAmount: number
   thirdAmount: number
@@ -103,7 +103,10 @@ export function normalizeAmount(value: unknown): number {
 export function normalizeSiblingPayload(body: any) {
   const pricingModeRaw = String(body?.pricingMode ?? "perCourse")
   const pricingMode =
-    pricingModeRaw === "perStudent" || pricingModeRaw === "perSession" || pricingModeRaw === "perHour"
+    pricingModeRaw === "perStudent" ||
+    pricingModeRaw === "perSession" ||
+    pricingModeRaw === "perHour" ||
+    pricingModeRaw === "custom"
       ? pricingModeRaw
       : "perCourse"
   return {
@@ -160,12 +163,13 @@ function diffHours(startTime: string | null | undefined, endTime: string | null 
 }
 
 export function resolveEffectiveCoursePriceByPackage(
-  packagePricingMode: "perStudent" | "perCourse" | "perSession" | "perHour",
+  packagePricingMode: "perStudent" | "perCourse" | "perSession" | "perHour" | "custom",
   amountForRank: number,
   course: { duration?: number | null; startTime?: string | null; endTime?: string | null }
 ): number {
   if (packagePricingMode === "perStudent") return Math.max(0, amountForRank)
   if (packagePricingMode === "perCourse") return Math.max(0, amountForRank)
+  if (packagePricingMode === "custom") return Math.max(0, amountForRank)
   const sessions = Math.max(0, Number(course.duration || 0))
   if (packagePricingMode === "perSession") return Math.max(0, amountForRank * sessions)
   const hours = diffHours(course.startTime, course.endTime)

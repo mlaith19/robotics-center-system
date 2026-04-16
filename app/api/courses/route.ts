@@ -7,6 +7,7 @@ import { parseCourseDateForDb, parseCourseTimeForDb, courseTimeToDisplayValue } 
 import { getCourseRegistrationVisibilityMap, setCourseRegistrationVisibility } from "@/lib/course-registration-visibility"
 import { ensureSiblingDiscountTables } from "@/lib/sibling-discount"
 import { syncCourseTeacherTariffs } from "@/lib/teacher-tariff-profiles"
+import { ensureCourseBillingPlanColumns } from "@/lib/course-billing-plan"
 import {
   ensureCourseSessionPricesColumn,
   ensureCourseNoAttendanceChargeColumn,
@@ -34,6 +35,7 @@ export const GET = withTenantAuth(async (req, session) => {
     await ensureSiblingDiscountTables(db)
     await ensureCourseSessionPricesColumn(db)
     await ensureCourseNoAttendanceChargeColumn(db)
+    await ensureCourseBillingPlanColumns(db)
     // Avoid blocking/slowing every courses read request.
     // Keep status sync as best-effort background work.
     runAutoCompleteExpiredCourses(db).catch((e) => {
@@ -118,6 +120,7 @@ export const POST = withTenantAuth(async (req, session) => {
     await ensureSiblingDiscountTables(db)
     await ensureCourseSessionPricesColumn(db)
     await ensureCourseNoAttendanceChargeColumn(db)
+    await ensureCourseBillingPlanColumns(db)
     const body = await req.json()
     const name = body.name ? String(body.name).trim() : null
     if (!name) return Response.json({ error: "name is required" }, { status: 400 })
@@ -144,6 +147,10 @@ export const POST = withTenantAuth(async (req, session) => {
     const siblingDiscountPackageId = body.siblingDiscountPackageId ? String(body.siblingDiscountPackageId).trim() : null
     const useStudentSiblingDiscountInCourse = body.useStudentSiblingDiscountInCourse !== false
     const campChargeFirstSessionIfNoAttendance = body.campChargeFirstSessionIfNoAttendance === true
+    const billingPlan = body.billingPlan ? String(body.billingPlan).trim() : null
+    const billingPlanSummerPrice = body.billingPlanSummerPrice != null ? Number(body.billingPlanSummerPrice) : null
+    const billingPlanDiscountedPrice = body.billingPlanDiscountedPrice != null ? Number(body.billingPlanDiscountedPrice) : null
+    const billingPlanPerSessionPrice = body.billingPlanPerSessionPrice != null ? Number(body.billingPlanPerSessionPrice) : null
     const rawTariffPost = body.teacherTariffByTeacherId
     const tariffMapPost =
       rawTariffPost && typeof rawTariffPost === "object" && !Array.isArray(rawTariffPost)
@@ -181,14 +188,18 @@ export const POST = withTenantAuth(async (req, session) => {
         "courseNumber", category, "courseType", location,
         "startDate", "endDate", "startTime", "endTime",
         "daysOfWeek", "teacherIds", "schoolId", "gafanProgramId", "siblingDiscountPackageId",
-        "sessionPrices", "campChargeFirstSessionIfNoAttendance", "useStudentSiblingDiscountInCourse", "createdAt", "updatedAt"
+        "sessionPrices", "campChargeFirstSessionIfNoAttendance", "useStudentSiblingDiscountInCourse",
+        "billingPlan", "billingPlanSummerPrice", "billingPlanDiscountedPrice", "billingPlanPerSessionPrice",
+        "createdAt", "updatedAt"
       )
       VALUES (
         ${id}, ${name}, ${description}, ${level}, ${duration}, ${price}, ${status},
         ${courseNumber}, ${category}, ${courseType}, ${location},
         ${startDate}, ${endDate}, ${startTimeVal}::timestamp, ${endTimeVal}::timestamp,
         ${daysOfWeek}, ${teacherIds}, ${schoolId}, ${gafanProgramId}, ${siblingDiscountPackageId},
-        ${db.json(sessionPricesJson)}, ${campChargeFirstSessionIfNoAttendance}, ${useStudentSiblingDiscountInCourse}, ${now}, ${now}
+        ${db.json(sessionPricesJson)}, ${campChargeFirstSessionIfNoAttendance}, ${useStudentSiblingDiscountInCourse},
+        ${billingPlan}, ${billingPlanSummerPrice}, ${billingPlanDiscountedPrice}, ${billingPlanPerSessionPrice},
+        ${now}, ${now}
       )
       RETURNING *
     `

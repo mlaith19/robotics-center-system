@@ -161,6 +161,12 @@ export async function applySiblingAndAttendancePricingToEnrollmentRows(
               startTime: r.startTime ? String(r.startTime) : null,
               endTime: r.endTime ? String(r.endTime) : null,
             })
+          } else if (pkg.pricingMode === "custom") {
+            effectivePrice = resolveEffectiveCoursePriceByPackage("custom", amountForRank, {
+              duration: perSessionSummary.presentSessionCount,
+              startTime: r.startTime ? String(r.startTime) : null,
+              endTime: r.endTime ? String(r.endTime) : null,
+            })
           }
           // perCourse / perStudent: נשאר attendedChargeSum
         } else {

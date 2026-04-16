@@ -131,6 +131,10 @@ export default function NewCoursePage() {
     siblingDiscountPackageId: "",
     /** שיטת תמחור */
     pricingMode: "perStudent" as "perStudent" | "perCourse" | "perSession" | "perHour",
+    billingPlan: "summer" as "summer" | "discounted" | "perSession",
+    billingPlanSummerPrice: "",
+    billingPlanDiscountedPrice: "",
+    billingPlanPerSessionPrice: "",
   })
 
   const baseCourseType = normalizeCourseType(formData.courseType)
@@ -391,6 +395,9 @@ export default function NewCoursePage() {
         credentials: "include",
         body: JSON.stringify({
           ...formData,
+          billingPlanSummerPrice: formData.billingPlanSummerPrice ? Number(formData.billingPlanSummerPrice) : null,
+          billingPlanDiscountedPrice: formData.billingPlanDiscountedPrice ? Number(formData.billingPlanDiscountedPrice) : null,
+          billingPlanPerSessionPrice: formData.billingPlanPerSessionPrice ? Number(formData.billingPlanPerSessionPrice) : null,
           teacherTariffByTeacherId,
           courseType: courseTypeOut,
           duration: durationOut,
@@ -946,6 +953,64 @@ export default function NewCoursePage() {
   </CardHeader>
   <CardContent>
   <div className="space-y-3">
+  {baseCourseType !== "gafan" && (
+    <div className="space-y-2">
+      <Label className="text-right block">תוכנית חיוב</Label>
+      <Select
+        value={formData.billingPlan}
+        onValueChange={(value: "summer" | "discounted" | "perSession") =>
+          setFormData({ ...formData, billingPlan: value })
+        }
+      >
+        <SelectTrigger className="text-right" dir="rtl">
+          <SelectValue placeholder="בחר תוכנית חיוב" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="summer">תוכנית קיץ</SelectItem>
+          <SelectItem value="discounted">תוכנית מוזלת</SelectItem>
+          <SelectItem value="perSession">לפי מפגש</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  )}
+  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+    <div className="space-y-2">
+      <Label className="text-right block">מחיר תוכנית קיץ (ש"ח)</Label>
+      <Input
+        type="number"
+        min={0}
+        step="0.01"
+        value={formData.billingPlanSummerPrice}
+        onChange={(e) => setFormData({ ...formData, billingPlanSummerPrice: e.target.value })}
+        className="text-right"
+        dir="rtl"
+      />
+    </div>
+    <div className="space-y-2">
+      <Label className="text-right block">מחיר תוכנית מוזלת (ש"ח)</Label>
+      <Input
+        type="number"
+        min={0}
+        step="0.01"
+        value={formData.billingPlanDiscountedPrice}
+        onChange={(e) => setFormData({ ...formData, billingPlanDiscountedPrice: e.target.value })}
+        className="text-right"
+        dir="rtl"
+      />
+    </div>
+    <div className="space-y-2">
+      <Label className="text-right block">מחיר לפי מפגש (ש"ח)</Label>
+      <Input
+        type="number"
+        min={0}
+        step="0.01"
+        value={formData.billingPlanPerSessionPrice}
+        onChange={(e) => setFormData({ ...formData, billingPlanPerSessionPrice: e.target.value })}
+        className="text-right"
+        dir="rtl"
+      />
+    </div>
+  </div>
   {baseCourseType !== "gafan" && (
     <div className="space-y-2">
       <Label className="text-right block">שיטת חישוב</Label>

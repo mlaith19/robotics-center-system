@@ -60,7 +60,7 @@ interface SiblingPackageRow {
   id: string
   name: string
   description: string | null
-  pricingMode: "perStudent" | "perCourse" | "perSession" | "perHour"
+  pricingMode: "perStudent" | "perCourse" | "perSession" | "perHour" | "custom"
   firstAmount: number
   secondAmount: number
   thirdAmount: number
@@ -139,6 +139,7 @@ export default function SettingsPage() {
     secondAmount: string
     thirdAmount: string
     pricingMode: "perStudent" | "perCourse" | "perSession" | "perHour"
+    | "custom"
     isActive: boolean
   }>({
     open: false,
@@ -737,7 +738,15 @@ export default function SettingsPage() {
                       <div className="min-w-0 text-right">
                         <div className="font-medium">{pkg.name}</div>
                         <div className="text-xs text-muted-foreground break-words">
-                          {pkg.pricingMode === "perStudent" ? "לפי ילד" : pkg.pricingMode === "perCourse" ? "לפי קורס" : pkg.pricingMode === "perSession" ? "לפי מפגש" : "לפי שעה"} |
+                          {pkg.pricingMode === "perStudent"
+                            ? "לפי ילד"
+                            : pkg.pricingMode === "perCourse"
+                              ? "לפי קורס"
+                              : pkg.pricingMode === "perSession"
+                                ? "לפי מפגש"
+                                : pkg.pricingMode === "custom"
+                                  ? "מותאם אישי"
+                                  : "לפי שעה"} |
                           ראשון: ₪{pkg.firstAmount} | שני: ₪{pkg.secondAmount} | שלישי+: ₪{pkg.thirdAmount}
                           {pkg.isActive ? " | פעיל" : " | לא פעיל"}
                         </div>
@@ -1182,7 +1191,7 @@ export default function SettingsPage() {
               <Label>שיטת חישוב חבילה</Label>
               <Select
                 value={siblingDialog.pricingMode}
-                onValueChange={(value: "perStudent" | "perCourse" | "perSession" | "perHour") =>
+                onValueChange={(value: "perStudent" | "perCourse" | "perSession" | "perHour" | "custom") =>
                   setSiblingDialog((d) => ({ ...d, pricingMode: value }))
                 }
               >
@@ -1194,6 +1203,7 @@ export default function SettingsPage() {
                   <SelectItem value="perCourse">לפי קורס (סכום כולל)</SelectItem>
                   <SelectItem value="perSession">לפי מפגש</SelectItem>
                   <SelectItem value="perHour">לפי שעה</SelectItem>
+                  <SelectItem value="custom">מותאם אישי</SelectItem>
                 </SelectContent>
               </Select>
             </div>

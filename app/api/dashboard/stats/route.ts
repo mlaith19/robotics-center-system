@@ -2,6 +2,7 @@ import { handleDbError } from "@/lib/db"
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant, ensureSessionMatchesTenant } from "@/lib/tenant/resolve-tenant"
 import { computePerStudentDueAndPaid } from "@/lib/student-debt-aggregate"
+import { syncTeacherWeeklyActivityStatus } from "@/lib/teacher-weekly-activity-status"
 
 export const GET = withTenantAuth(async (req, session) => {
   const [tenant, tenantErr] = await requireTenant(req)
@@ -10,6 +11,7 @@ export const GET = withTenantAuth(async (req, session) => {
   if (mismatch) return mismatch
   const db = tenant.db
   try {
+    await syncTeacherWeeklyActivityStatus(db)
     const result = await db`
       SELECT 
         (SELECT COUNT(*) FROM "Course" WHERE status = 'active' OR status = 'פעיל' OR status IS NULL) as "totalCourses",

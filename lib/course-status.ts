@@ -112,16 +112,26 @@ export function getCourseStatusPresentation(course: {
 export async function runAutoCompleteExpiredCourses(db: Sql): Promise<void> {
   try {
     await db.unsafe(`
-      UPDATE "Course"
-      SET status = 'completed', "updatedAt" = CURRENT_TIMESTAMP
-      WHERE "endDate" IS NOT NULL
-        AND TRIM("endDate") <> ''
-        AND LENGTH(TRIM("endDate")) >= 10
-        AND LEFT(TRIM("endDate"), 10) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
-        AND (LEFT(TRIM("endDate"), 10))::date < CURRENT_DATE
+      WITH completed_courses AS (
+        UPDATE "Course"
+        SET status = 'completed', "updatedAt" = CURRENT_TIMESTAMP
+        WHERE "endDate" IS NOT NULL
+          AND TRIM("endDate") <> ''
+          AND LENGTH(TRIM("endDate")) >= 10
+          AND LEFT(TRIM("endDate"), 10) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+          AND (LEFT(TRIM("endDate"), 10))::date < CURRENT_DATE
+          AND (
+            LOWER(TRIM(COALESCE(status, ''))) IN ('active', '')
+            OR TRIM(COALESCE(status, '')) = 'פעיל'
+          )
+        RETURNING id
+      )
+      UPDATE "Enrollment" e
+      SET status = 'inactive'
+      WHERE e."courseId" IN (SELECT id FROM completed_courses)
         AND (
-          LOWER(TRIM(COALESCE(status, ''))) IN ('active', '')
-          OR TRIM(COALESCE(status, '')) = 'פעיל'
+          LOWER(TRIM(COALESCE(e.status, ''))) IN ('active', '')
+          OR TRIM(COALESCE(e.status, '')) IN ('פעיל', 'active')
         )
     `)
   } catch (e) {

@@ -6,6 +6,7 @@ import { parseCourseDateForDb, parseCourseTimeForDb, courseTimeToDisplayValue } 
 import { getCourseRegistrationVisibilityMap, setCourseRegistrationVisibility } from "@/lib/course-registration-visibility"
 import { ensureSiblingDiscountTables } from "@/lib/sibling-discount"
 import { ensureTeacherTariffTables, loadCourseTeacherTariffMap, syncCourseTeacherTariffs } from "@/lib/teacher-tariff-profiles"
+import { ensureCourseBillingPlanColumns } from "@/lib/course-billing-plan"
 import {
   ensureCourseSessionPricesColumn,
   ensureCourseNoAttendanceChargeColumn,
@@ -22,6 +23,12 @@ function cleanStr(v: any): string | null {
   return s.length ? s : null
 }
 
+function isCompletedStatusValue(status: unknown): boolean {
+  const raw = String(status ?? "").trim()
+  const normalized = raw.toLowerCase()
+  return normalized === "completed" || raw === "הושלם"
+}
+
 export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
   const featureErr = await requireFeatureFromRequest(req, "courses", session)
   if (featureErr) return featureErr
@@ -33,6 +40,7 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
     await ensureSiblingDiscountTables(db)
     await ensureCourseSessionPricesColumn(db)
     await ensureCourseNoAttendanceChargeColumn(db)
+    await ensureCourseBillingPlanColumns(db)
     await runAutoCompleteExpiredCourses(db)
     const result = await db`
       SELECT
@@ -77,6 +85,7 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
     await ensureSiblingDiscountTables(db)
     await ensureCourseSessionPricesColumn(db)
     await ensureCourseNoAttendanceChargeColumn(db)
+    await ensureCourseBillingPlanColumns(db)
     const teacherIdsPre = Array.isArray(body.teacherIds) ? body.teacherIds.map((x: unknown) => String(x)) : []
     const rawTariffPre = body.teacherTariffByTeacherId
     const tariffMapPre =
@@ -142,10 +151,26 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
           "useStudentSiblingDiscountInCourse" = ${body.useStudentSiblingDiscountInCourse !== false},
           "sessionPrices" = ${db.json(sessionPricesPut)},
           "campChargeFirstSessionIfNoAttendance" = ${body.campChargeFirstSessionIfNoAttendance === true},
+          "billingPlan" = ${cleanStr(body.billingPlan)},
+          "billingPlanSummerPrice" = ${body.billingPlanSummerPrice != null ? Number(body.billingPlanSummerPrice) : null},
+          "billingPlanDiscountedPrice" = ${body.billingPlanDiscountedPrice != null ? Number(body.billingPlanDiscountedPrice) : null},
+          "billingPlanPerSessionPrice" = ${body.billingPlanPerSessionPrice != null ? Number(body.billingPlanPerSessionPrice) : null},
           "updatedAt" = ${now}
       WHERE id = ${id}
       RETURNING *
     `
+    const nextStatus = cleanStr(body.status) || "active"
+    if (isCompletedStatusValue(nextStatus)) {
+      await db`
+        UPDATE "Enrollment"
+        SET status = 'inactive'
+        WHERE "courseId" = ${id}
+          AND (
+            LOWER(TRIM(COALESCE(status, ''))) IN ('active', '')
+            OR TRIM(COALESCE(status, '')) IN ('פעיל', 'active')
+          )
+      `
+    }
     await setCourseRegistrationVisibility(
       db as unknown as (strings: TemplateStringsArray, ...values: unknown[]) => Promise<any[]>,
       String(id),

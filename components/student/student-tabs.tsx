@@ -71,6 +71,7 @@ type Attendance = {
 type SiblingPackage = {
   id: string
   name: string
+  pricingMode: "perStudent" | "perCourse" | "perSession" | "perHour" | "custom"
   firstAmount: number
   secondAmount: number
   thirdAmount: number
