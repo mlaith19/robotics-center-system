@@ -9,8 +9,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ArrowRight, BookOpen, Save, Calendar, Users, MessageSquare, Loader2, DollarSign } from "lucide-react"
+import { ArrowRight, BookOpen, Calendar, Users, MessageSquare, Loader2 } from "lucide-react"
 import { courseTimeToInputValue, normalizeCourseCalendarYmd } from "@/lib/course-db-fields"
 import { listCampSessionDates } from "@/lib/camp-kaytana"
 import { PerSessionPriceList } from "@/components/course/per-session-price-list"
@@ -107,6 +108,8 @@ export default function EditCoursePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [isFormReady, setIsFormReady] = useState(false)
+  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle")
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [schools, setSchools] = useState<School[]>([])
   const [gafanPrograms, setGafanPrograms] = useState<GafanProgram[]>([])
@@ -322,6 +325,7 @@ export default function EditCoursePage() {
         if (Array.isArray(categoryList)) setCourseCategories(categoryList)
         if (Array.isArray(siblingPackageList)) setSiblingPackages(siblingPackageList.filter((p: any) => p?.isActive !== false))
         if (Array.isArray(tariffList)) setTariffProfiles(tariffList)
+        setIsFormReady(true)
         setLoading(false)
       })
       .catch(err => {
@@ -375,7 +379,7 @@ export default function EditCoursePage() {
     })
   }
 
-  async function save() {
+  async function save(navigateOnSuccess = true) {
     if (!formData.name.trim()) {
       setErr(l("שם הקורס הוא שדה חובה", "Course name is required", "اسم الدورة مطلوب"))
       return
@@ -458,13 +462,30 @@ export default function EditCoursePage() {
         const j = await res.json().catch(() => ({}))
         throw new Error(j?.error ?? `Failed (${res.status})`)
       }
-      router.push("/dashboard/courses")
+      if (navigateOnSuccess) {
+        router.push("/dashboard/courses")
+      }
     } catch (e: any) {
       setErr(e?.message ?? l("שגיאה בעדכון קורס", "Failed to update", "فشل تحديث الدورة"))
     } finally {
       setSaving(false)
     }
   }
+
+  useEffect(() => {
+    if (loading || !isFormReady) return
+    const timer = setTimeout(async () => {
+      setAutoSaveStatus("saving")
+      try {
+        await save(false)
+        setAutoSaveStatus("saved")
+      } catch {
+        setAutoSaveStatus("error")
+      }
+    }, 800)
+
+    return () => clearTimeout(timer)
+  }, [loading, isFormReady, formData, teacherTariffByTeacherId, sessionPricesByDate])
 
   if (loading) {
     return (
@@ -485,6 +506,15 @@ export default function EditCoursePage() {
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold sm:text-3xl">{l("עריכת קורס", "Edit Course", "تعديل الدورة")}</h1>
           <p className="mt-1 text-sm text-muted-foreground sm:text-base">{l("עדכן את פרטי הקורס", "Update course details", "حدّث تفاصيل الدورة")}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {autoSaveStatus === "saving"
+              ? l("שומר אוטומטית...", "Auto-saving...", "حفظ تلقائي...")
+              : autoSaveStatus === "saved"
+                ? l("נשמר אוטומטית", "Auto-saved", "تم الحفظ تلقائياً")
+                : autoSaveStatus === "error"
+                  ? l("שגיאה בשמירה אוטומטית", "Auto-save failed", "فشل الحفظ التلقائي")
+                  : l("שמירה אוטומטית פעילה", "Auto-save enabled", "الحفظ التلقائي مفعّل")}
+          </p>
         </div>
       </div>
 
@@ -494,7 +524,17 @@ export default function EditCoursePage() {
         </Card>
       )}
 
+      <Tabs defaultValue="status" className="w-full">
+        <TabsList className="mb-4 grid w-full grid-cols-2 gap-2 sm:grid-cols-5">
+          <TabsTrigger value="status">{l("סטטוס", "Status", "الحالة")}</TabsTrigger>
+          <TabsTrigger value="general">{l("כללי", "General", "عام")}</TabsTrigger>
+          <TabsTrigger value="teachers">{l("מורים", "Teachers", "المعلمون")}</TabsTrigger>
+          <TabsTrigger value="schedule">{l("זמנים", "Schedule", "الجدول")}</TabsTrigger>
+          <TabsTrigger value="pricing">{l("תמחור", "Pricing", "التسعير")}</TabsTrigger>
+        </TabsList>
+
       {/* סטטוס הקורס */}
+      <TabsContent value="status">
       <Card className="border-blue-200 bg-blue-50/50">
         <CardHeader className="text-right">
           <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
@@ -654,8 +694,10 @@ export default function EditCoursePage() {
           )}
         </CardContent>
       </Card>
+      </TabsContent>
 
       {/* מידע כללי / מידע בסיסי על התוכנית (לגפ"ן) */}
+      <TabsContent value="general">
       <Card className="border-green-200 bg-green-50/50">
         <CardHeader className="text-right">
           <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
@@ -813,8 +855,10 @@ export default function EditCoursePage() {
           )}
         </CardContent>
       </Card>
+      </TabsContent>
 
       {/* מורים */}
+      <TabsContent value="teachers">
       <Card className="border-purple-200 bg-purple-50/50">
         <CardHeader className="text-right">
           <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
@@ -885,8 +929,10 @@ export default function EditCoursePage() {
           )}
         </CardContent>
       </Card>
+      </TabsContent>
 
       {/* תאריכים וזמנים */}
+      <TabsContent value="schedule">
       <Card className="border-orange-200 bg-orange-50/50">
         <CardHeader className="text-right">
           <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
@@ -959,8 +1005,10 @@ export default function EditCoursePage() {
           </div>
         </CardContent>
       </Card>
+      </TabsContent>
 
       {/* תמחור */}
+      <TabsContent value="pricing">
       <Card className="border-emerald-200 bg-emerald-50/50">
         <CardHeader className="text-right">
           <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
@@ -980,26 +1028,62 @@ export default function EditCoursePage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {formData.courseType !== "gafan" && (
+            <div className="mb-4 space-y-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:items-end">
+                <div className="space-y-2">
+                  <Label className="text-right block">שיטות תמחור ותוכנית חיוב</Label>
+                  <Select
+                    value={pricingDropdownValue}
+                    onValueChange={(value) => {
+                      setPricingDropdownValue(value)
+                      if (value.startsWith("pricing:")) {
+                        const pricingMode = value.replace("pricing:", "") as "perStudent" | "perCourse" | "perSession" | "perHour"
+                        setFormData({ ...formData, pricingMode, billingPlanSelectionMode: "pricing" })
+                        return
+                      }
+                      if (value === "billing:enabled") {
+                        setFormData({ ...formData, billingPlanSelectionMode: "billing" })
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="text-right" dir="rtl">
+                      <SelectValue placeholder="בחר שיטה" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pricing:perStudent">מחיר לכל תלמיד</SelectItem>
+                      <SelectItem value="pricing:perCourse">מחיר כולל לקורס</SelectItem>
+                      <SelectItem value="pricing:perSession">מחיר לפי מפגש</SelectItem>
+                      <SelectItem value="pricing:perHour">מחיר לפי שעה</SelectItem>
+                      <SelectItem value="billing:enabled">תוכנית חיוב</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {formData.billingPlanSelectionMode === "billing" && (
+                  <div className="space-y-2">
+                    <Label className="text-right block">ברירת מחדל לתלמיד בקורס</Label>
+                    <Select
+                      value={formData.billingPlan}
+                      onValueChange={(value: "summer" | "discounted" | "perSession") =>
+                        setFormData({ ...formData, billingPlan: value })
+                      }
+                    >
+                      <SelectTrigger className="text-right" dir="rtl">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="summer">תוכנית קיץ</SelectItem>
+                        <SelectItem value="discounted">תוכנית מוזלת</SelectItem>
+                        <SelectItem value="perSession">לפי מפגש</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
           {formData.billingPlanSelectionMode === "billing" && (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 mb-4">
-            <div className="space-y-2 sm:col-span-3">
-              <Label className="text-right block">ברירת מחדל לתלמיד בקורס</Label>
-              <Select
-                value={formData.billingPlan}
-                onValueChange={(value: "summer" | "discounted" | "perSession") =>
-                  setFormData({ ...formData, billingPlan: value })
-                }
-              >
-                <SelectTrigger className="text-right" dir="rtl">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="summer">תוכנית קיץ</SelectItem>
-                  <SelectItem value="discounted">תוכנית מוזלת</SelectItem>
-                  <SelectItem value="perSession">לפי מפגש</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
             <div className="space-y-2">
               <Label className="text-right block">מחיר תוכנית קיץ (ש"ח)</Label>
               <Input
@@ -1037,36 +1121,6 @@ export default function EditCoursePage() {
               />
             </div>
           </div>
-          )}
-          {formData.courseType !== "gafan" && (
-            <div className="space-y-2 mb-4">
-              <Label className="text-right block">שיטות תמחור ותוכנית חיוב</Label>
-              <Select
-                value={pricingDropdownValue}
-                onValueChange={(value) => {
-                  setPricingDropdownValue(value)
-                  if (value.startsWith("pricing:")) {
-                    const pricingMode = value.replace("pricing:", "") as "perStudent" | "perCourse" | "perSession" | "perHour"
-                    setFormData({ ...formData, pricingMode, billingPlanSelectionMode: "pricing" })
-                    return
-                  }
-                  if (value === "billing:enabled") {
-                    setFormData({ ...formData, billingPlanSelectionMode: "billing" })
-                  }
-                }}
-              >
-                <SelectTrigger className="text-right" dir="rtl">
-                  <SelectValue placeholder="בחר שיטה" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pricing:perStudent">מחיר לכל תלמיד</SelectItem>
-                  <SelectItem value="pricing:perCourse">מחיר כולל לקורס</SelectItem>
-                  <SelectItem value="pricing:perSession">מחיר לפי מפגש</SelectItem>
-                  <SelectItem value="pricing:perHour">מחיר לפי שעה</SelectItem>
-                  <SelectItem value="billing:enabled">תוכנית חיוב</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
           )}
           <div className="space-y-2 mb-4">
             <Label className="text-right block">חבילת הנחת אחים לקורס (אופציונלי)</Label>
@@ -1151,15 +1205,13 @@ export default function EditCoursePage() {
           </div>
         </CardContent>
       </Card>
+      </TabsContent>
+      </Tabs>
 
       {/* כפתורים */}
       <div className="flex gap-3 justify-start">
-        <Button onClick={save} disabled={!formData.name.trim() || saving} className="gap-2 bg-primary">
-          <Save className="h-4 w-4" />
-          {saving ? l("שומר...", "Saving...", "جارٍ الحفظ...") : l("שמור שינויים", "Save Changes", "حفظ التغييرات")}
-        </Button>
         <Button variant="outline" onClick={() => router.back()} className="bg-transparent">
-          {l("ביטול", "Cancel", "إلغاء")}
+          {l("סגור", "Close", "إغلاق")}
         </Button>
       </div>
     </div>
