@@ -36,6 +36,7 @@ interface Course {
   updatedAt: string
   campChargeFirstSessionIfNoAttendance?: boolean | null
   useStudentSiblingDiscountInCourse?: boolean | null
+  billingPlanSelectionMode?: "pricing" | "billing" | null
 }
 
 function isTruthyCourseFlag(raw: unknown): boolean {
@@ -865,6 +866,7 @@ export default function CourseViewPage() {
       String((course as any)?.billingPlan || "").trim() === "perSession"
         ? String((course as any)?.billingPlan || "").trim()
         : "summer"
+    const shouldUseBillingPlanMode = String((course as any)?.billingPlanSelectionMode || "").trim() === "billing"
     try {
       const results = await Promise.allSettled(
         candidateIds.map((studentId) =>
@@ -875,7 +877,7 @@ export default function CourseViewPage() {
               studentId,
               courseId: id,
               status: "active",
-              billingPlanChoice: defaultBillingPlan,
+              billingPlanChoice: shouldUseBillingPlanMode ? defaultBillingPlan : null,
             }),
           }),
         ),
@@ -1452,10 +1454,12 @@ export default function CourseViewPage() {
   }
 
   const dueByStudent = new Map<string, { studentName: string; totalDue: number }>()
+  const firstEnrollmentByStudent = new Map<string, Enrollment>()
   for (const e of enrollments) {
     const sid = String(e.studentId || "").trim()
     if (!sid) continue
     const studentName = e.studentName || "—"
+    if (!firstEnrollmentByStudent.has(sid)) firstEnrollmentByStudent.set(sid, e)
     const presentDates = Array.from(presentDatesByStudent.get(sid) || [])
     // coursePrice שמגיע מ-API /enrollments כבר כולל התאמות אפקטיביות
     // (למשל הנחות אחים), לכן הוא חייב להיות בסיס החישוב לחייבים.
@@ -1476,15 +1480,20 @@ export default function CourseViewPage() {
   }
 
   const debtRowsAll = Array.from(dueByStudent.entries()).map(([studentId, due]) => {
+    const enrollment = firstEnrollmentByStudent.get(studentId)
     const paid = paidByStudent.get(studentId) || 0
     const balance = Math.max(0, due.totalDue - paid)
     return {
-      enrollmentId: studentId,
+      enrollmentId: enrollment?.id || studentId,
       studentId,
       studentName: due.studentName,
       totalDue: due.totalDue,
       paid,
       balance,
+      billingPlanChoice:
+        enrollment?.billingPlanChoice === "discounted" || enrollment?.billingPlanChoice === "perSession"
+          ? enrollment.billingPlanChoice
+          : "summer",
     }
   })
   const debtRows = debtRowsAll
@@ -1976,7 +1985,6 @@ export default function CourseViewPage() {
                         <TableHead className="text-right">{tr.enrollmentDate}</TableHead>
                         <TableHead className="text-right">{tr.siblingPackage}</TableHead>
                         <TableHead className="text-right">{tr.siblingRank}</TableHead>
-                        <TableHead className="text-right">תוכנית חיוב</TableHead>
                         <TableHead className="text-right">{tr.packageSource}</TableHead>
                         <TableHead className="text-right">{tr.performedBy}</TableHead>
                         {isCampCourse && (
@@ -2000,37 +2008,6 @@ export default function CourseViewPage() {
                           </TableCell>
                           <TableCell className="text-right text-muted-foreground">{enrollment.siblingDiscountPackageName || "—"}</TableCell>
                           <TableCell className="text-right text-muted-foreground">{enrollment.siblingRankLabel || "—"}</TableCell>
-                          <TableCell className="text-right">
-                            {canEditCourses && statusPres.key !== "completed" ? (
-                              <Select
-                                value={
-                                  enrollment.billingPlanChoice === "discounted" || enrollment.billingPlanChoice === "perSession"
-                                    ? enrollment.billingPlanChoice
-                                    : "summer"
-                                }
-                                onValueChange={(v: "summer" | "discounted" | "perSession") =>
-                                  saveEnrollmentBillingPlanChoice(enrollment.id, v)
-                                }
-                              >
-                                <SelectTrigger className="w-[min(100%,220px)]">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="summer">תוכנית קיץ</SelectItem>
-                                  <SelectItem value="discounted">תוכנית מוזלת</SelectItem>
-                                  <SelectItem value="perSession">לפי מפגש</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            ) : (
-                              <span className="text-muted-foreground">
-                                {enrollment.billingPlanChoice === "discounted"
-                                  ? "תוכנית מוזלת"
-                                  : enrollment.billingPlanChoice === "perSession"
-                                    ? "לפי מפגש"
-                                    : "תוכנית קיץ"}
-                              </span>
-                            )}
-                          </TableCell>
                           <TableCell className="text-right text-muted-foreground">
                             {enrollment.siblingDiscountPackageSource === "course"
                               ? tr.sourceCourse
@@ -2533,6 +2510,7 @@ export default function CourseViewPage() {
                   <TableHeader>
                     <TableRow className="bg-muted/50">
                       <TableHead className="text-right">{tr.student}</TableHead>
+                      <TableHead className="text-right">תוכנית חיוב</TableHead>
                       <TableHead className="text-right">סה&quot;כ לתשלום</TableHead>
                       <TableHead className="text-right">שולם</TableHead>
                       <TableHead className="text-right">יתרה</TableHead>
@@ -2542,13 +2520,40 @@ export default function CourseViewPage() {
                     {debtRows.length > 0 ? debtRows.map((r) => (
                       <TableRow key={r.enrollmentId}>
                         <TableCell className="text-right">{r.studentName}</TableCell>
+                        <TableCell className="text-right">
+                          {String((course as any)?.billingPlanSelectionMode || "").trim() === "billing" && canEditCourses && statusPres.key !== "completed" ? (
+                            <Select
+                              value={r.billingPlanChoice}
+                              onValueChange={(v: "summer" | "discounted" | "perSession") =>
+                                saveEnrollmentBillingPlanChoice(r.enrollmentId, v)
+                              }
+                            >
+                              <SelectTrigger className="w-[min(100%,220px)]">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="summer">תוכנית קיץ</SelectItem>
+                                <SelectItem value="discounted">תוכנית מוזלת</SelectItem>
+                                <SelectItem value="perSession">לפי מפגש</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <span className="text-muted-foreground">
+                              {r.billingPlanChoice === "discounted"
+                                ? "תוכנית מוזלת"
+                                : r.billingPlanChoice === "perSession"
+                                  ? "לפי מפגש"
+                                  : "תוכנית קיץ"}
+                            </span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-right">₪{r.totalDue.toLocaleString()}</TableCell>
                         <TableCell className="text-right text-emerald-700 font-medium">₪{r.paid.toLocaleString()}</TableCell>
                         <TableCell className="text-right text-red-600 font-semibold">₪{r.balance.toLocaleString()}</TableCell>
                       </TableRow>
                     )) : (
                       <TableRow>
-                        <TableCell className="text-center text-muted-foreground" colSpan={4}>
+                        <TableCell className="text-center text-muted-foreground" colSpan={5}>
                           אין תלמידים עם חוב בקורס זה
                         </TableCell>
                       </TableRow>

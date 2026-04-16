@@ -119,16 +119,19 @@ export async function applySiblingAndAttendancePricingToEnrollmentRows(
     const pkg = packageId ? packagesMap.get(packageId) : undefined
 
     let effectivePrice = Number(r.coursePrice || 0)
+    const billingSelectionMode = String((r as Record<string, unknown>).billingPlanSelectionMode || "").trim()
     const selectedBillingPlan = normalizeBillingPlan((r as Record<string, unknown>).billingPlanChoice ?? r.billingPlan)
-    if (selectedBillingPlan === "summer") {
-      const n = Number((r as Record<string, unknown>).billingPlanSummerPrice)
-      if (Number.isFinite(n) && n >= 0) effectivePrice = n
-    } else if (selectedBillingPlan === "discounted") {
-      const n = Number((r as Record<string, unknown>).billingPlanDiscountedPrice)
-      if (Number.isFinite(n) && n >= 0) effectivePrice = n
-    } else if (selectedBillingPlan === "perSession") {
-      const n = Number((r as Record<string, unknown>).billingPlanPerSessionPrice)
-      if (Number.isFinite(n) && n >= 0) effectivePrice = n
+    if (billingSelectionMode === "billing") {
+      if (selectedBillingPlan === "summer") {
+        const n = Number((r as Record<string, unknown>).billingPlanSummerPrice)
+        if (Number.isFinite(n) && n >= 0) effectivePrice = n
+      } else if (selectedBillingPlan === "discounted") {
+        const n = Number((r as Record<string, unknown>).billingPlanDiscountedPrice)
+        if (Number.isFinite(n) && n >= 0) effectivePrice = n
+      } else if (selectedBillingPlan === "perSession") {
+        const n = Number((r as Record<string, unknown>).billingPlanPerSessionPrice)
+        if (Number.isFinite(n) && n >= 0) effectivePrice = n
+      }
     }
     let siblingDiscountPackageName: string | null = null
     let siblingDiscountPackageSource: "course" | "student" | null = null
@@ -209,7 +212,7 @@ export async function applySiblingAndAttendancePricingToEnrollmentRows(
       siblingRankLabel,
       siblingAmountForRank,
       siblingGroupId: siblingGroupIdOut,
-      billingPlanChoice: selectedBillingPlan,
+      billingPlanChoice: billingSelectionMode === "billing" ? selectedBillingPlan : null,
     })
   }
 

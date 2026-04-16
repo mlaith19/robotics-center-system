@@ -147,6 +147,7 @@ export const POST = withTenantAuth(async (req, session) => {
     const siblingDiscountPackageId = body.siblingDiscountPackageId ? String(body.siblingDiscountPackageId).trim() : null
     const useStudentSiblingDiscountInCourse = body.useStudentSiblingDiscountInCourse !== false
     const campChargeFirstSessionIfNoAttendance = body.campChargeFirstSessionIfNoAttendance === true
+    const billingPlanSelectionMode = String(body.billingPlanSelectionMode || "").trim() === "billing" ? "billing" : "pricing"
     const billingPlan = body.billingPlan ? String(body.billingPlan).trim() : null
     const billingPlanSummerPrice = body.billingPlanSummerPrice != null ? Number(body.billingPlanSummerPrice) : null
     const billingPlanDiscountedPrice = body.billingPlanDiscountedPrice != null ? Number(body.billingPlanDiscountedPrice) : null
@@ -189,7 +190,7 @@ export const POST = withTenantAuth(async (req, session) => {
         "startDate", "endDate", "startTime", "endTime",
         "daysOfWeek", "teacherIds", "schoolId", "gafanProgramId", "siblingDiscountPackageId",
         "sessionPrices", "campChargeFirstSessionIfNoAttendance", "useStudentSiblingDiscountInCourse",
-        "billingPlan", "billingPlanSummerPrice", "billingPlanDiscountedPrice", "billingPlanPerSessionPrice",
+        "billingPlan", "billingPlanSummerPrice", "billingPlanDiscountedPrice", "billingPlanPerSessionPrice", "billingPlanSelectionMode",
         "createdAt", "updatedAt"
       )
       VALUES (
@@ -198,7 +199,7 @@ export const POST = withTenantAuth(async (req, session) => {
         ${startDate}, ${endDate}, ${startTimeVal}::timestamp, ${endTimeVal}::timestamp,
         ${daysOfWeek}, ${teacherIds}, ${schoolId}, ${gafanProgramId}, ${siblingDiscountPackageId},
         ${db.json(sessionPricesJson)}, ${campChargeFirstSessionIfNoAttendance}, ${useStudentSiblingDiscountInCourse},
-        ${billingPlan}, ${billingPlanSummerPrice}, ${billingPlanDiscountedPrice}, ${billingPlanPerSessionPrice},
+        ${billingPlan}, ${billingPlanSummerPrice}, ${billingPlanDiscountedPrice}, ${billingPlanPerSessionPrice}, ${billingPlanSelectionMode},
         ${now}, ${now}
       )
       RETURNING *

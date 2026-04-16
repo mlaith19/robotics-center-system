@@ -133,14 +133,18 @@ export default function NewCoursePage() {
     /** שיטת תמחור */
     pricingMode: "perStudent" as "perStudent" | "perCourse" | "perSession" | "perHour",
     billingPlan: "summer" as "summer" | "discounted" | "perSession",
+    billingPlanSelectionMode: "pricing" as "pricing" | "billing",
     billingPlanSummerPrice: "",
     billingPlanDiscountedPrice: "",
     billingPlanPerSessionPrice: "",
   })
   useEffect(() => {
-    if (pricingDropdownValue.startsWith("billing:")) return
+    if (formData.billingPlanSelectionMode === "billing") {
+      setPricingDropdownValue(`billing:${formData.billingPlan}`)
+      return
+    }
     setPricingDropdownValue(`pricing:${formData.pricingMode}`)
-  }, [formData.pricingMode, pricingDropdownValue])
+  }, [formData.pricingMode, formData.billingPlan, formData.billingPlanSelectionMode])
 
   const baseCourseType = normalizeCourseType(formData.courseType)
   const needsSessionCount = formData.pricingMode === "perSession" || formData.pricingMode === "perHour"
@@ -403,6 +407,7 @@ export default function NewCoursePage() {
           billingPlanSummerPrice: formData.billingPlanSummerPrice ? Number(formData.billingPlanSummerPrice) : null,
           billingPlanDiscountedPrice: formData.billingPlanDiscountedPrice ? Number(formData.billingPlanDiscountedPrice) : null,
           billingPlanPerSessionPrice: formData.billingPlanPerSessionPrice ? Number(formData.billingPlanPerSessionPrice) : null,
+          billingPlanSelectionMode: formData.billingPlanSelectionMode,
           teacherTariffByTeacherId,
           courseType: courseTypeOut,
           duration: durationOut,
@@ -958,6 +963,7 @@ export default function NewCoursePage() {
   </CardHeader>
   <CardContent>
   <div className="space-y-3">
+  {formData.billingPlanSelectionMode === "billing" && (
   <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
     <div className="space-y-2">
       <Label className="text-right block">מחיר תוכנית קיץ (ש"ח)</Label>
@@ -996,6 +1002,7 @@ export default function NewCoursePage() {
       />
     </div>
   </div>
+  )}
   {baseCourseType !== "gafan" && (
     <div className="space-y-2">
       <Label className="text-right block">שיטות תמחור ותוכנית חיוב</Label>
@@ -1005,12 +1012,12 @@ export default function NewCoursePage() {
           setPricingDropdownValue(value)
           if (value.startsWith("pricing:")) {
             const pricingMode = value.replace("pricing:", "") as "perStudent" | "perCourse" | "perSession" | "perHour"
-            setFormData({ ...formData, pricingMode })
+            setFormData({ ...formData, pricingMode, billingPlanSelectionMode: "pricing" })
             return
           }
           if (value.startsWith("billing:")) {
             const billingPlan = value.replace("billing:", "") as "summer" | "discounted" | "perSession"
-            setFormData({ ...formData, billingPlan })
+            setFormData({ ...formData, billingPlan, billingPlanSelectionMode: "billing" })
           }
         }}
       >
