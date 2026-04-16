@@ -378,7 +378,7 @@ function RegisterStudentContent() {
                     <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} required disabled={isSubmitting} />
                   </div>
                 </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <div className="space-y-2">
                     <Label htmlFor="gender">מין *</Label>
                     <Select value={gender} onValueChange={setGender} disabled={isSubmitting}>
@@ -407,17 +407,6 @@ function RegisterStudentContent() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="schoolName">בית ספר</Label>
-                    <Input
-                      id="schoolName"
-                      value={schoolName}
-                      onChange={(e) => setSchoolName(e.target.value)}
-                      placeholder="שם בית ספר"
-                      className="h-10 text-sm"
-                      disabled={isSubmitting}
-                    />
-                  </div>
-                  <div className="space-y-2">
                     <Label htmlFor="birthDate">תאריך לידה</Label>
                     <Input
                       id="birthDate"
@@ -439,15 +428,27 @@ function RegisterStudentContent() {
                     )}
                   </div>
                 )}
-                <div className="space-y-2">
-                  <Label htmlFor="className">כיתה</Label>
-                  <Input
-                    id="className"
-                    value={className}
-                    onChange={(e) => setClassName(e.target.value)}
-                    placeholder="לדוגמה: ה׳2"
-                    disabled={isSubmitting}
-                  />
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="className">כיתה</Label>
+                    <Input
+                      id="className"
+                      value={className}
+                      onChange={(e) => setClassName(e.target.value)}
+                      placeholder="לדוגמה: ה׳2"
+                      disabled={isSubmitting}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="schoolName">בית ספר</Label>
+                    <Input
+                      id="schoolName"
+                      value={schoolName}
+                      onChange={(e) => setSchoolName(e.target.value)}
+                      placeholder="שם בית ספר"
+                      disabled={isSubmitting}
+                    />
+                  </div>
                 </div>
               </>
             )}
