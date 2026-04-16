@@ -454,17 +454,17 @@ export default function NewCoursePage() {
         </Card>
       )}
 
-      <Tabs defaultValue="status" className="w-full" dir={isRtl ? "rtl" : "ltr"}>
+      <Tabs defaultValue="general" className="w-full" dir={isRtl ? "rtl" : "ltr"}>
         <TabsList className="mb-4 grid w-full grid-cols-2 gap-2 sm:grid-cols-5" dir={isRtl ? "rtl" : "ltr"}>
-          <TabsTrigger value="status" className={isRtl ? "text-right" : ""}>{l("סטטוס", "Status", "الحالة")}</TabsTrigger>
           <TabsTrigger value="general" className={isRtl ? "text-right" : ""}>{l("כללי", "General", "عام")}</TabsTrigger>
+          <TabsTrigger value="settings" className={isRtl ? "text-right" : ""}>{l("הגדרות", "Settings", "الإعدادات")}</TabsTrigger>
           <TabsTrigger value="teachers" className={isRtl ? "text-right" : ""}>{l("מורים", "Teachers", "المعلمون")}</TabsTrigger>
           <TabsTrigger value="schedule" className={isRtl ? "text-right" : ""}>{l("זמנים", "Schedule", "الجدول")}</TabsTrigger>
           <TabsTrigger value="pricing" className={isRtl ? "text-right" : ""}>{l("תמחור", "Pricing", "التسعير")}</TabsTrigger>
         </TabsList>
 
       {/* סטטוס הקורס */}
-      <TabsContent value="status" dir={isRtl ? "rtl" : "ltr"}>
+      <TabsContent value="general" dir={isRtl ? "rtl" : "ltr"}>
       <Card className="border-blue-200 bg-blue-50/50">
         <CardHeader className="text-right">
           <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
@@ -528,44 +528,6 @@ export default function NewCoursePage() {
               </Select>
             </div>
           </div>
-          <div className="mt-4 rounded-md border border-blue-200 bg-white/70 p-3">
-            <div
-              className="flex items-center justify-end gap-2 cursor-pointer"
-              onClick={() => setFormData((prev) => ({ ...prev, showRegistrationLink: !prev.showRegistrationLink }))}
-            >
-              <span className="text-sm">
-                {l(
-                  "הצג לינק רישום לתלמידים שלא רשומים לקורס",
-                  "Show registration link to students not enrolled in this course",
-                  "إظهار رابط التسجيل للطلاب غير المسجلين في هذه الدورة"
-                )}
-              </span>
-              <Checkbox checked={formData.showRegistrationLink} />
-            </div>
-          </div>
-          {baseCourseType === "camp" && (
-            <div className="mt-3 rounded-md border border-blue-200 bg-white/70 p-3">
-              <div
-                className="flex cursor-pointer items-center justify-end gap-2"
-                onClick={() =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    campChargeFirstSessionIfNoAttendance: !prev.campChargeFirstSessionIfNoAttendance,
-                  }))
-                }
-              >
-                <span className="text-sm">
-                  {l(
-                    "בקייטנה: תלמיד שלא נכח בכלל יחויב לפי מחיר המפגש הראשון",
-                    "Camp: if a student has no attendance at all, charge by the first session price",
-                    "في المخيم: الطالب الذي لم يحضر إطلاقًا يُحاسب بسعر الجلسة الأولى",
-                  )}
-                </span>
-                <Checkbox checked={formData.campChargeFirstSessionIfNoAttendance} />
-              </div>
-            </div>
-          )}
-          
           {/* שדות גפ"ן - מוצגים רק כאשר סוג הקורס הוא גפ"ן */}
           {formData.courseType === "gafan" && (
             <div className="mt-4 grid grid-cols-1 gap-4 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/20 sm:grid-cols-2">
@@ -801,6 +763,72 @@ export default function NewCoursePage() {
   </CardContent>
   </Card>
   </TabsContent>
+
+      <TabsContent value="settings" dir={isRtl ? "rtl" : "ltr"}>
+      <Card className="border-slate-200 bg-slate-50/50">
+        <CardHeader className="text-right">
+          <CardTitle>{l("הגדרות", "Settings", "الإعدادات")}</CardTitle>
+          <CardDescription className="text-right">
+            {l("אפשרויות כלליות לקורס", "General course options", "خيارات عامة للدورة")}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="rounded-md border bg-white p-3">
+            <div
+              className="flex cursor-pointer items-center justify-end gap-2"
+              onClick={() => setFormData((prev) => ({ ...prev, showRegistrationLink: !prev.showRegistrationLink }))}
+            >
+              <span className="text-sm">
+                {l(
+                  "הצג לינק רישום לתלמידים שלא רשומים לקורס",
+                  "Show registration link to students not enrolled in this course",
+                  "إظهار رابط التسجيل للطلاب غير المسجلين في هذه الدورة",
+                )}
+              </span>
+              <Checkbox checked={formData.showRegistrationLink} />
+            </div>
+          </div>
+
+          {baseCourseType === "camp" && (
+            <div className="rounded-md border bg-white p-3">
+              <div
+                className="flex cursor-pointer items-center justify-end gap-2"
+                onClick={() =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    campChargeFirstSessionIfNoAttendance: !prev.campChargeFirstSessionIfNoAttendance,
+                  }))
+                }
+              >
+                <span className="text-sm">
+                  {l(
+                    "בקייטנה: תלמיד שלא נכח בכלל יחויב לפי מחיר המפגש הראשון",
+                    "Camp: if a student has no attendance at all, charge by the first session price",
+                    "في المخيم: الطالب الذي لم يحضر إطلاقًا يُحاسب بسعر الجلسة الأولى",
+                  )}
+                </span>
+                <Checkbox checked={formData.campChargeFirstSessionIfNoAttendance} />
+              </div>
+            </div>
+          )}
+
+          <div className="rounded-md border bg-white p-3">
+            <div
+              className="flex cursor-pointer items-center justify-end gap-2"
+              onClick={() =>
+                setFormData((prev) => ({
+                  ...prev,
+                  useStudentSiblingDiscountInCourse: !prev.useStudentSiblingDiscountInCourse,
+                }))
+              }
+            >
+              <span className="text-sm">החל הנחת אחים שמוגדרת על התלמיד גם בקורס הזה</span>
+              <Checkbox checked={formData.useStudentSiblingDiscountInCourse} />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+      </TabsContent>
 
       {/* מורים */}
       <TabsContent value="teachers" dir={isRtl ? "rtl" : "ltr"}>
@@ -1105,20 +1133,6 @@ export default function NewCoursePage() {
     </Select>
   </div>
   )}
-  <div className="mb-4 rounded-md border p-3">
-    <div
-      className="flex cursor-pointer items-center justify-end gap-2"
-      onClick={() =>
-        setFormData((prev) => ({
-          ...prev,
-          useStudentSiblingDiscountInCourse: !prev.useStudentSiblingDiscountInCourse,
-        }))
-      }
-    >
-      <span className="text-sm">החל הנחת אחים שמוגדרת על התלמיד גם בקורס הזה</span>
-      <Checkbox checked={formData.useStudentSiblingDiscountInCourse} />
-    </div>
-  </div>
   {!isBillingMode && (
   <div className="space-y-2">
   <Label className="text-right block">
