@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { CityCombobox } from "@/components/ui/combobox-city"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 import { ArrowRight, User, Award as IdCard, Phone, Users, Heart, BookOpen, X, Loader2, KeyRound } from "lucide-react"
 import { useLanguage } from "@/lib/i18n/context"
@@ -143,6 +144,43 @@ export default function EditStudentPage() {
     rows.forEach((row: any, idx: number) => map.set(String(row.id), idx + 1))
     return map
   }, [id, siblingStudentIds, allStudents])
+
+  const normalizeText = (value: unknown) =>
+    String(value ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+
+  const getLastName = (fullName: unknown) => {
+    const parts = normalizeText(fullName).split(" ").filter(Boolean)
+    return parts.length >= 2 ? parts[parts.length - 1] : ""
+  }
+
+  const suspectedRelatedStudents = useMemo(() => {
+    const currentLastName = getLastName(student.name)
+    const currentFather = normalizeText(student.father)
+    const currentMother = normalizeText(student.mother)
+    const currentPhone = normalizeText(student.phone)
+    const currentAdditionalPhone = normalizeText(student.additionalPhone)
+
+    return allStudents.filter((s: any) => {
+      if (String(s?.id) === id) return false
+
+      const candidateLastName = getLastName(s?.name)
+      const candidateFather = normalizeText(s?.father)
+      const candidateMother = normalizeText(s?.mother)
+      const candidatePhone = normalizeText(s?.phone)
+      const candidateAdditionalPhone = normalizeText(s?.additionalPhone)
+
+      const byLastName = Boolean(currentLastName && candidateLastName && currentLastName === candidateLastName)
+      const byFather = Boolean(currentFather && candidateFather && (currentFather === candidateFather || candidateFather.includes(currentFather) || currentFather.includes(candidateFather)))
+      const byMother = Boolean(currentMother && candidateMother && (currentMother === candidateMother || candidateMother.includes(currentMother) || currentMother.includes(candidateMother)))
+      const byPhone = Boolean(currentPhone && candidatePhone && currentPhone === candidatePhone)
+      const byAdditionalPhone = Boolean(currentAdditionalPhone && candidateAdditionalPhone && currentAdditionalPhone === candidateAdditionalPhone)
+
+      return byLastName || byFather || byMother || byPhone || byAdditionalPhone
+    })
+  }, [allStudents, id, student.additionalPhone, student.father, student.mother, student.name, student.phone])
 
   // Update local state when student data is fetched
   useEffect(() => {
@@ -378,31 +416,42 @@ export default function EditStudentPage() {
         </Card>
       )}
 
-      <Card className="border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100/50 p-4 sm:p-6">
-        <div className="flex items-start gap-4">
-          <div className="bg-blue-500 text-white p-3 rounded-lg">
-            <User className="h-6 w-6" />
-          </div>
-          <div className="flex-1">
-            <h3 className="font-semibold text-lg mb-2">{tr.status}</h3>
-            <p className="text-sm text-muted-foreground mb-3">{tr.chooseStatus}</p>
-            <Select value={student.status} onValueChange={(value) => updateStudent({ status: value })}>
-              <SelectTrigger className="w-full bg-white">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="מתעניין">{tr.pending}</SelectItem>
-                <SelectItem value="פעיל">{tr.active}</SelectItem>
-                <SelectItem value="השהיה">{tr.paused}</SelectItem>
-                <SelectItem value="סיים">{tr.completed}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </Card>
-
       <form onSubmit={handleSubmit} className="space-y-6">
-        <Card className="border-2 border-green-200 bg-gradient-to-br from-green-50 to-green-100/50 p-4 sm:p-6">
+        <Tabs defaultValue="general" className="space-y-4" dir={isRtl ? "rtl" : "ltr"}>
+          <TabsList className="h-auto w-full flex-wrap justify-start gap-2 rounded-lg bg-muted/70 p-1">
+            <TabsTrigger value="general">{isEn ? "General" : isAr ? "عام" : "כללי"}</TabsTrigger>
+            <TabsTrigger value="parents">{isEn ? "Parents" : isAr ? "الأهل" : "הורים"}</TabsTrigger>
+            <TabsTrigger value="medical">{isEn ? "Medical" : isAr ? "طبي" : "רפואי"}</TabsTrigger>
+            <TabsTrigger value="courses">{isEn ? "Courses" : isAr ? "الدورات" : "קורסים"}</TabsTrigger>
+            <TabsTrigger value="siblings">{isEn ? "Student Linking" : isAr ? "ربط الطلاب" : "שיוך תלמידים"}</TabsTrigger>
+            <TabsTrigger value="account">{isEn ? "User Account" : isAr ? "حساب المستخدم" : "חשבון משתמש"}</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="general" className="space-y-6">
+            <Card className="border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100/50 p-4 sm:p-6">
+              <div className="flex items-start gap-4">
+                <div className="bg-blue-500 text-white p-3 rounded-lg">
+                  <User className="h-6 w-6" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-lg mb-2">{tr.status}</h3>
+                  <p className="text-sm text-muted-foreground mb-3">{tr.chooseStatus}</p>
+                  <Select value={student.status} onValueChange={(value) => updateStudent({ status: value })}>
+                    <SelectTrigger className="w-full bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="מתעניין">{tr.pending}</SelectItem>
+                      <SelectItem value="פעיל">{tr.active}</SelectItem>
+                      <SelectItem value="השהיה">{tr.paused}</SelectItem>
+                      <SelectItem value="סיים">{tr.completed}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="border-2 border-green-200 bg-gradient-to-br from-green-50 to-green-100/50 p-4 sm:p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="bg-green-500 text-white p-2.5 rounded-lg">
               <IdCard className="h-5 w-5" />
@@ -474,9 +523,9 @@ export default function EditStudentPage() {
               </div>
             </div>
           </div>
-        </Card>
+            </Card>
 
-        <Card className="border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100/50 p-4 sm:p-6">
+            <Card className="border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100/50 p-4 sm:p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="bg-blue-500 text-white p-2.5 rounded-lg">
               <Phone className="h-5 w-5" />
@@ -554,9 +603,11 @@ export default function EditStudentPage() {
               />
             </div>
           </div>
-        </Card>
+            </Card>
+          </TabsContent>
 
-        <Card className="border-2 border-emerald-200 bg-gradient-to-br from-emerald-50 to-emerald-100/50 p-4 sm:p-6">
+          <TabsContent value="parents" className="space-y-6">
+            <Card className="border-2 border-emerald-200 bg-gradient-to-br from-emerald-50 to-emerald-100/50 p-4 sm:p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="bg-emerald-500 text-white p-2.5 rounded-lg">
               <Users className="h-5 w-5" />
@@ -593,9 +644,11 @@ export default function EditStudentPage() {
               />
             </div>
           </div>
-        </Card>
+            </Card>
+          </TabsContent>
 
-        <Card className="border-2 border-red-200 bg-gradient-to-br from-red-50 to-red-100/50 p-4 sm:p-6">
+          <TabsContent value="medical" className="space-y-6">
+            <Card className="border-2 border-red-200 bg-gradient-to-br from-red-50 to-red-100/50 p-4 sm:p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="bg-red-500 text-white p-2.5 rounded-lg">
               <Heart className="h-5 w-5" />
@@ -637,10 +690,11 @@ export default function EditStudentPage() {
               />
             </div>
           </div>
-        </Card>
+            </Card>
+          </TabsContent>
 
-        {/* User Account */}
-        <Card className="border-2 border-indigo-200 bg-gradient-to-br from-indigo-50 to-indigo-100/50 p-4 sm:p-6">
+          <TabsContent value="account" className="space-y-6">
+            <Card className="border-2 border-indigo-200 bg-gradient-to-br from-indigo-50 to-indigo-100/50 p-4 sm:p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="bg-indigo-500 text-white p-2.5 rounded-lg">
               <KeyRound className="h-5 w-5" />
@@ -698,9 +752,11 @@ export default function EditStudentPage() {
               )}
             </div>
           )}
-        </Card>
+            </Card>
+          </TabsContent>
 
-        <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-purple-100/50 p-4 sm:p-6">
+          <TabsContent value="courses" className="space-y-6">
+            <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-purple-100/50 p-4 sm:p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="bg-purple-500 text-white p-2.5 rounded-lg">
               <BookOpen className="h-5 w-5" />
@@ -780,9 +836,11 @@ export default function EditStudentPage() {
               <p className="text-sm text-muted-foreground text-center py-4">{tr.noCourses}</p>
             )}
           </div>
-        </Card>
+            </Card>
+          </TabsContent>
 
-        <Card className="border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-amber-100/50 p-4 sm:p-6">
+          <TabsContent value="siblings" className="space-y-6">
+            <Card className="border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-amber-100/50 p-4 sm:p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="bg-amber-500 text-white p-2.5 rounded-lg">
               <Users className="h-5 w-5" />
@@ -811,11 +869,9 @@ export default function EditStudentPage() {
                 </SelectContent>
               </Select>
             </div>
-            {allStudents.filter((s: any) => String(s.id) !== id).length > 0 ? (
+            {suspectedRelatedStudents.length > 0 ? (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {allStudents
-                  .filter((s: any) => String(s.id) !== id)
-                  .map((s: any) => {
+                {suspectedRelatedStudents.map((s: any) => {
                     const sid = String(s.id)
                     return (
                       <label key={sid} className="flex items-center gap-2 rounded-md border px-3 py-2 cursor-pointer hover:bg-amber-50">
@@ -831,7 +887,7 @@ export default function EditStudentPage() {
                   })}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">אין תלמידים נוספים לשיוך.</p>
+              <p className="text-sm text-muted-foreground">לא נמצאו תלמידים עם חשד לקרבה לפי שם משפחה/הורים/טלפון.</p>
             )}
             {(id && siblingRankMap.get(id)) ? (
               <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm">
@@ -839,7 +895,9 @@ export default function EditStudentPage() {
               </div>
             ) : null}
           </div>
-        </Card>
+            </Card>
+          </TabsContent>
+        </Tabs>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-start">
           <Button 
