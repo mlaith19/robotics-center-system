@@ -1732,7 +1732,7 @@ export default function CourseViewPage() {
       map.get(key)!.rows.push(payment)
       return map
     }, new Map<string, { key: string; studentId: string; studentName: string; rows: CoursePaymentRow[] }>()),
-  ).map((group) => ({
+  ).map(([, group]) => ({
     ...group,
     totalPaid: group.rows.reduce((sum, r) => sum + Number(r.amount || 0), 0),
     attendanceCount: presentCountByStudent.get(group.studentId) || 0,

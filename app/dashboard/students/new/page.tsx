@@ -45,6 +45,8 @@ export default function NewStudentPage() {
     firstName: isEn ? "First Name *" : isAr ? "الاسم الأول *" : "שם פרטי *",
     lastName: isEn ? "Last Name *" : isAr ? "اسم العائلة *" : "שם משפחה *",
     gender: isEn ? "Gender" : isAr ? "الجنس" : "מין",
+    genderRequired: isEn ? "Gender is required" : isAr ? "حقل الجنس مطلوب" : "יש לבחור מין",
+    idNumberRequired: isEn ? "ID number is required" : isAr ? "رقم الهوية مطلوب" : "יש להזין תעודת זהות",
     idNumber: isEn ? "ID Number" : "תעודת זהות",
     birthDate: isEn ? "Birth Date" : "תאריך לידה",
     profileImageOptional: isEn ? "Profile image (optional)" : isAr ? "صورة الملف الشخصي (اختياري)" : "תמונת פרופיל (לא חובה)",
@@ -131,6 +133,12 @@ export default function NewStudentPage() {
     setSubmitError(null)
 
     try {
+      if (!String(newStudent.idNumber || "").trim()) {
+        throw new Error(tr.idNumberRequired)
+      }
+      if (!String(newStudent.gender || "").trim()) {
+        throw new Error(tr.genderRequired)
+      }
       // Validate user account fields if creating account
       if (createUserAccount) {
         if (!username.trim()) {
@@ -274,23 +282,23 @@ export default function NewStudentPage() {
           <div className="grid gap-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
-                <Label htmlFor="firstName" className="text-base font-medium">{tr.firstName}</Label>
-                <Input
-                  id="firstName"
-                  value={newStudent.firstName}
-                  onChange={(e) => setNewStudent({ ...newStudent, firstName: e.target.value })}
-                  placeholder={isEn ? "John" : isAr ? "الاسم الأول" : "שם פרטי"}
-                  className="text-base h-12 bg-white"
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
                 <Label htmlFor="lastName" className="text-base font-medium">{tr.lastName}</Label>
                 <Input
                   id="lastName"
                   value={newStudent.lastName}
                   onChange={(e) => setNewStudent({ ...newStudent, lastName: e.target.value })}
                   placeholder={isEn ? "Doe" : isAr ? "اسم العائلة" : "שם משפחה"}
+                  className="text-base h-12 bg-white"
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="firstName" className="text-base font-medium">{tr.firstName}</Label>
+                <Input
+                  id="firstName"
+                  value={newStudent.firstName}
+                  onChange={(e) => setNewStudent({ ...newStudent, firstName: e.target.value })}
+                  placeholder={isEn ? "John" : isAr ? "الاسم الأول" : "שם פרטי"}
                   className="text-base h-12 bg-white"
                   required
                 />
@@ -305,6 +313,7 @@ export default function NewStudentPage() {
                 <SelectContent>
                   <SelectItem value="male">{isEn ? "Male" : isAr ? "ذكر" : "זכר"}</SelectItem>
                   <SelectItem value="female">{isEn ? "Female" : isAr ? "أنثى" : "נקבה"}</SelectItem>
+                  <SelectItem value="other">{isEn ? "Other" : isAr ? "آخر" : "אחר"}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -320,6 +329,7 @@ export default function NewStudentPage() {
                   onChange={(e) => setNewStudent({ ...newStudent, idNumber: e.target.value })}
                   placeholder="123456789"
                   className="text-base h-12 bg-white"
+                  required
                 />
               </div>
 
@@ -676,21 +686,32 @@ export default function NewStudentPage() {
         </Card>
         )}
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:justify-start">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-start">
           {activeStep > 1 && (
-            <Button type="button" variant="outline" size="lg" className="h-12 w-full px-8 text-base sm:w-auto" onClick={() => setActiveStep((s) => Math.max(1, s - 1))}>
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              className="h-10 w-full px-5 text-sm sm:h-11 sm:w-auto sm:text-base"
+              onClick={() => setActiveStep((s) => Math.max(1, s - 1))}
+            >
               {isEn ? "Back" : isAr ? "رجوع" : "חזרה"}
             </Button>
           )}
           {activeStep < 4 ? (
-            <Button type="button" size="lg" className="h-12 w-full px-8 text-base sm:w-auto" onClick={() => setActiveStep((s) => Math.min(4, s + 1))}>
+            <Button
+              type="button"
+              size="lg"
+              className="h-10 w-full px-5 text-sm sm:h-11 sm:w-auto sm:text-base"
+              onClick={() => setActiveStep((s) => Math.min(4, s + 1))}
+            >
               {isEn ? "Next" : isAr ? "التالي" : "הבא"}
             </Button>
           ) : (
           <Button
             type="submit"
             size="lg"
-            className="h-12 w-full px-8 text-base sm:w-auto"
+            className="h-10 w-full px-5 text-sm sm:h-11 sm:w-auto sm:text-base"
             disabled={isSubmitting || submitSuccess || !newStudent.firstName.trim() || !newStudent.lastName.trim()}
           >
             {submitSuccess ? (isEn ? "Saved successfully!" : "נשמר בהצלחה!") : isSubmitting ? tr.saving : tr.addStudent}
@@ -698,7 +719,7 @@ export default function NewStudentPage() {
           )}
 
           <Link href="/dashboard/students" className="w-full sm:w-auto">
-            <Button type="button" variant="outline" size="lg" className="h-12 w-full px-8 text-base bg-transparent sm:w-auto">
+            <Button type="button" variant="outline" size="lg" className="h-10 w-full px-5 text-sm bg-transparent sm:h-11 sm:w-auto sm:text-base">
               {tr.cancel}
             </Button>
           </Link>

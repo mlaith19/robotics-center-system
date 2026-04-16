@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Phone, Mail, Loader2, CheckCircle, Users, Heart } from "lucide-react"
 import { fileToProfileImageDataUrl } from "@/lib/profile-image-client"
 
@@ -121,6 +122,10 @@ function RegisterStudentContent() {
     }
     if (!idNumber.trim()) {
       setError("יש להזין תעודת זהות כדי ליצור משתמש תלמיד אוטומטי")
+      return
+    }
+    if (!gender.trim()) {
+      setError("יש לבחור מין")
       return
     }
     if (!phone.trim()) {
@@ -262,23 +267,26 @@ function RegisterStudentContent() {
               <>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="firstName">שם פרטי *</Label>
-                    <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} required disabled={isSubmitting} />
-                  </div>
-                  <div className="space-y-2">
                     <Label htmlFor="lastName">שם משפחה *</Label>
                     <Input id="lastName" value={lastName} onChange={(e) => setLastName(e.target.value)} required disabled={isSubmitting} />
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="firstName">שם פרטי *</Label>
+                    <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} required disabled={isSubmitting} />
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="gender">מין</Label>
-                  <Input
-                    id="gender"
-                    value={gender}
-                    onChange={(e) => setGender(e.target.value)}
-                    placeholder="זכר / נקבה"
-                    disabled={isSubmitting}
-                  />
+                  <Label htmlFor="gender">מין *</Label>
+                  <Select value={gender} onValueChange={setGender} disabled={isSubmitting}>
+                    <SelectTrigger id="gender">
+                      <SelectValue placeholder="בחר מין" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="male">זכר</SelectItem>
+                      <SelectItem value="female">נקבה</SelectItem>
+                      <SelectItem value="other">אחר</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
             <div className="space-y-2">
               <Label htmlFor="idNumber">תעודת זהות</Label>
@@ -288,6 +296,7 @@ function RegisterStudentContent() {
                 onChange={(e) => setIdNumber(e.target.value)}
                 placeholder="הכנס תעודת זהות"
                 disabled={isSubmitting}
+                required
               />
               {isLookupLoading && (
                 <p className="text-xs text-muted-foreground">בודק אם תלמיד כבר קיים...</p>
@@ -306,6 +315,31 @@ function RegisterStudentContent() {
                 placeholder="YYYY-MM-DD או DD/MM/YYYY"
                 disabled={isSubmitting}
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="profileImageUpload">תמונת פרופיל (לא חובה)</Label>
+              <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+                {profileImage ? (
+                  <img src={profileImage} alt="profile preview" className="mx-auto h-16 w-16 rounded-full border bg-white object-cover sm:mx-0" />
+                ) : (
+                  <div className="mx-auto h-16 w-16 rounded-full border-2 border-dashed bg-muted sm:mx-0" />
+                )}
+                <div className="min-w-0 flex-1 space-y-2">
+                  <Input
+                    id="profileImageUpload"
+                    type="file"
+                    accept="image/*"
+                    className="text-xs sm:text-sm"
+                    onChange={handleProfileImageUpload}
+                    disabled={isSubmitting}
+                  />
+                  {profileImage && (
+                    <Button type="button" variant="outline" size="sm" onClick={() => setProfileImage("")} disabled={isSubmitting}>
+                      הסר תמונה
+                    </Button>
+                  )}
+                </div>
+              </div>
             </div>
               </>
             )}
@@ -351,31 +385,6 @@ function RegisterStudentContent() {
                 />
               </div>
             )}
-            {activeStep === 2 && <div className="space-y-2">
-              <Label htmlFor="profileImageUpload">תמונת פרופיל (לא חובה)</Label>
-              <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
-                {profileImage ? (
-                  <img src={profileImage} alt="profile preview" className="mx-auto h-16 w-16 rounded-full border bg-white object-cover sm:mx-0" />
-                ) : (
-                  <div className="mx-auto h-16 w-16 rounded-full border-2 border-dashed bg-muted sm:mx-0" />
-                )}
-                <div className="min-w-0 flex-1 space-y-2">
-                  <Input
-                    id="profileImageUpload"
-                    type="file"
-                    accept="image/*"
-                    className="text-xs sm:text-sm"
-                    onChange={handleProfileImageUpload}
-                    disabled={isSubmitting}
-                  />
-                  {profileImage && (
-                    <Button type="button" variant="outline" size="sm" onClick={() => setProfileImage("")} disabled={isSubmitting}>
-                      הסר תמונה
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>}
             {activeStep === 2 && <div className="space-y-2">
               <Label htmlFor="phone">טלפון</Label>
               <div className="relative">
@@ -472,18 +481,27 @@ function RegisterStudentContent() {
                 </Label>
               </div>
             </div>}
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               {activeStep > 1 && (
-                <Button type="button" variant="outline" className="w-full" onClick={() => setActiveStep((s) => Math.max(1, s - 1))}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 w-full sm:h-11 sm:flex-1"
+                  onClick={() => setActiveStep((s) => Math.max(1, s - 1))}
+                >
                   חזרה
                 </Button>
               )}
               {activeStep < 3 ? (
-                <Button type="button" className="w-full" onClick={() => setActiveStep((s) => Math.min(3, s + 1))}>
+                <Button
+                  type="button"
+                  className="h-10 w-full sm:h-11 sm:flex-1"
+                  onClick={() => setActiveStep((s) => Math.min(3, s + 1))}
+                >
                   הבא
                 </Button>
               ) : (
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
+            <Button type="submit" className="h-10 w-full sm:h-11 sm:flex-1" disabled={isSubmitting}>
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin ml-2" />
