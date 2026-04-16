@@ -836,6 +836,26 @@ export default function EditCoursePage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          <div className="space-y-2 rounded-md border bg-white p-3">
+            <Label className="text-right block">חבילות הנחות</Label>
+            <Select
+              value={formData.siblingDiscountPackageId || "none"}
+              onValueChange={(value) => setFormData({ ...formData, siblingDiscountPackageId: value === "none" ? "" : value })}
+            >
+              <SelectTrigger className="text-right" dir="rtl">
+                <SelectValue placeholder="ללא חבילה" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">ללא חבילה</SelectItem>
+                {siblingPackages.map((pkg) => (
+                  <SelectItem key={pkg.id} value={pkg.id}>
+                    {pkg.name} ({pkg.pricingMode === "perStudent" ? "לפי ילד" : pkg.pricingMode === "perCourse" ? "לפי קורס" : pkg.pricingMode === "perSession" ? "לפי מפגש" : "לפי שעה"})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="rounded-md border bg-white p-3">
             <div
               className="flex cursor-pointer items-center justify-end gap-2"
@@ -1160,25 +1180,6 @@ export default function EditCoursePage() {
             </div>
           </div>
           )}
-          <div className="space-y-2 mb-4">
-            <Label className="text-right block">חבילת הנחת אחים לקורס (אופציונלי)</Label>
-            <Select
-              value={formData.siblingDiscountPackageId || "none"}
-              onValueChange={(value) => setFormData({ ...formData, siblingDiscountPackageId: value === "none" ? "" : value })}
-            >
-              <SelectTrigger className="text-right" dir="rtl">
-                <SelectValue placeholder="ללא חבילה" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">ללא חבילה</SelectItem>
-                {siblingPackages.map((pkg) => (
-                  <SelectItem key={pkg.id} value={pkg.id}>
-                    {pkg.name} ({pkg.pricingMode === "perStudent" ? "לפי ילד" : pkg.pricingMode === "perCourse" ? "לפי קורס" : pkg.pricingMode === "perSession" ? "לפי מפגש" : "לפי שעה"})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
           {!isBillingMode && (
           <div className="space-y-2">
             <Label className="text-right block">
