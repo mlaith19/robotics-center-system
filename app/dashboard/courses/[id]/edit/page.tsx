@@ -158,7 +158,13 @@ export default function EditCoursePage() {
     }
     setPricingDropdownValue(`pricing:${formData.pricingMode}`)
   }, [formData.pricingMode, formData.billingPlan, formData.billingPlanSelectionMode])
-  const needsSessionCount = formData.pricingMode === "perSession" || formData.pricingMode === "perHour"
+  const isBillingMode = formData.billingPlanSelectionMode === "billing"
+  const isPerCourseMode = !isBillingMode && formData.pricingMode === "perCourse"
+  const isPerSessionMode = !isBillingMode && formData.pricingMode === "perSession"
+  const isPerHourMode = !isBillingMode && formData.pricingMode === "perHour"
+  const isPerStudentMode = !isBillingMode && formData.pricingMode === "perStudent"
+  const needsSessionCount =
+    isPerSessionMode || isPerHourMode
   const needsHourlyRange = formData.pricingMode === "perHour"
   const computedSessionCount = useMemo(
     () =>
@@ -524,17 +530,17 @@ export default function EditCoursePage() {
         </Card>
       )}
 
-      <Tabs defaultValue="status" className="w-full">
-        <TabsList className="mb-4 grid w-full grid-cols-2 gap-2 sm:grid-cols-5">
-          <TabsTrigger value="status">{l("סטטוס", "Status", "الحالة")}</TabsTrigger>
-          <TabsTrigger value="general">{l("כללי", "General", "عام")}</TabsTrigger>
-          <TabsTrigger value="teachers">{l("מורים", "Teachers", "المعلمون")}</TabsTrigger>
-          <TabsTrigger value="schedule">{l("זמנים", "Schedule", "الجدول")}</TabsTrigger>
-          <TabsTrigger value="pricing">{l("תמחור", "Pricing", "التسعير")}</TabsTrigger>
+      <Tabs defaultValue="status" className="w-full" dir={isRtl ? "rtl" : "ltr"}>
+        <TabsList className="mb-4 grid w-full grid-cols-2 gap-2 sm:grid-cols-5" dir={isRtl ? "rtl" : "ltr"}>
+          <TabsTrigger value="status" className={isRtl ? "text-right" : ""}>{l("סטטוס", "Status", "الحالة")}</TabsTrigger>
+          <TabsTrigger value="general" className={isRtl ? "text-right" : ""}>{l("כללי", "General", "عام")}</TabsTrigger>
+          <TabsTrigger value="teachers" className={isRtl ? "text-right" : ""}>{l("מורים", "Teachers", "المعلمون")}</TabsTrigger>
+          <TabsTrigger value="schedule" className={isRtl ? "text-right" : ""}>{l("זמנים", "Schedule", "الجدول")}</TabsTrigger>
+          <TabsTrigger value="pricing" className={isRtl ? "text-right" : ""}>{l("תמחור", "Pricing", "التسعير")}</TabsTrigger>
         </TabsList>
 
       {/* סטטוס הקורס */}
-      <TabsContent value="status">
+      <TabsContent value="status" dir={isRtl ? "rtl" : "ltr"}>
       <Card className="border-blue-200 bg-blue-50/50">
         <CardHeader className="text-right">
           <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
@@ -697,7 +703,7 @@ export default function EditCoursePage() {
       </TabsContent>
 
       {/* מידע כללי / מידע בסיסי על התוכנית (לגפ"ן) */}
-      <TabsContent value="general">
+      <TabsContent value="general" dir={isRtl ? "rtl" : "ltr"}>
       <Card className="border-green-200 bg-green-50/50">
         <CardHeader className="text-right">
           <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
@@ -858,7 +864,7 @@ export default function EditCoursePage() {
       </TabsContent>
 
       {/* מורים */}
-      <TabsContent value="teachers">
+      <TabsContent value="teachers" dir={isRtl ? "rtl" : "ltr"}>
       <Card className="border-purple-200 bg-purple-50/50">
         <CardHeader className="text-right">
           <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
@@ -932,7 +938,7 @@ export default function EditCoursePage() {
       </TabsContent>
 
       {/* תאריכים וזמנים */}
-      <TabsContent value="schedule">
+      <TabsContent value="schedule" dir={isRtl ? "rtl" : "ltr"}>
       <Card className="border-orange-200 bg-orange-50/50">
         <CardHeader className="text-right">
           <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
@@ -1008,7 +1014,7 @@ export default function EditCoursePage() {
       </TabsContent>
 
       {/* תמחור */}
-      <TabsContent value="pricing">
+      <TabsContent value="pricing" dir={isRtl ? "rtl" : "ltr"}>
       <Card className="border-emerald-200 bg-emerald-50/50">
         <CardHeader className="text-right">
           <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
@@ -1018,7 +1024,9 @@ export default function EditCoursePage() {
           <CardDescription className="text-right">
             {formData.courseType === "gafan"
               ? "הגדר את מחיר השעה לקורס גפ\"ן"
-              : formData.pricingMode === "perCourse"
+              : isBillingMode
+                ? "תמחור לפי תוכנית חיוב לתלמיד"
+                : formData.pricingMode === "perCourse"
                 ? "מחיר כולל לקורס כולו"
                 : formData.pricingMode === "perSession"
                   ? "מחיר ברירת מחדל למפגש + רשימת מחירים לפי תאריך מפגש"
@@ -1155,17 +1163,20 @@ export default function EditCoursePage() {
               <Checkbox checked={formData.useStudentSiblingDiscountInCourse} />
             </div>
           </div>
+          {!isBillingMode && (
           <div className="space-y-2">
             <Label className="text-right block">
               {formData.courseType === "gafan"
                 ? "מחיר לשעה (ש\"ח) *"
-                : formData.pricingMode === "perHour"
+                : isPerHourMode
                   ? "מחיר לשעה (ש\"ח) *"
-                  : formData.pricingMode === "perSession"
+                  : isPerSessionMode
                     ? "מחיר ברירת מחדל למפגש (ש\"ח) *"
-                : formData.pricingMode === "perCourse"
-                  ? "מחיר כולל לקורס (ש\"ח) *"
-                  : "מחיר הקורס (ש\"ח) *"}
+                    : isPerCourseMode
+                      ? "מחיר כולל לקורס (ש\"ח) *"
+                      : isPerStudentMode
+                        ? "מחיר לכל תלמיד (ש\"ח) *"
+                        : "מחיר (ש\"ח) *"}
             </Label>
             <Input 
               type="number"
@@ -1203,6 +1214,7 @@ export default function EditCoursePage() {
               </div>
             )}
           </div>
+          )}
         </CardContent>
       </Card>
       </TabsContent>

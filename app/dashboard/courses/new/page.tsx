@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ArrowRight, BookOpen, Save, Calendar, Users, MessageSquare } from "lucide-react"
 import { useLanguage } from "@/lib/i18n/context"
@@ -147,7 +148,13 @@ export default function NewCoursePage() {
   }, [formData.pricingMode, formData.billingPlan, formData.billingPlanSelectionMode])
 
   const baseCourseType = normalizeCourseType(formData.courseType)
-  const needsSessionCount = formData.pricingMode === "perSession" || formData.pricingMode === "perHour"
+  const isBillingMode = formData.billingPlanSelectionMode === "billing"
+  const isPerCourseMode = !isBillingMode && formData.pricingMode === "perCourse"
+  const isPerSessionMode = !isBillingMode && formData.pricingMode === "perSession"
+  const isPerHourMode = !isBillingMode && formData.pricingMode === "perHour"
+  const isPerStudentMode = !isBillingMode && formData.pricingMode === "perStudent"
+  const needsSessionCount =
+    isPerSessionMode || isPerHourMode
   const needsHourlyRange = formData.pricingMode === "perHour"
   const hoursPerSession = useMemo(
     () => hoursBetweenTimeInputs(formData.startTime, formData.endTime),
@@ -447,7 +454,17 @@ export default function NewCoursePage() {
         </Card>
       )}
 
+      <Tabs defaultValue="status" className="w-full" dir={isRtl ? "rtl" : "ltr"}>
+        <TabsList className="mb-4 grid w-full grid-cols-2 gap-2 sm:grid-cols-5" dir={isRtl ? "rtl" : "ltr"}>
+          <TabsTrigger value="status" className={isRtl ? "text-right" : ""}>{l("סטטוס", "Status", "الحالة")}</TabsTrigger>
+          <TabsTrigger value="general" className={isRtl ? "text-right" : ""}>{l("כללי", "General", "عام")}</TabsTrigger>
+          <TabsTrigger value="teachers" className={isRtl ? "text-right" : ""}>{l("מורים", "Teachers", "المعلمون")}</TabsTrigger>
+          <TabsTrigger value="schedule" className={isRtl ? "text-right" : ""}>{l("זמנים", "Schedule", "الجدول")}</TabsTrigger>
+          <TabsTrigger value="pricing" className={isRtl ? "text-right" : ""}>{l("תמחור", "Pricing", "التسعير")}</TabsTrigger>
+        </TabsList>
+
       {/* סטטוס הקורס */}
+      <TabsContent value="status" dir={isRtl ? "rtl" : "ltr"}>
       <Card className="border-blue-200 bg-blue-50/50">
         <CardHeader className="text-right">
           <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
@@ -607,8 +624,10 @@ export default function NewCoursePage() {
           )}
         </CardContent>
       </Card>
+      </TabsContent>
 
 {/* מידע כללי / מידע בסיסי על התוכנית (לגפ"ן) */}
+  <TabsContent value="general" dir={isRtl ? "rtl" : "ltr"}>
   <Card className="border-green-200 bg-green-50/50">
   <CardHeader className="text-right">
   <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
@@ -781,8 +800,10 @@ export default function NewCoursePage() {
   )}
   </CardContent>
   </Card>
+  </TabsContent>
 
       {/* מורים */}
+      <TabsContent value="teachers" dir={isRtl ? "rtl" : "ltr"}>
       <Card className="border-purple-200 bg-purple-50/50">
         <CardHeader className="text-right">
           <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
@@ -853,8 +874,10 @@ export default function NewCoursePage() {
           )}
         </CardContent>
       </Card>
+      </TabsContent>
 
       {/* תאריכים וזמנים */}
+      <TabsContent value="schedule" dir={isRtl ? "rtl" : "ltr"}>
       <Card className="border-orange-200 bg-orange-50/50">
         <CardHeader className="text-right">
           <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
@@ -939,8 +962,10 @@ export default function NewCoursePage() {
           </div>
         </CardContent>
       </Card>
+      </TabsContent>
 
 {/* תמחור */}
+  <TabsContent value="pricing" dir={isRtl ? "rtl" : "ltr"}>
   <Card className="border-emerald-200 bg-emerald-50/50">
   <CardHeader className="text-right">
   <CardTitle className="flex flex-row-reverse items-center justify-end gap-2">
@@ -950,7 +975,9 @@ export default function NewCoursePage() {
   <CardDescription className="text-right">
     {formData.courseType === "gafan"
       ? "הגדר את מחיר השעה לקורס גפ\"ן"
-      : needsSessionCount
+      : isBillingMode
+        ? "תמחור לפי תוכנית חיוב לתלמיד"
+        : needsSessionCount
         ? needsHourlyRange
           ? "מחיר לשעה × אורך מפגש × מספר מפגשים (שעות ותאריכים מהכרטיסייה למעלה)"
           : formData.pricingMode === "perSession"
@@ -963,94 +990,101 @@ export default function NewCoursePage() {
   </CardHeader>
   <CardContent>
   <div className="space-y-3">
-  {formData.billingPlanSelectionMode === "billing" && (
-  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-    <div className="space-y-2 sm:col-span-3">
-      <Label className="text-right block">ברירת מחדל לתלמיד בקורס</Label>
-      <Select
-        value={formData.billingPlan}
-        onValueChange={(value: "summer" | "discounted" | "perSession") =>
-          setFormData({ ...formData, billingPlan: value })
-        }
-      >
-        <SelectTrigger className="text-right" dir="rtl">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="summer">תוכנית קיץ</SelectItem>
-          <SelectItem value="discounted">תוכנית מוזלת</SelectItem>
-          <SelectItem value="perSession">לפי מפגש</SelectItem>
-        </SelectContent>
-      </Select>
-    </div>
-    <div className="space-y-2">
-      <Label className="text-right block">מחיר תוכנית קיץ (ש"ח)</Label>
-      <Input
-        type="number"
-        min={0}
-        step="0.01"
-        value={formData.billingPlanSummerPrice}
-        onChange={(e) => setFormData({ ...formData, billingPlanSummerPrice: e.target.value })}
-        className="text-right"
-        dir="rtl"
-      />
-    </div>
-    <div className="space-y-2">
-      <Label className="text-right block">מחיר תוכנית מוזלת (ש"ח)</Label>
-      <Input
-        type="number"
-        min={0}
-        step="0.01"
-        value={formData.billingPlanDiscountedPrice}
-        onChange={(e) => setFormData({ ...formData, billingPlanDiscountedPrice: e.target.value })}
-        className="text-right"
-        dir="rtl"
-      />
-    </div>
-    <div className="space-y-2">
-      <Label className="text-right block">מחיר לפי מפגש (ש"ח)</Label>
-      <Input
-        type="number"
-        min={0}
-        step="0.01"
-        value={formData.billingPlanPerSessionPrice}
-        onChange={(e) => setFormData({ ...formData, billingPlanPerSessionPrice: e.target.value })}
-        className="text-right"
-        dir="rtl"
-      />
-    </div>
-  </div>
-  )}
   {baseCourseType !== "gafan" && (
-    <div className="space-y-2">
-      <Label className="text-right block">שיטות תמחור ותוכנית חיוב</Label>
-      <Select
-        value={pricingDropdownValue}
-        onValueChange={(value) => {
-          setPricingDropdownValue(value)
-          if (value.startsWith("pricing:")) {
-            const pricingMode = value.replace("pricing:", "") as "perStudent" | "perCourse" | "perSession" | "perHour"
-            setFormData({ ...formData, pricingMode, billingPlanSelectionMode: "pricing" })
-            return
-          }
-          if (value === "billing:enabled") {
-            setFormData({ ...formData, billingPlanSelectionMode: "billing" })
-          }
-        }}
-      >
-        <SelectTrigger className="text-right" dir="rtl">
-          <SelectValue placeholder="בחר שיטה" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="pricing:perStudent">מחיר לכל תלמיד</SelectItem>
-          <SelectItem value="pricing:perCourse">מחיר כולל לקורס</SelectItem>
-          <SelectItem value="pricing:perSession">מחיר לפי מפגש</SelectItem>
-          <SelectItem value="pricing:perHour">מחיר לפי שעה</SelectItem>
-          <SelectItem value="billing:enabled">תוכנית חיוב</SelectItem>
-        </SelectContent>
-      </Select>
+    <div className="mb-4 space-y-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:items-end">
+        <div className="space-y-2">
+          <Label className="text-right block">שיטות תמחור ותוכנית חיוב</Label>
+          <Select
+            value={pricingDropdownValue}
+            onValueChange={(value) => {
+              setPricingDropdownValue(value)
+              if (value.startsWith("pricing:")) {
+                const pricingMode = value.replace("pricing:", "") as "perStudent" | "perCourse" | "perSession" | "perHour"
+                setFormData({ ...formData, pricingMode, billingPlanSelectionMode: "pricing" })
+                return
+              }
+              if (value === "billing:enabled") {
+                setFormData({ ...formData, billingPlanSelectionMode: "billing" })
+              }
+            }}
+          >
+            <SelectTrigger className="text-right" dir="rtl">
+              <SelectValue placeholder="בחר שיטה" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="pricing:perStudent">מחיר לכל תלמיד</SelectItem>
+              <SelectItem value="pricing:perCourse">מחיר כולל לקורס</SelectItem>
+              <SelectItem value="pricing:perSession">מחיר לפי מפגש</SelectItem>
+              <SelectItem value="pricing:perHour">מחיר לפי שעה</SelectItem>
+              <SelectItem value="billing:enabled">תוכנית חיוב</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {formData.billingPlanSelectionMode === "billing" && (
+          <div className="space-y-2">
+            <Label className="text-right block">ברירת מחדל לתלמיד בקורס</Label>
+            <Select
+              value={formData.billingPlan}
+              onValueChange={(value: "summer" | "discounted" | "perSession") =>
+                setFormData({ ...formData, billingPlan: value })
+              }
+            >
+              <SelectTrigger className="text-right" dir="rtl">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="summer">תוכנית קיץ</SelectItem>
+                <SelectItem value="discounted">תוכנית מוזלת</SelectItem>
+                <SelectItem value="perSession">לפי מפגש</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+      </div>
     </div>
   )}
+  {formData.billingPlanSelectionMode === "billing" && (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="space-y-2">
+        <Label className="text-right block">מחיר תוכנית קיץ (ש"ח)</Label>
+        <Input
+          type="number"
+          min={0}
+          step="0.01"
+          value={formData.billingPlanSummerPrice}
+          onChange={(e) => setFormData({ ...formData, billingPlanSummerPrice: e.target.value })}
+          className="text-right"
+          dir="rtl"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label className="text-right block">מחיר תוכנית מוזלת (ש"ח)</Label>
+        <Input
+          type="number"
+          min={0}
+          step="0.01"
+          value={formData.billingPlanDiscountedPrice}
+          onChange={(e) => setFormData({ ...formData, billingPlanDiscountedPrice: e.target.value })}
+          className="text-right"
+          dir="rtl"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label className="text-right block">מחיר לפי מפגש (ש"ח)</Label>
+        <Input
+          type="number"
+          min={0}
+          step="0.01"
+          value={formData.billingPlanPerSessionPrice}
+          onChange={(e) => setFormData({ ...formData, billingPlanPerSessionPrice: e.target.value })}
+          className="text-right"
+          dir="rtl"
+        />
+      </div>
+    </div>
+  )}
+  {!isBillingMode && (
   <div className="space-y-2">
     <Label className="text-right block">חבילת הנחת אחים לקורס (אופציונלי)</Label>
     <Select
@@ -1070,6 +1104,7 @@ export default function NewCoursePage() {
       </SelectContent>
     </Select>
   </div>
+  )}
   <div className="mb-4 rounded-md border p-3">
     <div
       className="flex cursor-pointer items-center justify-end gap-2"
@@ -1084,17 +1119,20 @@ export default function NewCoursePage() {
       <Checkbox checked={formData.useStudentSiblingDiscountInCourse} />
     </div>
   </div>
+  {!isBillingMode && (
   <div className="space-y-2">
   <Label className="text-right block">
     {formData.courseType === "gafan"
       ? "מחיר לשעה (ש\"ח) *"
-      : needsSessionCount
-        ? needsHourlyRange
-          ? "מחיר לשעה (ש\"ח) *"
-          : formData.pricingMode === "perSession"
-            ? "מחיר ברירת מחדל למפגש (ש\"ח) *"
-            : "מחיר למפגש (ש\"ח) *"
-        : "מחיר הקורס (ש\"ח) *"}
+      : isPerHourMode
+        ? "מחיר לשעה (ש\"ח) *"
+        : isPerSessionMode
+          ? "מחיר ברירת מחדל למפגש (ש\"ח) *"
+          : isPerCourseMode
+            ? "מחיר כולל לקורס (ש\"ח) *"
+            : isPerStudentMode
+              ? "מחיר לכל תלמיד (ש\"ח) *"
+              : "מחיר (ש\"ח) *"}
   </Label>
   <Input
   type="number"
@@ -1148,9 +1186,12 @@ export default function NewCoursePage() {
     </div>
   )}
   </div>
+  )}
   </div>
   </CardContent>
   </Card>
+  </TabsContent>
+  </Tabs>
 
       {/* כפתורים */}
       <div className="flex gap-3 justify-start">
