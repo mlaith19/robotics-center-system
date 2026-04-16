@@ -36,6 +36,12 @@ interface Teacher {
 interface Course {
   id: string
   name: string
+  schoolId?: string | null
+}
+
+interface School {
+  id: string
+  name: string
 }
 
 interface Enrollment {
@@ -54,6 +60,7 @@ export default function AttendancePage() {
   const [attendanceType, setAttendanceType] = useState<AttendanceType>("course")
   const [selectedId, setSelectedId] = useState<string>("")
   const [selectedCourseId, setSelectedCourseId] = useState<string>("") // For student type - which course
+  const [selectedSchoolId, setSelectedSchoolId] = useState<string>("all")
   const [participantType, setParticipantType] = useState<"student" | "teacher">("student") // For course type - show students or teachers
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [attendanceData, setAttendanceData] = useState<Record<string, AttendanceStatus>>({})
@@ -74,10 +81,17 @@ export default function AttendancePage() {
   // Fetch data from API
   const { data: rawStudents } = useSWR<Student[]>("/api/students", arrayFetcher)
   const { data: rawTeachers } = useSWR<Teacher[]>("/api/teachers", arrayFetcher)
-  const { data: rawCourses  } = useSWR<Course[]>("/api/courses",   arrayFetcher)
+  const { data: rawSchools } = useSWR<School[]>("/api/schools", arrayFetcher)
+  const schoolFilterQuery = selectedSchoolId !== "all" ? `?schoolId=${encodeURIComponent(selectedSchoolId)}` : ""
+  const { data: rawCourses  } = useSWR<Course[]>(`/api/courses${schoolFilterQuery}`,   arrayFetcher)
+  const schools = Array.isArray(rawSchools) ? rawSchools : []
   const students = Array.isArray(rawStudents) ? rawStudents : []
   const teachers = Array.isArray(rawTeachers) ? rawTeachers : []
   const courses  = Array.isArray(rawCourses)  ? rawCourses  : []
+  const schoolNameById = new Map((Array.isArray(rawSchools) ? rawSchools : []).map((s) => [s.id, s.name]))
+  const availableSchools = schools.filter((school) =>
+    courses.some((course) => (course.schoolId ?? null) === school.id)
+  )
 
   // Fetch attendance history for selected course (all dates)
   const { data: rawAttendanceHistory } = useSWR<any[]>(
@@ -351,6 +365,32 @@ export default function AttendancePage() {
               </div>
 
               <div className="space-y-2">
+                <label className="text-sm font-medium">בית ספר</label>
+                <Select
+                  value={selectedSchoolId}
+                  onValueChange={(value) => {
+                    setSelectedSchoolId(value)
+                    setSelectedId("")
+                    setSelectedCourseId("")
+                    setAttendanceData({})
+                  }}
+                  disabled={availableSchools.length === 0}
+                >
+                  <SelectTrigger className="h-10">
+                    <SelectValue placeholder={availableSchools.length > 0 ? "בחר בית ספר" : "אין בתי ספר זמינים"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">כל בתי הספר</SelectItem>
+                    {availableSchools.map((school) => (
+                      <SelectItem key={school.id} value={school.id}>
+                        {school.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
                 <label className="text-sm font-medium">
                   {attendanceType === "course" ? "קורס" : attendanceType === "teacher" ? "מורה" : "תלמיד"}
                 </label>
@@ -376,6 +416,7 @@ export default function AttendancePage() {
                       courses.map((course: Course) => (
                         <SelectItem key={course.id} value={course.id}>
                           {course.name}
+                          {course.schoolId ? ` — ${schoolNameById.get(course.schoolId) || "ללא בית ספר"}` : " — ללא בית ספר"}
                         </SelectItem>
                       ))}
                     {attendanceType === "teacher" &&
@@ -434,6 +475,7 @@ export default function AttendancePage() {
                       {courses.map((course: Course) => (
                         <SelectItem key={course.id} value={course.id}>
                           {course.name}
+                          {course.schoolId ? ` — ${schoolNameById.get(course.schoolId) || "ללא בית ספר"}` : " — ללא בית ספר"}
                         </SelectItem>
                       ))}
                     </SelectContent>
