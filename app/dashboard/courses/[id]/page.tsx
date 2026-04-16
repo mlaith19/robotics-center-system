@@ -1485,9 +1485,12 @@ export default function CourseViewPage() {
   )
     .map(([packageName, members]) => ({
       packageName,
-      members: [...members].sort((a, b) =>
-        String(a.studentName || "").localeCompare(String(b.studentName || ""), "he", { sensitivity: "base" }),
-      ),
+      members: [...members].sort((a, b) => {
+        const rankA = a.siblingRank != null && Number(a.siblingRank) > 0 ? Number(a.siblingRank) : 9999
+        const rankB = b.siblingRank != null && Number(b.siblingRank) > 0 ? Number(b.siblingRank) : 9999
+        if (rankA !== rankB) return rankA - rankB
+        return String(a.studentName || "").localeCompare(String(b.studentName || ""), "he", { sensitivity: "base" })
+      }),
       totalDue: members.reduce((sum, m) => sum + Number((m as any).coursePrice || 0), 0),
     }))
     .sort((a, b) => a.packageName.localeCompare(b.packageName, "he", { sensitivity: "base" }))
