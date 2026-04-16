@@ -17,7 +17,7 @@ import { deleteWithUndo } from "@/lib/notify"
 import { useCurrentUser } from "@/lib/auth-context"
 import { hasFullAccessRole } from "@/lib/permissions"
 
-type AttendanceType = "course" | "teacher" | "student"
+type AttendanceType = "course" | "school" | "teacher" | "student"
 type AttendanceStatus = "present" | "absent" | "sick" | "vacation"
 
 interface Student {
@@ -57,6 +57,8 @@ export default function AttendancePage() {
   const isAdmin =
     hasFullAccessRole(currentUser?.roleKey) ||
     hasFullAccessRole(currentUser?.role)
+  const roleToken = (currentUser?.roleKey ?? currentUser?.role ?? "").toString().trim().toLowerCase()
+  const isTeacherSession = roleToken === "teacher" || roleToken.includes("teacher") || roleToken.includes("מורה")
   const [attendanceType, setAttendanceType] = useState<AttendanceType>("course")
   const [selectedId, setSelectedId] = useState<string>("")
   const [selectedCourseId, setSelectedCourseId] = useState<string>("") // For student type - which course
@@ -70,6 +72,8 @@ export default function AttendancePage() {
   const [teacherEndTime, setTeacherEndTime] = useState<string>("")
   /** הוראה בקורס מול שעת משרד (תעריף מ־פרופיל תעריף) */
   const [teacherHourKind, setTeacherHourKind] = useState<"teaching" | "office">("teaching")
+  const isCourseBasedAttendance = attendanceType === "course" || attendanceType === "school"
+  const activeCourseId = attendanceType === "course" ? selectedId : selectedCourseId
 
   useEffect(() => {
     if (!isAdmin) {
@@ -89,20 +93,41 @@ export default function AttendancePage() {
   const teachers = Array.isArray(rawTeachers) ? rawTeachers : []
   const courses  = Array.isArray(rawCourses)  ? rawCourses  : []
   const schoolNameById = new Map((Array.isArray(rawSchools) ? rawSchools : []).map((s) => [s.id, s.name]))
-  const availableSchools = schools.filter((school) =>
-    courses.some((course) => (course.schoolId ?? null) === school.id)
+  const teacherScopedCourseIds = Array.isArray(currentUser?.teacherCourseIds)
+    ? (currentUser?.teacherCourseIds as string[])
+    : null
+  const teacherScopedSchools = new Set(
+    (teacherScopedCourseIds
+      ? courses.filter((c) => teacherScopedCourseIds.includes(String(c.id)))
+      : courses
+    )
+      .map((c) => c.schoolId)
+      .filter((id): id is string => !!id)
   )
+  const availableSchools = schools.filter((school) =>
+    teacherScopedSchools.size > 0
+      ? teacherScopedSchools.has(school.id)
+      : courses.some((course) => (course.schoolId ?? null) === school.id)
+  )
+  const coursesForSelectedSchool =
+    attendanceType === "school" && selectedId
+      ? courses.filter((course) => (course.schoolId ?? null) === selectedId)
+      : courses
+  const selectedCourseName =
+    attendanceType === "school"
+      ? courses.find((c) => c.id === selectedCourseId)?.name
+      : courses.find((c) => c.id === selectedId)?.name
 
   // Fetch attendance history for selected course (all dates)
   const { data: rawAttendanceHistory } = useSWR<any[]>(
-    selectedId && attendanceType === "course" ? `/api/attendance?courseId=${selectedId}` : null,
+    activeCourseId && isCourseBasedAttendance ? `/api/attendance?courseId=${activeCourseId}` : null,
     arrayFetcher
   )
   const attendanceHistory = Array.isArray(rawAttendanceHistory) ? rawAttendanceHistory : []
 
   // Fetch enrollments for selected course
   const { data: rawEnrollments } = useSWR<Enrollment[]>(
-    selectedId && attendanceType === "course" ? `/api/enrollments?courseId=${selectedId}` : null,
+    activeCourseId && isCourseBasedAttendance ? `/api/enrollments?courseId=${activeCourseId}` : null,
     arrayFetcher
   )
   const enrollments = Array.isArray(rawEnrollments) ? rawEnrollments : []
@@ -112,8 +137,8 @@ export default function AttendancePage() {
     ? format(selectedDate, "yyyy-MM-dd") 
     : format(new Date(), "yyyy-MM-dd")
   const { data: existingAttendance = [] } = useSWR(
-    selectedId && selectedDate
-      ? `/api/attendance?${attendanceType === "course" ? `courseId=${selectedId}` : `studentId=${selectedId}`}&date=${dateStr}`
+    ((isCourseBasedAttendance && !!activeCourseId) || (!isCourseBasedAttendance && !!selectedId)) && selectedDate
+      ? `/api/attendance?${isCourseBasedAttendance ? `courseId=${activeCourseId}` : `studentId=${selectedId}`}&date=${dateStr}`
       : null,
     arrayFetcher,
     {
@@ -137,7 +162,7 @@ export default function AttendancePage() {
     const safeTeachers = Array.isArray(teachers) ? teachers : []
     const safeEnrollments = Array.isArray(enrollments) ? enrollments : []
 
-    if (attendanceType === "course") {
+    if (isCourseBasedAttendance) {
       if (participantType === "student") {
         const enrolledStudentIds = safeEnrollments.map((e: Enrollment) => e.studentId)
         return safeStudents.filter((s: Student) => enrolledStudentIds.includes(s.id))
@@ -181,7 +206,7 @@ export default function AttendancePage() {
       }
       
       // Determine if this is teacher or student attendance
-      const isTeacherAttendance = attendanceType === "teacher" || (attendanceType === "course" && participantType === "teacher")
+      const isTeacherAttendance = attendanceType === "teacher" || (isCourseBasedAttendance && participantType === "teacher")
       const parseTimeToMinutes = (timeStr: string): number | null => {
         const m = /^(\d{2}):(\d{2})$/.exec(timeStr)
         if (!m) return null
@@ -237,7 +262,7 @@ export default function AttendancePage() {
     const courseId = attendanceType === "course" ? selectedId : selectedCourseId
     if (!courseId) return
     const prevStatus = attendanceData[personId]
-    const isTeacherAttendance = attendanceType === "teacher" || (attendanceType === "course" && participantType === "teacher")
+    const isTeacherAttendance = attendanceType === "teacher" || (isCourseBasedAttendance && participantType === "teacher")
     const params = new URLSearchParams({
       courseId,
       date: dateStr,
@@ -259,7 +284,7 @@ export default function AttendancePage() {
         const res = await fetch(`/api/attendance?${params}`, { method: "DELETE", credentials: "include" })
         if (!res.ok) throw new Error("Failed to delete attendance")
         mutate(`/api/attendance?courseId=${courseId}&date=${dateStr}`)
-        mutate(`/api/attendance?courseId=${selectedId}`)
+        mutate(`/api/attendance?courseId=${activeCourseId}`)
       },
       confirmPolicy: "standard",
       undoWindowMs: 10_000,
@@ -299,12 +324,15 @@ export default function AttendancePage() {
   const selectedItem =
     attendanceType === "course"
       ? courses.find((c: Course) => c.id === selectedId)
+      : attendanceType === "school"
+        ? schools.find((s: School) => s.id === selectedId)
       : attendanceType === "teacher"
         ? teachers.find((t: Teacher) => t.id === selectedId)
         : students.find((s: Student) => s.id === selectedId)
 
   const getList = () => {
     if (attendanceType === "course") return courses
+    if (attendanceType === "school") return schools
     if (attendanceType === "teacher") return teachers
     return students
   }
@@ -326,7 +354,7 @@ export default function AttendancePage() {
             <AlertCircle className="h-4 w-4 text-orange-600" />
             <AlertTitle className="text-orange-900">אין נתונים זמינים</AlertTitle>
             <AlertDescription className="text-orange-800">
-              לא נמצאו {attendanceType === "course" ? "קורסים" : attendanceType === "teacher" ? "מורים" : "תלמידים"}{" "}
+              לא נמצאו {attendanceType === "course" ? "קורסים" : attendanceType === "school" ? "בתי ספר" : attendanceType === "teacher" ? "מורים" : "תלמידים"}{" "}
               במערכת. הוסף נתונים דרך הדפים הרלוונטיים.
             </AlertDescription>
           </Alert>
@@ -358,41 +386,46 @@ export default function AttendancePage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="course">קורס</SelectItem>
+                    {(!isTeacherSession || availableSchools.length > 0) && (
+                      <SelectItem value="school">בתי ספר</SelectItem>
+                    )}
                     {isAdmin && <SelectItem value="teacher">מורה</SelectItem>}
                     <SelectItem value="student">תלמיד</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium">בית ספר</label>
-                <Select
-                  value={selectedSchoolId}
-                  onValueChange={(value) => {
-                    setSelectedSchoolId(value)
-                    setSelectedId("")
-                    setSelectedCourseId("")
-                    setAttendanceData({})
-                  }}
-                  disabled={availableSchools.length === 0}
-                >
-                  <SelectTrigger className="h-10">
-                    <SelectValue placeholder={availableSchools.length > 0 ? "בחר בית ספר" : "אין בתי ספר זמינים"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">כל בתי הספר</SelectItem>
-                    {availableSchools.map((school) => (
-                      <SelectItem key={school.id} value={school.id}>
-                        {school.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {attendanceType !== "school" && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">בית ספר</label>
+                  <Select
+                    value={selectedSchoolId}
+                    onValueChange={(value) => {
+                      setSelectedSchoolId(value)
+                      setSelectedId("")
+                      setSelectedCourseId("")
+                      setAttendanceData({})
+                    }}
+                    disabled={availableSchools.length === 0}
+                  >
+                    <SelectTrigger className="h-10">
+                      <SelectValue placeholder={availableSchools.length > 0 ? "בחר בית ספר" : "אין בתי ספר זמינים"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">כל בתי הספר</SelectItem>
+                      {availableSchools.map((school) => (
+                        <SelectItem key={school.id} value={school.id}>
+                          {school.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <label className="text-sm font-medium">
-                  {attendanceType === "course" ? "קורס" : attendanceType === "teacher" ? "מורה" : "תלמיד"}
+                  {attendanceType === "course" ? "קורס" : attendanceType === "school" ? "בית ספר" : attendanceType === "teacher" ? "מורה" : "תלמיד"}
                 </label>
                 <Select 
                   value={selectedId} 
@@ -406,7 +439,7 @@ export default function AttendancePage() {
                     <SelectValue
                       placeholder={
                         hasData
-                          ? `בחר ${attendanceType === "course" ? "קורס" : attendanceType === "teacher" ? "מורה" : "תלמיד"}`
+                          ? `בחר ${attendanceType === "course" ? "קורס" : attendanceType === "school" ? "בית ספר" : attendanceType === "teacher" ? "מורה" : "תלמיד"}`
                           : "אין נתונים"
                       }
                     />
@@ -417,6 +450,12 @@ export default function AttendancePage() {
                         <SelectItem key={course.id} value={course.id}>
                           {course.name}
                           {course.schoolId ? ` — ${schoolNameById.get(course.schoolId) || "ללא בית ספר"}` : " — ללא בית ספר"}
+                        </SelectItem>
+                      ))}
+                    {attendanceType === "school" &&
+                      schools.map((school: School) => (
+                        <SelectItem key={school.id} value={school.id}>
+                          {school.name}
                         </SelectItem>
                       ))}
                     {attendanceType === "teacher" &&
@@ -435,7 +474,7 @@ export default function AttendancePage() {
                 </Select>
               </div>
 
-              {attendanceType === "course" && (
+              {isCourseBasedAttendance && (
                 <div className="space-y-2">
                   <label className="text-sm font-medium">סוג משתתף</label>
                   <Select
@@ -444,7 +483,7 @@ export default function AttendancePage() {
                       setParticipantType(value)
                       setAttendanceData({})
                     }}
-                    disabled={!selectedId}
+                    disabled={attendanceType === "school" ? !selectedCourseId : !activeCourseId}
                   >
                     <SelectTrigger className="h-10">
                       <SelectValue placeholder="בחר סוג משתתף" />
@@ -457,7 +496,7 @@ export default function AttendancePage() {
                 </div>
               )}
 
-              {(attendanceType === "student" || attendanceType === "teacher") && (
+              {(attendanceType === "student" || attendanceType === "teacher" || attendanceType === "school") && (
                 <div className="space-y-2">
                   <label className="text-sm font-medium">קורס</label>
                   <Select
@@ -466,13 +505,13 @@ export default function AttendancePage() {
                       setSelectedCourseId(value)
                       setAttendanceData({})
                     }}
-                    disabled={!courses.length || !selectedId}
+                    disabled={attendanceType === "school" ? !selectedId || coursesForSelectedSchool.length === 0 : !courses.length || !selectedId}
                   >
                     <SelectTrigger className="h-10">
-                      <SelectValue placeholder={selectedId ? "בחר קורס" : `בחר ${attendanceType === "student" ? "תלמיד" : "מורה"} קודם`} />
+                      <SelectValue placeholder={selectedId ? "בחר קורס" : `בחר ${attendanceType === "school" ? "בית ספר" : attendanceType === "student" ? "תלמיד" : "מורה"} קודם`} />
                     </SelectTrigger>
                     <SelectContent>
-                      {courses.map((course: Course) => (
+                      {(attendanceType === "school" ? coursesForSelectedSchool : courses).map((course: Course) => (
                         <SelectItem key={course.id} value={course.id}>
                           {course.name}
                           {course.schoolId ? ` — ${schoolNameById.get(course.schoolId) || "ללא בית ספר"}` : " — ללא בית ספר"}
@@ -483,7 +522,7 @@ export default function AttendancePage() {
                 </div>
               )}
 
-              {(attendanceType === "teacher" || (attendanceType === "course" && participantType === "teacher")) && (
+              {(attendanceType === "teacher" || (isCourseBasedAttendance && participantType === "teacher")) && (
                 <>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">משעה</label>
@@ -541,12 +580,12 @@ export default function AttendancePage() {
           </CardContent>
         </Card>
 
-        {selectedId && tableData.length > 0 && (attendanceType === "course" || selectedCourseId) && (
+        {selectedId && tableData.length > 0 && (isCourseBasedAttendance || selectedCourseId) && (
           <Card className="border-green-200 bg-green-50/30">
             <CardHeader className="px-3 text-right sm:px-6">
               <CardTitle className="break-words text-base sm:text-lg">
-                {attendanceType === "course"
-                  ? `נוכחות קורס: ${selectedItem?.name}`
+                {isCourseBasedAttendance
+                  ? `נוכחות קורס: ${selectedCourseName || "—"}`
                   : attendanceType === "teacher"
                     ? `נוכחות מורה: ${(selectedItem as Teacher)?.name}`
                     : `נוכחות תלמיד: ${(selectedItem as Student)?.name}`}
@@ -653,10 +692,10 @@ export default function AttendancePage() {
         )}
 
         {/* Attendance History Table */}
-        {selectedId && attendanceType === "course" && attendanceHistory.length > 0 && (
+        {activeCourseId && isCourseBasedAttendance && attendanceHistory.length > 0 && (
           <Card className="border-blue-200 bg-blue-50/30">
             <CardHeader className="px-3 text-right sm:px-6">
-              <CardTitle className="break-words text-base sm:text-lg">היסטוריית נוכחות - {selectedItem?.name}</CardTitle>
+              <CardTitle className="break-words text-base sm:text-lg">היסטוריית נוכחות - {selectedCourseName || "—"}</CardTitle>
               <CardDescription>כל הנוכחויות שנרשמו לקורס זה</CardDescription>
             </CardHeader>
             <CardContent className="px-3 sm:px-6">
