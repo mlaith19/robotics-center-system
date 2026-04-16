@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { ArrowRight, Pencil, Loader2, BookOpen, Calendar, Users, BarChart3, CalendarCheck, Check, X, Thermometer, Plane, CalendarRange, Printer, Layers, Trash2, Clock, Plus } from "lucide-react"
+import { ArrowRight, Pencil, Loader2, BookOpen, Calendar, Users, BarChart3, CalendarCheck, Check, X, Thermometer, Plane, CalendarRange, Printer, Layers, Trash2, Clock, Plus, ToggleLeft, ToggleRight } from "lucide-react"
 import { courseTimeToDisplayValue, normalizeCourseCalendarYmd } from "@/lib/course-db-fields"
 import { courseTypeIsPerSession, normalizeSessionPricesMap } from "@/lib/course-session-prices"
 import { useLanguage } from "@/lib/i18n/context"
@@ -1590,15 +1590,24 @@ export default function CourseViewPage() {
 
   const dueByStudent = new Map<string, { studentName: string; totalDue: number }>()
   const firstEnrollmentByStudent = new Map<string, Enrollment>()
+  const presentCountByStudent = new Map<string, number>()
   for (const e of enrollments) {
     const sid = String(e.studentId || "").trim()
     if (!sid) continue
     const studentName = e.studentName || "—"
     if (!firstEnrollmentByStudent.has(sid)) firstEnrollmentByStudent.set(sid, e)
     const presentDates = Array.from(presentDatesByStudent.get(sid) || [])
+    presentCountByStudent.set(sid, presentDates.length)
     // coursePrice שמגיע מ-API /enrollments כבר כולל התאמות אפקטיביות
     // (למשל הנחות אחים), לכן הוא חייב להיות בסיס החישוב לחייבים.
     let enrollmentDue = Number((e as any).coursePrice ?? course?.price ?? 0)
+    // בתוכנית חיוב "לפי מפגש": סכום לתשלום = נוכחות * מחיר למפגש
+    const billingMode = String((course as any)?.billingPlanSelectionMode || "").trim()
+    const planChoice = normalizeBillingPlanChoice((e as any)?.billingPlanChoice ?? (course as any)?.billingPlan)
+    const perSessionPrice = Number((course as any)?.billingPlanPerSessionPrice ?? 0)
+    if (billingMode === "billing" && planChoice === "perSession" && Number.isFinite(perSessionPrice) && perSessionPrice >= 0) {
+      enrollmentDue = Math.round(presentDates.length * perSessionPrice * 100) / 100
+    }
     if (
       isCampCourse &&
       campNoAttendanceRuleEnabled &&
@@ -1708,6 +1717,30 @@ export default function CourseViewPage() {
       .join(" ")
     return matchesStudentSearchText(searchText, paymentsQuery)
   })
+  const paymentsGroupedByStudent = Array.from(
+    filteredPaymentsForCourse.reduce((map, payment) => {
+      const sid = String(payment.studentId || "")
+      const key = sid || `__no_student__${payment.id}`
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          studentId: sid,
+          studentName: payment.studentName || "—",
+          rows: [] as CoursePaymentRow[],
+        })
+      }
+      map.get(key)!.rows.push(payment)
+      return map
+    }, new Map<string, { key: string; studentId: string; studentName: string; rows: CoursePaymentRow[] }>()),
+  ).map((group) => ({
+    ...group,
+    totalPaid: group.rows.reduce((sum, r) => sum + Number(r.amount || 0), 0),
+    attendanceCount: presentCountByStudent.get(group.studentId) || 0,
+    rows: [...group.rows].sort(
+      (a, b) =>
+        new Date(String(b.paymentDate || "")).getTime() - new Date(String(a.paymentDate || "")).getTime(),
+    ),
+  }))
   const filteredDebtRows = debtRows.filter((row) => {
     const student = studentsById.get(String(row.studentId || ""))
     const searchText = [
@@ -2236,7 +2269,7 @@ export default function CourseViewPage() {
                         <TableHead className="text-right">{tr.student}</TableHead>
                         <TableHead className="text-right">{tr.status}</TableHead>
                         <TableHead className="text-right">{tr.enrollmentDate}</TableHead>
-                        <TableHead className="text-right">{tr.siblingPackage}</TableHead>
+                        <TableHead className="text-right">חבילות</TableHead>
                         <TableHead className="text-right">תוכנית חיוב</TableHead>
                         <TableHead className="text-right">{tr.siblingRank}</TableHead>
                         <TableHead className="text-right">{tr.packageSource}</TableHead>
@@ -2260,7 +2293,42 @@ export default function CourseViewPage() {
                           <TableCell className="text-right text-muted-foreground">
                             {enrollment.enrollmentDate ? new Date(enrollment.enrollmentDate).toLocaleDateString(localeTag) : "-"}
                           </TableCell>
-                          <TableCell className="text-right text-muted-foreground">{enrollment.siblingDiscountPackageName || "—"}</TableCell>
+                          <TableCell className="text-right">
+                            {enrollment.siblingDiscountPackageName ? (
+                              <div className="flex flex-col items-end gap-1">
+                                <span className={enrollment.siblingDiscountDisabled ? "text-muted-foreground line-through" : ""}>
+                                  {enrollment.siblingDiscountPackageName}
+                                </span>
+                                {canTabDebtors && statusPres.key !== "completed" ? (
+                                  <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="outline"
+                                    className={`h-7 w-7 ${
+                                      enrollment.siblingDiscountDisabled
+                                        ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                                        : "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                    }`}
+                                    title={enrollment.siblingDiscountDisabled ? "הפעל חבילה" : "בטל חבילה"}
+                                    onClick={() =>
+                                      saveEnrollmentSiblingDiscountDisabled(
+                                        enrollment.id,
+                                        !Boolean(enrollment.siblingDiscountDisabled),
+                                      )
+                                    }
+                                  >
+                                    {enrollment.siblingDiscountDisabled ? (
+                                      <ToggleLeft className="h-4 w-4" />
+                                    ) : (
+                                      <ToggleRight className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                ) : null}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
                           <TableCell className="text-right">
                             {String((course as any)?.billingPlanSelectionMode || "").trim() === "billing" && canTabDebtors && statusPres.key !== "completed" ? (
                               <Select
@@ -2669,7 +2737,7 @@ export default function CourseViewPage() {
                 <Table className="min-w-[980px]">
                   <TableHeader>
                     <TableRow className="bg-muted/50">
-                      <TableHead className="text-right">שם תלמיד</TableHead>
+                      <TableHead className="text-right">תלמיד</TableHead>
                       <TableHead className="text-right">תאריך תשלום</TableHead>
                       <TableHead className="text-right">שיטת תשלום</TableHead>
                       <TableHead className="text-right">סכום תשלום</TableHead>
@@ -2678,15 +2746,32 @@ export default function CourseViewPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredPaymentsForCourse.length > 0 ? filteredPaymentsForCourse.map((p) => (
-                      <TableRow key={p.id}>
-                        <TableCell className="text-right">{p.studentName || "—"}</TableCell>
-                        <TableCell className="text-right">{p.paymentDate ? new Date(p.paymentDate).toLocaleDateString(localeTag) : "—"}</TableCell>
-                        <TableCell className="text-right">{paymentTypeLabel(p.paymentType)}</TableCell>
-                        <TableCell className="text-right">₪{Number(p.amount || 0).toLocaleString()}</TableCell>
-                        <TableCell className="text-right">{p.description || "—"}</TableCell>
-                        <TableCell className="text-right">{p.siblingDiscountPackageName || "—"}</TableCell>
-                      </TableRow>
+                    {paymentsGroupedByStudent.length > 0 ? paymentsGroupedByStudent.map((group) => (
+                      <Fragment key={group.key}>
+                        <TableRow className="bg-muted/30">
+                          <TableCell className="text-right font-semibold">
+                            {group.studentName}
+                            <div className="text-xs text-muted-foreground mt-1">
+                              סה"כ תשלומים: ₪{group.totalPaid.toLocaleString()} | נוכחות: {group.attendanceCount}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground">—</TableCell>
+                          <TableCell className="text-right text-muted-foreground">—</TableCell>
+                          <TableCell className="text-right font-semibold">₪{group.totalPaid.toLocaleString()}</TableCell>
+                          <TableCell className="text-right text-muted-foreground">—</TableCell>
+                          <TableCell className="text-right text-muted-foreground">—</TableCell>
+                        </TableRow>
+                        {group.rows.map((p) => (
+                          <TableRow key={p.id}>
+                            <TableCell className="text-right text-muted-foreground pe-6">↳ {p.studentName || "—"}</TableCell>
+                            <TableCell className="text-right">{p.paymentDate ? new Date(p.paymentDate).toLocaleDateString(localeTag) : "—"}</TableCell>
+                            <TableCell className="text-right">{paymentTypeLabel(p.paymentType)}</TableCell>
+                            <TableCell className="text-right">₪{Number(p.amount || 0).toLocaleString()}</TableCell>
+                            <TableCell className="text-right">{p.description || "—"}</TableCell>
+                            <TableCell className="text-right">{p.siblingDiscountPackageName || "—"}</TableCell>
+                          </TableRow>
+                        ))}
+                      </Fragment>
                     )) : (
                       <TableRow>
                         <TableCell className="text-center text-muted-foreground" colSpan={6}>
@@ -2937,9 +3022,14 @@ export default function CourseViewPage() {
                               {canTabDebtors && statusPres.key !== "completed" ? (
                                 <Button
                                   type="button"
-                                  size="sm"
-                                  variant={r.siblingDiscountDisabled ? "default" : "outline"}
-                                  className="h-7 px-2 text-xs"
+                                  size="icon"
+                                  variant="outline"
+                                  className={`h-7 w-7 ${
+                                    r.siblingDiscountDisabled
+                                      ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                                      : "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                  }`}
+                                  title={r.siblingDiscountDisabled ? "הפעל חבילה" : "בטל חבילה"}
                                   onClick={() =>
                                     saveEnrollmentSiblingDiscountDisabled(
                                       r.enrollmentId,
@@ -2947,7 +3037,11 @@ export default function CourseViewPage() {
                                     )
                                   }
                                 >
-                                  {r.siblingDiscountDisabled ? "הפעל חבילה" : "בטל חבילה"}
+                                  {r.siblingDiscountDisabled ? (
+                                    <ToggleLeft className="h-4 w-4" />
+                                  ) : (
+                                    <ToggleRight className="h-4 w-4" />
+                                  )}
                                 </Button>
                               ) : null}
                             </div>

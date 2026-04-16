@@ -42,7 +42,9 @@ export default function NewStudentPage() {
     medicalInfo: isEn ? "Medical Information" : "מידע רפואי",
     courses: isEn ? "Courses" : "קורסים",
     userAccount: isEn ? "User Account" : "חשבון משתמש",
-    fullName: isEn ? "Full Name *" : "שם מלא *",
+    firstName: isEn ? "First Name *" : isAr ? "الاسم الأول *" : "שם פרטי *",
+    lastName: isEn ? "Last Name *" : isAr ? "اسم العائلة *" : "שם משפחה *",
+    gender: isEn ? "Gender" : isAr ? "الجنس" : "מין",
     idNumber: isEn ? "ID Number" : "תעודת זהות",
     birthDate: isEn ? "Birth Date" : "תאריך לידה",
     profileImageOptional: isEn ? "Profile image (optional)" : isAr ? "صورة الملف الشخصي (اختياري)" : "תמונת פרופיל (לא חובה)",
@@ -70,13 +72,16 @@ export default function NewStudentPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [submitSuccess, setSubmitSuccess] = useState(false)
+  const [activeStep, setActiveStep] = useState(1)
 
   // Fetch courses from API
   const { data: rawCourses } = useSWR<Course[]>("/api/courses", arrayFetcher)
   const courses = Array.isArray(rawCourses) ? rawCourses : []
 
   const [newStudent, setNewStudent] = useState({
-    name: "",
+    firstName: "",
+    lastName: "",
+    gender: "",
     idNumber: "",
     birthDate: "",
     email: "",
@@ -147,6 +152,7 @@ export default function NewStudentPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...newStudent,
+          name: `${newStudent.firstName} ${newStudent.lastName}`.trim(),
           courseSessions,
           profileImage: newStudent.profileImage.trim() || null,
           // User account data
@@ -237,6 +243,23 @@ export default function NewStudentPage() {
       </Card>
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">{isEn ? "Step" : isAr ? "الخطوة" : "שלב"} {activeStep}/4</div>
+            <div className="flex items-center gap-2">
+              {[1, 2, 3, 4].map((step) => (
+                <button
+                  key={step}
+                  type="button"
+                  onClick={() => setActiveStep(step)}
+                  className={`h-2.5 w-8 rounded-full ${activeStep === step ? "bg-primary" : "bg-muted"}`}
+                  aria-label={`step-${step}`}
+                />
+              ))}
+            </div>
+          </div>
+        </Card>
+        {activeStep === 1 && (
         <Card className="border-2 border-green-200 bg-gradient-to-br from-green-50 to-green-100/50 p-4 sm:p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="bg-green-500 text-white p-2.5 rounded-lg">
@@ -249,18 +272,41 @@ export default function NewStudentPage() {
           </div>
 
           <div className="grid gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="firstName" className="text-base font-medium">{tr.firstName}</Label>
+                <Input
+                  id="firstName"
+                  value={newStudent.firstName}
+                  onChange={(e) => setNewStudent({ ...newStudent, firstName: e.target.value })}
+                  placeholder={isEn ? "John" : isAr ? "الاسم الأول" : "שם פרטי"}
+                  className="text-base h-12 bg-white"
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="lastName" className="text-base font-medium">{tr.lastName}</Label>
+                <Input
+                  id="lastName"
+                  value={newStudent.lastName}
+                  onChange={(e) => setNewStudent({ ...newStudent, lastName: e.target.value })}
+                  placeholder={isEn ? "Doe" : isAr ? "اسم العائلة" : "שם משפחה"}
+                  className="text-base h-12 bg-white"
+                  required
+                />
+              </div>
+            </div>
             <div className="grid gap-2">
-              <Label htmlFor="name" className="text-base font-medium">
-                {tr.fullName}
-              </Label>
-              <Input
-                id="name"
-                value={newStudent.name}
-                onChange={(e) => setNewStudent({ ...newStudent, name: e.target.value })}
-                  placeholder={isEn ? "e.g. John Doe" : "לדוגמה: יוסי כהן"}
-                className="text-base h-12 bg-white"
-                required
-              />
+              <Label htmlFor="gender" className="text-base font-medium">{tr.gender}</Label>
+              <Select value={newStudent.gender} onValueChange={(value) => setNewStudent({ ...newStudent, gender: value })}>
+                <SelectTrigger id="gender" className="h-12 bg-white">
+                  <SelectValue placeholder={isEn ? "Select gender" : isAr ? "اختر الجنس" : "בחר מין"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="male">{isEn ? "Male" : isAr ? "ذكر" : "זכר"}</SelectItem>
+                  <SelectItem value="female">{isEn ? "Female" : isAr ? "أنثى" : "נקבה"}</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -311,7 +357,9 @@ export default function NewStudentPage() {
             </div>
           </div>
         </Card>
+        )}
 
+        {activeStep === 2 && (
         <Card className="border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100/50 p-4 sm:p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="bg-blue-500 text-white p-2.5 rounded-lg">
@@ -392,7 +440,9 @@ export default function NewStudentPage() {
             </div>
           </div>
         </Card>
+        )}
 
+        {activeStep === 2 && (
         <Card className="border-2 border-emerald-200 bg-gradient-to-br from-emerald-50 to-emerald-100/50 p-4 sm:p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="bg-emerald-500 text-white p-2.5 rounded-lg">
@@ -432,8 +482,10 @@ export default function NewStudentPage() {
             </div>
           </div>
         </Card>
+        )}
 
         {/* User Account */}
+        {activeStep === 3 && (
         <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-purple-100/50 p-4 sm:p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="bg-purple-500 text-white p-2.5 rounded-lg">
@@ -487,7 +539,9 @@ export default function NewStudentPage() {
             )}
           </div>
         </Card>
+        )}
 
+        {activeStep === 3 && (
         <Card className="border-2 border-red-200 bg-gradient-to-br from-red-50 to-red-100/50 p-4 sm:p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="bg-red-500 text-white p-2.5 rounded-lg">
@@ -535,7 +589,9 @@ export default function NewStudentPage() {
             </div>
           </div>
         </Card>
+        )}
 
+        {activeStep === 4 && (
         <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-purple-100/50 p-4 sm:p-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="bg-purple-500 text-white p-2.5 rounded-lg">
@@ -618,16 +674,28 @@ export default function NewStudentPage() {
             )}
           </div>
         </Card>
+        )}
 
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-start">
+          {activeStep > 1 && (
+            <Button type="button" variant="outline" size="lg" className="h-12 w-full px-8 text-base sm:w-auto" onClick={() => setActiveStep((s) => Math.max(1, s - 1))}>
+              {isEn ? "Back" : isAr ? "رجوع" : "חזרה"}
+            </Button>
+          )}
+          {activeStep < 4 ? (
+            <Button type="button" size="lg" className="h-12 w-full px-8 text-base sm:w-auto" onClick={() => setActiveStep((s) => Math.min(4, s + 1))}>
+              {isEn ? "Next" : isAr ? "التالي" : "הבא"}
+            </Button>
+          ) : (
           <Button
             type="submit"
             size="lg"
             className="h-12 w-full px-8 text-base sm:w-auto"
-            disabled={isSubmitting || submitSuccess || !newStudent.name}
+            disabled={isSubmitting || submitSuccess || !newStudent.firstName.trim() || !newStudent.lastName.trim()}
           >
             {submitSuccess ? (isEn ? "Saved successfully!" : "נשמר בהצלחה!") : isSubmitting ? tr.saving : tr.addStudent}
           </Button>
+          )}
 
           <Link href="/dashboard/students" className="w-full sm:w-auto">
             <Button type="button" variant="outline" size="lg" className="h-12 w-full px-8 text-base bg-transparent sm:w-auto">

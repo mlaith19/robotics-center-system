@@ -22,6 +22,14 @@ function normalizeBirthDateInput(raw: unknown): string | null {
   return `${yyyy}-${mm}-${dd}`
 }
 
+async function ensureStudentExtendedIdentityColumns(
+  db: (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown[]>,
+) {
+  await db`ALTER TABLE "Student" ADD COLUMN IF NOT EXISTS "firstName" TEXT`
+  await db`ALTER TABLE "Student" ADD COLUMN IF NOT EXISTS "lastName" TEXT`
+  await db`ALTER TABLE "Student" ADD COLUMN IF NOT EXISTS "gender" TEXT`
+}
+
 function resolveRoleKey(session: { role?: string; roleKey?: string }): string {
   return (session.roleKey || session.role || "").toLowerCase()
 }
@@ -132,7 +140,14 @@ export const POST = withTenantAuth(async (req, session) => {
     await ensureProfileImageColumns(db as unknown as (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown[]>)
     await ensureSiblingDiscountTables(db)
     await ensureStudentRegistrationInterestColumn(db)
-    if (!body.name) return Response.json({ error: "name is required" }, { status: 400 })
+    await ensureStudentExtendedIdentityColumns(db as unknown as (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown[]>)
+    const firstName = body.firstName ? String(body.firstName).trim() : ""
+    const lastName = body.lastName ? String(body.lastName).trim() : ""
+    const normalizedName = [firstName, lastName].filter(Boolean).join(" ").trim()
+    const effectiveName = normalizedName || String(body.name || "").trim()
+    if (!effectiveName) return Response.json({ error: "name is required" }, { status: 400 })
+    const gender = body.gender ? String(body.gender).trim() : null
+
     const profileImage = resolveProfileImageWithFallback(body.profileImage)
 
     const createUserAccount = body.createUserAccount === true
@@ -166,7 +181,7 @@ export const POST = withTenantAuth(async (req, session) => {
       const hashedPassword = await bcrypt.hash(password, 10)
       await db`
         INSERT INTO "User" (id, name, email, username, password, phone, status, role, permissions, "createdAt", "updatedAt")
-        VALUES (${userId}, ${body.name}, ${body.email || null}, ${username}, ${hashedPassword},
+        VALUES (${userId}, ${effectiveName}, ${body.email || null}, ${username}, ${hashedPassword},
                 ${body.phone || null}, 'active', 'student',
                 ${JSON.stringify(["settings.home", "schedule.view"])}, ${now}, ${now})
       `
@@ -181,10 +196,10 @@ export const POST = withTenantAuth(async (req, session) => {
       INSERT INTO "Student" (
         id, name, email, phone, address, city, status, "birthDate",
         "idNumber", father, mother, "additionalPhone", "healthFund", allergies,
-        "siblingDiscountPackageId", "totalSessions", "courseIds", "courseSessions", "profileImage", "registrationInterest", "userId", "createdAt", "updatedAt"
+        "siblingDiscountPackageId", "totalSessions", "courseIds", "courseSessions", "profileImage", "registrationInterest", "firstName", "lastName", "gender", "userId", "createdAt", "updatedAt"
       )
       VALUES (
-        ${studentId}, ${body.name}, ${body.email || null}, ${body.phone || null},
+        ${studentId}, ${effectiveName}, ${body.email || null}, ${body.phone || null},
         ${body.address || null}, ${body.city || null},
         ${body.status || 'מתעניין'}, ${normalizeBirthDateInput(body.birthDate)},
         ${body.idNumber || null}, ${body.father || null}, ${body.mother || null},
@@ -193,7 +208,7 @@ export const POST = withTenantAuth(async (req, session) => {
         ${body.totalSessions || 12},
         ${JSON.stringify(body.courseIds || [])}::jsonb,
         ${JSON.stringify(body.courseSessions || {})}::jsonb,
-        ${profileImage}, ${registrationInterest}, ${userId}, ${now}, ${now}
+        ${profileImage}, ${registrationInterest}, ${firstName || null}, ${lastName || null}, ${gender}, ${userId}, ${now}, ${now}
       )
       RETURNING *
     `
