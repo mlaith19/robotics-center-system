@@ -606,6 +606,7 @@ export default function CourseViewPage() {
   const [payTargetMode, setPayTargetMode] = useState<"single" | "multi">("single")
   const [payStudentId, setPayStudentId] = useState("")
   const [payStudentIds, setPayStudentIds] = useState<string[]>([])
+  const [payStudentSearchQuery, setPayStudentSearchQuery] = useState("")
   const [payAmount, setPayAmount] = useState("")
   const [payMethod, setPayMethod] = useState<"cash" | "credit" | "transfer" | "check" | "bit">("cash")
   const [payDate, setPayDate] = useState(() => new Date().toISOString().split("T")[0])
@@ -1456,19 +1457,24 @@ export default function CourseViewPage() {
         }),
       )
       await loadCoursePayments()
-      setIsAddPaymentOpen(false)
-      setPayTargetMode("single")
-      setPayStudentId("")
-      setPayStudentIds([])
-      setPayAmount("")
-      setPayMethod("cash")
-      setPayDate(new Date().toISOString().split("T")[0])
-      setPayDescription("")
+      resetAddPaymentFormAndClose()
     } catch {
       // keep silent as existing page style
     } finally {
       setIsAddingPayment(false)
     }
+  }
+
+  function resetAddPaymentFormAndClose() {
+    setIsAddPaymentOpen(false)
+    setPayTargetMode("single")
+    setPayStudentId("")
+    setPayStudentIds([])
+    setPayStudentSearchQuery("")
+    setPayAmount("")
+    setPayMethod("cash")
+    setPayDate(new Date().toISOString().split("T")[0])
+    setPayDescription("")
   }
 
   function attendanceStatusButton(studentId: string, status: "present" | "absent" | "sick" | "vacation", label: string, Icon: any) {
@@ -1718,6 +1724,9 @@ export default function CourseViewPage() {
   })
   const filteredAttendanceEnrollments = sortedEnrollmentsForAttendanceTab.filter((enrollment) =>
     matchesStudentSearchText(enrollmentSearchText(enrollment), attendanceStudentsQuery),
+  )
+  const filteredPayTargetEnrollments = enrollments.filter((enrollment) =>
+    matchesStudentSearchText(enrollmentSearchText(enrollment), payStudentSearchQuery),
   )
   // כותרת חייבים מחושבת לפי העמודות של הטבלה המוצגת (רק תלמידים עם יתרה)
   const debtRowsTotalDue = filteredDebtRows.reduce((sum, r) => sum + r.totalDue, 0)
@@ -2690,65 +2699,88 @@ export default function CourseViewPage() {
               </div>
             </CardContent>
           </Card>
-          <Dialog open={isAddPaymentOpen} onOpenChange={setIsAddPaymentOpen}>
+          <Dialog
+            open={isAddPaymentOpen}
+            onOpenChange={(open) => {
+              if (!open) {
+                resetAddPaymentFormAndClose()
+                return
+              }
+              setIsAddPaymentOpen(true)
+            }}
+          >
             <DialogContent dir="rtl">
               <DialogHeader>
                 <DialogTitle>הוספת תשלום לקורס</DialogTitle>
               </DialogHeader>
               <div className="space-y-3">
                 <div>
-                  <div className="mb-1 text-sm text-muted-foreground">סוג יעד לתשלום</div>
-                  <Select value={payTargetMode} onValueChange={(v: "single" | "multi") => setPayTargetMode(v)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="single">תלמיד יחיד</SelectItem>
-                      <SelectItem value="multi">מספר תלמידים</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
+                  <div className="mb-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div>
+                      <div className="mb-1 text-sm text-muted-foreground">סוג יעד לתשלום</div>
+                      <Select
+                        value={payTargetMode}
+                        onValueChange={(v: "single" | "multi") => {
+                          setPayTargetMode(v)
+                          setPayStudentId("")
+                          setPayStudentIds([])
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="single">תלמיד יחיד</SelectItem>
+                          <SelectItem value="multi">מספר תלמידים</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <div className="mb-1 text-sm text-muted-foreground">חיפוש תלמיד</div>
+                      <Input
+                        value={payStudentSearchQuery}
+                        onChange={(e) => setPayStudentSearchQuery(e.target.value)}
+                        placeholder="חיפוש תלמיד..."
+                        className="h-9"
+                        dir={isRtl ? "rtl" : "ltr"}
+                      />
+                    </div>
+                  </div>
                   <div className="mb-1 text-sm text-muted-foreground">
                     {payTargetMode === "single" ? "תלמיד משויך" : "תלמידים לתשלום מרוכז"}
                   </div>
-                  {payTargetMode === "single" ? (
-                    <Select value={payStudentId} onValueChange={setPayStudentId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="בחר תלמיד" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {enrollments.map((e) => (
-                          <SelectItem key={e.studentId} value={e.studentId}>
-                            {e.studentName || "—"}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border p-2">
-                      {enrollments.map((e) => {
-                        const sid = String(e.studentId || "")
-                        const isSelected = payStudentIds.includes(sid)
-                        return (
-                          <button
-                            key={sid}
-                            type="button"
-                            className={`w-full rounded-md border px-3 py-2 text-right text-sm ${
-                              isSelected ? "border-primary bg-primary/10" : "border-border hover:bg-muted/50"
-                            }`}
-                            onClick={() =>
-                              setPayStudentIds((prev) =>
-                                prev.includes(sid) ? prev.filter((x) => x !== sid) : [...prev, sid],
-                              )
+                  <div className="mb-2 text-xs text-muted-foreground">
+                    {payTargetMode === "single"
+                      ? `מוצגים ${filteredPayTargetEnrollments.length} תלמידים (סה"כ ${enrollments.length})`
+                      : `נבחרו ${payStudentIds.length} תלמידים | מוצגים ${filteredPayTargetEnrollments.length} (סה"כ ${enrollments.length})`}
+                  </div>
+                  <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border p-2">
+                    {filteredPayTargetEnrollments.map((e) => {
+                      const sid = String(e.studentId || "")
+                      const isSelected =
+                        payTargetMode === "single" ? String(payStudentId) === sid : payStudentIds.includes(sid)
+                      return (
+                        <button
+                          key={sid}
+                          type="button"
+                          className={`w-full rounded-md border px-3 py-2 text-right text-sm ${
+                            isSelected ? "border-primary bg-primary/10" : "border-border hover:bg-muted/50"
+                          }`}
+                          onClick={() => {
+                            if (payTargetMode === "single") {
+                              setPayStudentId(sid)
+                              return
                             }
-                          >
-                            {e.studentName || "—"}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
+                            setPayStudentIds((prev) =>
+                              prev.includes(sid) ? prev.filter((x) => x !== sid) : [...prev, sid],
+                            )
+                          }}
+                        >
+                          {e.studentName || "—"}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
