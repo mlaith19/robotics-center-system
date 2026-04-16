@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Phone, Mail, Loader2, CheckCircle, Users, Heart } from "lucide-react"
+import { Loader2, CheckCircle, Heart } from "lucide-react"
 import { fileToProfileImageDataUrl } from "@/lib/profile-image-client"
 
 function RegisterStudentContent() {
@@ -20,11 +20,20 @@ function RegisterStudentContent() {
   const [gender, setGender] = useState("")
   const [idNumber, setIdNumber] = useState("")
   const [className, setClassName] = useState("")
-  const [father, setFather] = useState("")
-  const [mother, setMother] = useState("")
+  const [schoolName, setSchoolName] = useState("")
+  const [parent1Name, setParent1Name] = useState("")
+  const [parent1Relation, setParent1Relation] = useState("")
+  const [parent1Phone, setParent1Phone] = useState("")
+  const [parent1Email, setParent1Email] = useState("")
+  const [parent1City, setParent1City] = useState("")
+  const [parent2Name, setParent2Name] = useState("")
+  const [parent2Relation, setParent2Relation] = useState("")
+  const [parent2Phone, setParent2Phone] = useState("")
+  const [parent2Email, setParent2Email] = useState("")
+  const [parent2City, setParent2City] = useState("")
+  const [emergencyContactName, setEmergencyContactName] = useState("")
+  const [emergencyContactPhone, setEmergencyContactPhone] = useState("")
   const [birthDate, setBirthDate] = useState("")
-  const [phone, setPhone] = useState("")
-  const [email, setEmail] = useState("")
   const [healthFund, setHealthFund] = useState("")
   const [allergies, setAllergies] = useState("")
   const [profileImage, setProfileImage] = useState("")
@@ -61,6 +70,17 @@ function RegisterStudentContent() {
     if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age -= 1
     return age >= 0 ? String(age) : "—"
   }
+  function isValidIsraeliId(value: string): boolean {
+    const digits = String(value || "").replace(/\D/g, "")
+    if (digits.length !== 9) return false
+    let sum = 0
+    for (let i = 0; i < 9; i += 1) {
+      const n = Number(digits[i])
+      const step = n * ((i % 2) + 1)
+      sum += step > 9 ? step - 9 : step
+    }
+    return sum % 10 === 0
+  }
 
   const selectedCourseId = searchParams.get("courseId")?.trim() || ""
   const selectedCourseName = searchParams.get("courseName")?.trim() || ""
@@ -92,10 +112,19 @@ function RegisterStudentContent() {
         setLastName(rawLast || rest.join(" ").trim())
         setGender(String((s as { gender?: string | null }).gender ?? ""))
         setClassName(String((s as { className?: string | null }).className ?? ""))
-        setFather(String(s.father ?? ""))
-        setMother(String(s.mother ?? ""))
-        setPhone(String(s.phone ?? ""))
-        setEmail(String(s.email ?? ""))
+        setSchoolName(String((s as { schoolName?: string | null }).schoolName ?? ""))
+        setParent1Name(String((s as { parent1Name?: string | null }).parent1Name ?? s.father ?? ""))
+        setParent1Relation(String((s as { parent1Relation?: string | null }).parent1Relation ?? "אב"))
+        setParent1Phone(String((s as { parent1Phone?: string | null }).parent1Phone ?? s.phone ?? ""))
+        setParent1Email(String((s as { parent1Email?: string | null }).parent1Email ?? s.email ?? ""))
+        setParent1City(String((s as { parent1City?: string | null }).parent1City ?? (s as { city?: string | null }).city ?? ""))
+        setParent2Name(String((s as { parent2Name?: string | null }).parent2Name ?? s.mother ?? ""))
+        setParent2Relation(String((s as { parent2Relation?: string | null }).parent2Relation ?? "אם"))
+        setParent2Phone(String((s as { parent2Phone?: string | null }).parent2Phone ?? ""))
+        setParent2Email(String((s as { parent2Email?: string | null }).parent2Email ?? ""))
+        setParent2City(String((s as { parent2City?: string | null }).parent2City ?? ""))
+        setEmergencyContactName(String((s as { emergencyContactName?: string | null }).emergencyContactName ?? ""))
+        setEmergencyContactPhone(String((s as { emergencyContactPhone?: string | null }).emergencyContactPhone ?? ""))
         setHealthFund(String(s.healthFund ?? ""))
         setAllergies(String(s.allergies ?? ""))
         setProfileImage(String(s.profileImage ?? ""))
@@ -137,12 +166,16 @@ function RegisterStudentContent() {
       setError("יש להזין תעודת זהות כדי ליצור משתמש תלמיד אוטומטי")
       return
     }
+    if (!isValidIsraeliId(idNumber)) {
+      setError("מספר תעודת זהות לא תקין")
+      return
+    }
     if (!gender.trim()) {
       setError("יש לבחור מין")
       return
     }
-    if (!phone.trim()) {
-      setError("יש להזין טלפון הורה כדי ליצור סיסמה ראשונית אוטומטית")
+    if (!parent1Phone.trim()) {
+      setError("יש להזין נייד של הורה ראשי")
       return
     }
     if (!confirmCenterAgreement) {
@@ -168,12 +201,25 @@ function RegisterStudentContent() {
           lastName: lastName.trim(),
           gender: gender || null,
           className: className.trim() || null,
+          schoolName: schoolName.trim() || null,
+          parent1Name: parent1Name.trim() || null,
+          parent1Relation: parent1Relation.trim() || null,
+          parent1Phone: parent1Phone.trim() || null,
+          parent1Email: parent1Email.trim() || null,
+          parent1City: parent1City.trim() || null,
+          parent2Name: parent2Name.trim() || null,
+          parent2Relation: parent2Relation.trim() || null,
+          parent2Phone: parent2Phone.trim() || null,
+          parent2Email: parent2Email.trim() || null,
+          parent2City: parent2City.trim() || null,
+          emergencyContactName: emergencyContactName.trim() || null,
+          emergencyContactPhone: emergencyContactPhone.trim() || null,
           idNumber: idNumber.trim() || null,
-          father: father.trim() || null,
-          mother: mother.trim() || null,
+          father: parent1Name.trim() || null,
+          mother: parent2Name.trim() || null,
           birthDate: normalizeBirthDateInput(birthDate) || null,
-          phone: phone.trim() || null,
-          email: email.trim() || null,
+          phone: parent1Phone.trim() || null,
+          email: parent1Email.trim() || null,
           healthFund: healthFund.trim() || null,
           allergies: noSensitivity
             ? "אין רגישות (סומן בטופס רישום)"
@@ -196,12 +242,21 @@ function RegisterStudentContent() {
       setLastName("")
       setGender("")
       setClassName("")
+      setSchoolName("")
+      setParent1Name("")
+      setParent1Relation("")
+      setParent1Phone("")
+      setParent1Email("")
+      setParent1City("")
+      setParent2Name("")
+      setParent2Relation("")
+      setParent2Phone("")
+      setParent2Email("")
+      setParent2City("")
+      setEmergencyContactName("")
+      setEmergencyContactPhone("")
       setIdNumber("")
-      setFather("")
-      setMother("")
       setBirthDate("")
-      setPhone("")
-      setEmail("")
       setHealthFund("")
       setAllergies("")
       setProfileImage("")
@@ -261,7 +316,9 @@ function RegisterStudentContent() {
         <CardContent className="px-4 pb-6 sm:px-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="flex items-center justify-between rounded-lg border bg-muted/20 px-3 py-2">
-              <span className="text-xs text-muted-foreground">שלב {activeStep}/3</span>
+              <span className="text-xs text-muted-foreground">
+                שלב {activeStep}/3 • {activeStep === 1 ? "פרטי תלמיד" : activeStep === 2 ? "פרטי הורה" : "כללי"}
+              </span>
               <div className="flex items-center gap-1.5">
                 {[1, 2, 3].map((step) => (
                   <button
@@ -289,10 +346,6 @@ function RegisterStudentContent() {
                       ) : (
                         <div className="h-16 w-16 rounded-full border-2 border-dashed bg-muted" />
                       )}
-                      <div className="space-y-1">
-                        <div className="text-sm text-muted-foreground">גיל</div>
-                        <div className="text-lg font-semibold">{ageFromBirthDate(birthDate)}</div>
-                      </div>
                     </div>
                     <div className="min-w-0 flex-1 space-y-2 ps-3">
                       <Input
@@ -309,6 +362,10 @@ function RegisterStudentContent() {
                         </Button>
                       )}
                     </div>
+                    <div className="shrink-0 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-center">
+                      <div className="text-xs text-blue-700">גיל</div>
+                      <div className="text-xl font-bold text-blue-900 leading-none mt-1">{ageFromBirthDate(birthDate)}</div>
+                    </div>
                   </div>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -321,11 +378,11 @@ function RegisterStudentContent() {
                     <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} required disabled={isSubmitting} />
                   </div>
                 </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
                   <div className="space-y-2">
                     <Label htmlFor="gender">מין *</Label>
                     <Select value={gender} onValueChange={setGender} disabled={isSubmitting}>
-                      <SelectTrigger id="gender">
+                      <SelectTrigger id="gender" className="h-10 text-sm">
                         <SelectValue placeholder="בחר מין" />
                       </SelectTrigger>
                       <SelectContent>
@@ -342,10 +399,34 @@ function RegisterStudentContent() {
                       value={idNumber}
                       onChange={(e) => setIdNumber(e.target.value.replace(/\D/g, "").slice(0, 9))}
                       placeholder="9 ספרות"
+                      className="h-10 text-sm"
                       disabled={isSubmitting}
                       inputMode="numeric"
                       maxLength={9}
                       required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="schoolName">בית ספר</Label>
+                    <Input
+                      id="schoolName"
+                      value={schoolName}
+                      onChange={(e) => setSchoolName(e.target.value)}
+                      placeholder="שם בית ספר"
+                      className="h-10 text-sm"
+                      disabled={isSubmitting}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="birthDate">תאריך לידה</Label>
+                    <Input
+                      id="birthDate"
+                      type="text"
+                      value={birthDate}
+                      onChange={(e) => setBirthDate(e.target.value)}
+                      placeholder="YYYY-MM-DD"
+                      className="h-10 text-sm"
+                      disabled={isSubmitting}
                     />
                   </div>
                 </div>
@@ -358,60 +439,68 @@ function RegisterStudentContent() {
                     )}
                   </div>
                 )}
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="birthDate">תאריך לידה</Label>
-                    <Input
-                      id="birthDate"
-                      type="text"
-                      value={birthDate}
-                      onChange={(e) => setBirthDate(e.target.value)}
-                      placeholder="YYYY-MM-DD או DD/MM/YYYY"
-                      disabled={isSubmitting}
-                    />
+                <div className="space-y-2">
+                  <Label htmlFor="className">כיתה</Label>
+                  <Input
+                    id="className"
+                    value={className}
+                    onChange={(e) => setClassName(e.target.value)}
+                    placeholder="לדוגמה: ה׳2"
+                    disabled={isSubmitting}
+                  />
+                </div>
+              </>
+            )}
+            {activeStep === 2 && (
+              <>
+                <div className="rounded-lg border p-3 space-y-3">
+                  <div className="font-medium">הורה 1</div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Input value={parent1Name} onChange={(e) => setParent1Name(e.target.value)} placeholder="שם הורה" disabled={isSubmitting} />
+                    <Select value={parent1Relation} onValueChange={setParent1Relation} disabled={isSubmitting}>
+                      <SelectTrigger><SelectValue placeholder="קרבה לתלמיד" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="אב">אב</SelectItem>
+                        <SelectItem value="אם">אם</SelectItem>
+                        <SelectItem value="אח">אח</SelectItem>
+                        <SelectItem value="אחות">אחות</SelectItem>
+                        <SelectItem value="אחר">אחר</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input value={parent1Phone} onChange={(e) => setParent1Phone(e.target.value)} placeholder="נייד" disabled={isSubmitting} />
+                    <Input value={parent1Email} onChange={(e) => setParent1Email(e.target.value)} placeholder="אימייל" disabled={isSubmitting} />
+                    <Input value={parent1City} onChange={(e) => setParent1City(e.target.value)} placeholder="עיר" disabled={isSubmitting} />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="className">כיתה</Label>
-                    <Input
-                      id="className"
-                      value={className}
-                      onChange={(e) => setClassName(e.target.value)}
-                      placeholder="לדוגמה: ה׳2"
-                      disabled={isSubmitting}
-                    />
+                </div>
+                <div className="rounded-lg border p-3 space-y-3">
+                  <div className="font-medium">הורה 2</div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Input value={parent2Name} onChange={(e) => setParent2Name(e.target.value)} placeholder="שם הורה" disabled={isSubmitting} />
+                    <Select value={parent2Relation} onValueChange={setParent2Relation} disabled={isSubmitting}>
+                      <SelectTrigger><SelectValue placeholder="קרבה לתלמיד" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="אב">אב</SelectItem>
+                        <SelectItem value="אם">אם</SelectItem>
+                        <SelectItem value="אח">אח</SelectItem>
+                        <SelectItem value="אחות">אחות</SelectItem>
+                        <SelectItem value="אחר">אחר</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input value={parent2Phone} onChange={(e) => setParent2Phone(e.target.value)} placeholder="נייד" disabled={isSubmitting} />
+                    <Input value={parent2Email} onChange={(e) => setParent2Email(e.target.value)} placeholder="אימייל" disabled={isSubmitting} />
+                    <Input value={parent2City} onChange={(e) => setParent2City(e.target.value)} placeholder="עיר" disabled={isSubmitting} />
+                  </div>
+                </div>
+                <div className="rounded-lg border p-3 space-y-3">
+                  <div className="font-medium">איש קשר חירום</div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Input value={emergencyContactName} onChange={(e) => setEmergencyContactName(e.target.value)} placeholder="שם איש קשר" disabled={isSubmitting} />
+                    <Input value={emergencyContactPhone} onChange={(e) => setEmergencyContactPhone(e.target.value)} placeholder="נייד חירום" disabled={isSubmitting} />
                   </div>
                 </div>
               </>
             )}
-            {activeStep === 2 && <div className="space-y-2">
-              <Label htmlFor="father">שם האב</Label>
-              <div className="relative">
-                <Users className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="father"
-                  value={father}
-                  onChange={(e) => setFather(e.target.value)}
-                  placeholder="הכנס שם האב"
-                  className="pr-10"
-                  disabled={isSubmitting}
-                />
-              </div>
-            </div>}
-            {activeStep === 2 && <div className="space-y-2">
-              <Label htmlFor="mother">שם האם</Label>
-              <div className="relative">
-                <Users className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="mother"
-                  value={mother}
-                  onChange={(e) => setMother(e.target.value)}
-                  placeholder="הכנס שם האם"
-                  className="pr-10"
-                  disabled={isSubmitting}
-                />
-              </div>
-            </div>}
-            {activeStep === 2 && !selectedCourseId && (
+            {activeStep === 3 && !selectedCourseId && (
               <div className="space-y-2">
                 <Label htmlFor="registrationInterest">באיזה תחום או קורס מתעניינים? *</Label>
                 <Textarea
@@ -425,37 +514,7 @@ function RegisterStudentContent() {
                 />
               </div>
             )}
-            {activeStep === 2 && <div className="space-y-2">
-              <Label htmlFor="phone">טלפון</Label>
-              <div className="relative">
-                <Phone className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="phone"
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="הכנס טלפון"
-                  className="pr-10"
-                  disabled={isSubmitting}
-                />
-              </div>
-            </div>}
-            {activeStep === 2 && <div className="space-y-2">
-              <Label htmlFor="email">אימייל (לא חובה)</Label>
-              <div className="relative">
-                <Mail className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="email"
-                  type="text"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="הכנס אימייל (לא חובה)"
-                  className="pr-10"
-                  disabled={isSubmitting}
-                />
-              </div>
-            </div>}
-            {activeStep === 2 && <div className="space-y-2">
+            {activeStep === 3 && <div className="space-y-2">
               <Label htmlFor="healthFund">קופת חולים</Label>
               <Input
                 id="healthFund"

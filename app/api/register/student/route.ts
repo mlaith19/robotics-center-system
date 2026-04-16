@@ -21,6 +21,18 @@ function uniqueCourseIds(value: unknown): string[] {
   return [...new Set(ids)]
 }
 
+function isValidIsraeliId(raw: string): boolean {
+  const digits = String(raw || "").replace(/\D/g, "")
+  if (digits.length !== 9) return false
+  let sum = 0
+  for (let i = 0; i < 9; i += 1) {
+    const n = Number(digits[i])
+    const step = n * ((i % 2) + 1)
+    sum += step > 9 ? step - 9 : step
+  }
+  return sum % 10 === 0
+}
+
 async function ensureStudentExtendedIdentityColumns(
   db: (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown[]>,
 ) {
@@ -28,6 +40,19 @@ async function ensureStudentExtendedIdentityColumns(
   await db`ALTER TABLE "Student" ADD COLUMN IF NOT EXISTS "lastName" TEXT`
   await db`ALTER TABLE "Student" ADD COLUMN IF NOT EXISTS "gender" TEXT`
   await db`ALTER TABLE "Student" ADD COLUMN IF NOT EXISTS "className" TEXT`
+  await db`ALTER TABLE "Student" ADD COLUMN IF NOT EXISTS "schoolName" TEXT`
+  await db`ALTER TABLE "Student" ADD COLUMN IF NOT EXISTS "parent1Name" TEXT`
+  await db`ALTER TABLE "Student" ADD COLUMN IF NOT EXISTS "parent1Relation" TEXT`
+  await db`ALTER TABLE "Student" ADD COLUMN IF NOT EXISTS "parent1Phone" TEXT`
+  await db`ALTER TABLE "Student" ADD COLUMN IF NOT EXISTS "parent1Email" TEXT`
+  await db`ALTER TABLE "Student" ADD COLUMN IF NOT EXISTS "parent1City" TEXT`
+  await db`ALTER TABLE "Student" ADD COLUMN IF NOT EXISTS "parent2Name" TEXT`
+  await db`ALTER TABLE "Student" ADD COLUMN IF NOT EXISTS "parent2Relation" TEXT`
+  await db`ALTER TABLE "Student" ADD COLUMN IF NOT EXISTS "parent2Phone" TEXT`
+  await db`ALTER TABLE "Student" ADD COLUMN IF NOT EXISTS "parent2Email" TEXT`
+  await db`ALTER TABLE "Student" ADD COLUMN IF NOT EXISTS "parent2City" TEXT`
+  await db`ALTER TABLE "Student" ADD COLUMN IF NOT EXISTS "emergencyContactName" TEXT`
+  await db`ALTER TABLE "Student" ADD COLUMN IF NOT EXISTS "emergencyContactPhone" TEXT`
 }
 
 export async function GET(req: Request) {
@@ -42,7 +67,12 @@ export async function GET(req: Request) {
     if (!idNumber) return Response.json({ error: "idNumber is required" }, { status: 400 })
 
     const rows = await db`
-      SELECT id, name, "firstName", "lastName", "gender", "className", email, phone, "birthDate", father, mother, "healthFund", allergies, "idNumber", "userId", "profileImage", "registrationInterest"
+      SELECT
+        id, name, "firstName", "lastName", "gender", "className", "schoolName",
+        email, phone, city, "birthDate", father, mother, "healthFund", allergies, "idNumber", "userId", "profileImage", "registrationInterest",
+        "parent1Name", "parent1Relation", "parent1Phone", "parent1Email", "parent1City",
+        "parent2Name", "parent2Relation", "parent2Phone", "parent2Email", "parent2City",
+        "emergencyContactName", "emergencyContactPhone"
       FROM "Student"
       WHERE "idNumber" = ${idNumber}
       LIMIT 1
@@ -71,10 +101,24 @@ export async function POST(req: Request) {
     const idNumber = String(body.idNumber ?? "").trim()
     const gender = body.gender ? String(body.gender).trim() : null
     const className = body.className ? String(body.className).trim() : null
-    const phone = body.phone ? String(body.phone).trim() : null
-    const email = body.email ? String(body.email).trim() : null
-    const father = body.father ? String(body.father).trim() : null
-    const mother = body.mother ? String(body.mother).trim() : null
+    const schoolName = body.schoolName ? String(body.schoolName).trim() : null
+    const parent1Name = body.parent1Name ? String(body.parent1Name).trim() : null
+    const parent1Relation = body.parent1Relation ? String(body.parent1Relation).trim() : null
+    const parent1Phone = body.parent1Phone ? String(body.parent1Phone).trim() : null
+    const parent1Email = body.parent1Email ? String(body.parent1Email).trim() : null
+    const parent1City = body.parent1City ? String(body.parent1City).trim() : null
+    const parent2Name = body.parent2Name ? String(body.parent2Name).trim() : null
+    const parent2Relation = body.parent2Relation ? String(body.parent2Relation).trim() : null
+    const parent2Phone = body.parent2Phone ? String(body.parent2Phone).trim() : null
+    const parent2Email = body.parent2Email ? String(body.parent2Email).trim() : null
+    const parent2City = body.parent2City ? String(body.parent2City).trim() : null
+    const emergencyContactName = body.emergencyContactName ? String(body.emergencyContactName).trim() : null
+    const emergencyContactPhone = body.emergencyContactPhone ? String(body.emergencyContactPhone).trim() : null
+    const phone = parent1Phone || (body.phone ? String(body.phone).trim() : null)
+    const email = parent1Email || (body.email ? String(body.email).trim() : null)
+    const city = parent1City || (body.city ? String(body.city).trim() : null)
+    const father = parent1Name || (body.father ? String(body.father).trim() : null)
+    const mother = parent2Name || (body.mother ? String(body.mother).trim() : null)
     const healthFund = body.healthFund ? String(body.healthFund).trim() : null
     const allergies = body.allergies ? String(body.allergies).trim() : null
     const birthDate = normalizeBirthDateInput(body.birthDate)
@@ -86,6 +130,7 @@ export async function POST(req: Request) {
 
     if (!name) return Response.json({ error: "name is required" }, { status: 400 })
     if (!idNumber) return Response.json({ error: "idNumber is required" }, { status: 400 })
+    if (!isValidIsraeliId(idNumber)) return Response.json({ error: "invalid idNumber" }, { status: 400 })
     if (!phone || phone.length < 4) return Response.json({ error: "phone is required" }, { status: 400 })
 
     const existing = await db`
@@ -118,8 +163,22 @@ export async function POST(req: Request) {
           "lastName" = ${lastName || null},
           "gender" = ${gender},
           "className" = ${className},
+          "schoolName" = ${schoolName},
+          "parent1Name" = ${parent1Name},
+          "parent1Relation" = ${parent1Relation},
+          "parent1Phone" = ${parent1Phone},
+          "parent1Email" = ${parent1Email},
+          "parent1City" = ${parent1City},
+          "parent2Name" = ${parent2Name},
+          "parent2Relation" = ${parent2Relation},
+          "parent2Phone" = ${parent2Phone},
+          "parent2Email" = ${parent2Email},
+          "parent2City" = ${parent2City},
+          "emergencyContactName" = ${emergencyContactName},
+          "emergencyContactPhone" = ${emergencyContactPhone},
           email = ${email},
           phone = ${phone},
+          city = ${city},
           father = ${father},
           mother = ${mother},
           "birthDate" = ${birthDate},
@@ -174,12 +233,20 @@ export async function POST(req: Request) {
 
     await db`
       INSERT INTO "Student" (
-        id, name, email, phone, status, "birthDate", "idNumber", father, mother, "healthFund", allergies,
-        "totalSessions", "courseIds", "courseSessions", "profileImage", "registrationInterest", "firstName", "lastName", "gender", "className", "userId", "createdAt", "updatedAt"
+        id, name, email, phone, city, status, "birthDate", "idNumber", father, mother, "healthFund", allergies,
+        "totalSessions", "courseIds", "courseSessions", "profileImage", "registrationInterest", "firstName", "lastName", "gender", "className", "schoolName",
+        "parent1Name", "parent1Relation", "parent1Phone", "parent1Email", "parent1City",
+        "parent2Name", "parent2Relation", "parent2Phone", "parent2Email", "parent2City",
+        "emergencyContactName", "emergencyContactPhone",
+        "userId", "createdAt", "updatedAt"
       )
       VALUES (
-        ${studentId}, ${name}, ${email}, ${phone}, 'מתעניין', ${birthDate}, ${idNumber}, ${father}, ${mother}, ${healthFund}, ${allergies},
-        12, ${JSON.stringify(courseIds)}::jsonb, ${JSON.stringify({})}::jsonb, ${profileImageFallback}, ${interestStoredNew}, ${firstName || null}, ${lastName || null}, ${gender}, ${className}, ${userId}, ${now}, ${now}
+        ${studentId}, ${name}, ${email}, ${phone}, ${city}, 'מתעניין', ${birthDate}, ${idNumber}, ${father}, ${mother}, ${healthFund}, ${allergies},
+        12, ${JSON.stringify(courseIds)}::jsonb, ${JSON.stringify({})}::jsonb, ${profileImageFallback}, ${interestStoredNew}, ${firstName || null}, ${lastName || null}, ${gender}, ${className}, ${schoolName},
+        ${parent1Name}, ${parent1Relation}, ${parent1Phone}, ${parent1Email}, ${parent1City},
+        ${parent2Name}, ${parent2Relation}, ${parent2Phone}, ${parent2Email}, ${parent2City},
+        ${emergencyContactName}, ${emergencyContactPhone},
+        ${userId}, ${now}, ${now}
       )
     `
 
