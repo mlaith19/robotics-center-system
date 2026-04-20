@@ -672,7 +672,6 @@ export function canAccessPage(
   if (sessionRolesGrantFullAccess(sessionRoleKey, sessionRoleName) || hasFullAccessRole(userRole)) return true
 
   const roleIdNormalized = (typeof userRole === "string" ? userRole.toLowerCase() : userRole) as RoleType
-  const role = getRoleById(roleIdNormalized) || getRoleById(userRole)
 
   if (roleIdNormalized === "student" || userRole === "student") {
     if (pagePath === "/dashboard") return true
@@ -693,8 +692,7 @@ export function canAccessPage(
 
   if (pagePath === "/dashboard") {
     if (hasPermission(userPermissions, "settings.home")) return true
-    if (role && role.visiblePages.some((p) => p === "/dashboard")) return true
-    if (!role) return true
+    return false
   }
 
   const requiredPerm = getRequiredPermissionForPath(pagePath)
@@ -704,8 +702,6 @@ export function canAccessPage(
   // Allow access if the matching nav permission exists for this page.
   const navPerm = getNavPermissionForPath(pagePath)
   if (navPerm && hasPermission(userPermissions, navPerm)) return true
-
-  if (role && role.visiblePages.some((page) => pagePath === page || pagePath.startsWith(page + "/"))) return true
 
   return false
 }

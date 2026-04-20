@@ -103,6 +103,31 @@ const colorClasses: Record<string, string> = {
   teal: "bg-teal-50 border-teal-200",
 }
 
+type QuickAction = "view" | "edit" | "delete"
+
+type QuickPermissionRow = {
+  id: string
+  label: string
+  view?: string[]
+  edit?: string[]
+  delete?: string[]
+}
+
+const QUICK_PERMISSION_ROWS: QuickPermissionRow[] = [
+  { id: "courses", label: "קורסים", view: ["nav.courses", "courses.view"], edit: ["courses.edit"], delete: ["courses.delete"] },
+  { id: "students", label: "תלמידים", view: ["nav.students", "students.view"], edit: ["students.edit"], delete: ["students.delete"] },
+  { id: "schools", label: "בתי ספר", view: ["nav.schools", "schools.view"], edit: ["schools.edit"], delete: ["schools.delete"] },
+  { id: "teachers", label: "מורים", view: ["nav.teachers", "teachers.view"], edit: ["teachers.edit"], delete: ["teachers.delete"] },
+  { id: "registration", label: "רישום", view: ["nav.registration", "registration.view"], edit: ["registration.send"] },
+  { id: "gafan", label: "גפ\"ן", view: ["nav.gafan", "gafan.view"], edit: ["gafan.edit"], delete: ["gafan.delete"] },
+  { id: "users", label: "משתמשים", view: ["nav.users", "users.view"], edit: ["users.edit"], delete: ["users.delete"] },
+  { id: "cashier", label: "קופה", view: ["nav.cashier", "cashier.view"], edit: ["cashier.income", "cashier.expense"], delete: ["cashier.delete"] },
+  { id: "reports", label: "דוחות", view: ["nav.reports", "reports.view"], edit: ["reports.export"] },
+  { id: "attendance", label: "נוכחות", view: ["nav.attendance", "attendance.view"], edit: ["attendance.edit"], delete: ["attendance.teacher.delete"] },
+  { id: "schedule", label: "לוח זמנים", view: ["nav.schedule", "schedule.view"], edit: ["schedule.edit"] },
+  { id: "settings", label: "הגדרות", view: ["nav.settings", "settings.view"], edit: ["settings.edit"] },
+]
+
 export default function UsersPage() {
   const router = useRouter()
 
@@ -129,6 +154,7 @@ export default function UsersPage() {
 
   const [selectedRole, setSelectedRole] = useState<RoleType>("other")
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([])
+  const [initialPermissions, setInitialPermissions] = useState<string[]>([])
   const selectedPermissionsRef = useRef<string[]>([])
   useEffect(() => {
     selectedPermissionsRef.current = selectedPermissions
@@ -195,11 +221,13 @@ export default function UsersPage() {
     setFormData({ name: "", email: "", phone: "", username: "", password: "" })
     setSelectedRole("other")
     setSelectedPermissions([])
+    setInitialPermissions([])
     setEditingUser(null)
   }
 
   function openCreate() {
     resetForm()
+    setInitialPermissions([])
     setIsDialogOpen(true)
   }
 
@@ -217,9 +245,12 @@ export default function UsersPage() {
     const dbPerms = Array.isArray(user.permissions) ? user.permissions : []
     if (dbPerms.length > 0) {
       setSelectedPermissions(dbPerms)
+      setInitialPermissions(dbPerms)
     } else {
       const preset = getRoleById(role)
-      setSelectedPermissions(preset ? [...preset.permissions] : [])
+      const rolePerms = preset ? [...preset.permissions] : []
+      setSelectedPermissions(rolePerms)
+      setInitialPermissions(rolePerms)
     }
     setIsDialogOpen(true)
     if (user.id) {
@@ -239,9 +270,12 @@ export default function UsersPage() {
           const freshPerms = Array.isArray(data.permissions) ? data.permissions : []
           if (freshPerms.length > 0) {
             setSelectedPermissions(freshPerms)
+            setInitialPermissions(freshPerms)
           } else {
             const preset = getRoleById(freshRole)
-            setSelectedPermissions(preset ? [...preset.permissions] : [])
+            const rolePerms = preset ? [...preset.permissions] : []
+            setSelectedPermissions(rolePerms)
+            setInitialPermissions(rolePerms)
           }
           setEditingUser(data)
         }
@@ -343,6 +377,19 @@ export default function UsersPage() {
     resetForm()
     setEditingUser(null)
     await loadUsers()
+    const requestedSet = new Set((permsToSave || []).map((p) => String(p)))
+    const savedSet = new Set((savedPerms || []).map((p) => String(p)))
+    const missingAfterSave = Array.from(requestedSet).filter((p) => !savedSet.has(p))
+    const extraAfterSave = Array.from(savedSet).filter((p) => !requestedSet.has(p))
+    if (missingAfterSave.length > 0 || extraAfterSave.length > 0) {
+      alert(
+        `הפרטים נשמרו, אך נמצאה אי-התאמה בהרשאות.\n` +
+          `חסרות אחרי שמירה: ${missingAfterSave.length}\n` +
+          `נוספו בשרת: ${extraAfterSave.length}\n` +
+          `פתח שוב את המשתמש לבדיקה.`,
+      )
+      return
+    }
     alert("ההרשאות והפרטים נשמרו בהצלחה.")
   }
 
@@ -429,6 +476,39 @@ export default function UsersPage() {
     }
   }
 
+  function applyCategoryMacro(category: PermissionCategory, mode: "read" | "edit" | "full" | "clear") {
+    const ids = category.permissions.map((p) => p.id)
+    const navIds = ids.filter((id) => id.startsWith("nav."))
+    const viewIds = ids.filter((id) => /\.(view|read)$/.test(id))
+    const editIds = ids.filter((id) => /\.(edit|write|send)$/.test(id))
+    const deleteIds = ids.filter((id) => /\.delete$/.test(id))
+
+    setSelectedPermissions((prev) => {
+      const current = Array.isArray(prev) ? prev : []
+      const withoutCategory = current.filter((p) => !ids.includes(p))
+      if (mode === "clear") return withoutCategory
+      if (mode === "full") return [...new Set([...withoutCategory, ...ids])]
+      if (mode === "read") return [...new Set([...withoutCategory, ...navIds, ...viewIds])]
+      return [...new Set([...withoutCategory, ...navIds, ...viewIds, ...editIds, ...deleteIds])]
+    })
+  }
+
+  function setQuickPermission(row: QuickPermissionRow, action: QuickAction, enabled: boolean) {
+    const ids = row[action] ?? []
+    if (ids.length === 0) return
+    setSelectedPermissions((prev) => {
+      const current = Array.isArray(prev) ? prev : []
+      if (enabled) return [...new Set([...current, ...ids])]
+      return current.filter((p) => !ids.includes(p))
+    })
+  }
+
+  function isQuickPermissionEnabled(row: QuickPermissionRow, action: QuickAction): boolean {
+    const ids = row[action] ?? []
+    if (ids.length === 0) return false
+    return ids.every((id) => selectedPermissions.includes(id))
+  }
+
   const [roleTab, setRoleTab] = useState("__all__")
 
   const roleTabDefs = useMemo(() => {
@@ -450,6 +530,13 @@ export default function UsersPage() {
   }, [users, roleTab, roleTabDefs])
 
   const filteredCount = useMemo(() => filteredByRole.length, [filteredByRole])
+  const permissionDiff = useMemo(() => {
+    const initial = new Set((initialPermissions || []).map((p) => String(p)))
+    const selected = new Set((selectedPermissions || []).map((p) => String(p)))
+    const added = Array.from(selected).filter((p) => !initial.has(p)).sort()
+    const removed = Array.from(initial).filter((p) => !selected.has(p)).sort()
+    return { added, removed }
+  }, [initialPermissions, selectedPermissions])
 
   if (noPermission) {
     return (
@@ -784,6 +871,87 @@ export default function UsersPage() {
                   </div>
                 </div>
 
+                <Card className="border-dashed border-indigo-300 bg-indigo-50/40">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">הרשאות מהירות לפי פעולה</CardTitle>
+                    <CardDescription>הפעל/בטל צפייה, עריכה ומחיקה לכל מודול בלחיצה אחת</CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-2 sm:p-4">
+                    <div className="-mx-2 overflow-x-auto sm:mx-0">
+                      <Table className="min-w-[680px]">
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="text-right">מודול</TableHead>
+                            <TableHead className="text-center">צפייה</TableHead>
+                            <TableHead className="text-center">עריכה</TableHead>
+                            <TableHead className="text-center">מחיקה</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {QUICK_PERMISSION_ROWS.map((row) => (
+                            <TableRow key={row.id}>
+                              <TableCell className="font-medium">{row.label}</TableCell>
+                              <TableCell className="text-center">
+                                {row.view?.length ? (
+                                  <Checkbox
+                                    checked={isQuickPermissionEnabled(row, "view")}
+                                    onCheckedChange={(checked) => setQuickPermission(row, "view", Boolean(checked))}
+                                  />
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                {row.edit?.length ? (
+                                  <Checkbox
+                                    checked={isQuickPermissionEnabled(row, "edit")}
+                                    onCheckedChange={(checked) => setQuickPermission(row, "edit", Boolean(checked))}
+                                  />
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                {row.delete?.length ? (
+                                  <Checkbox
+                                    checked={isQuickPermissionEnabled(row, "delete")}
+                                    onCheckedChange={(checked) => setQuickPermission(row, "delete", Boolean(checked))}
+                                  />
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-dashed border-amber-300 bg-amber-50/40">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">סיכום שינויים לפני שמירה</CardTitle>
+                    <CardDescription>
+                      נוספו: {permissionDiff.added.length} | הוסרו: {permissionDiff.removed.length}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-md border border-emerald-200 bg-emerald-50 p-2">
+                      <div className="mb-1 text-sm font-semibold text-emerald-700">נוספו</div>
+                      <div className="max-h-28 overflow-y-auto text-xs text-emerald-800">
+                        {permissionDiff.added.length === 0 ? "ללא" : permissionDiff.added.join(", ")}
+                      </div>
+                    </div>
+                    <div className="rounded-md border border-rose-200 bg-rose-50 p-2">
+                      <div className="mb-1 text-sm font-semibold text-rose-700">הוסרו</div>
+                      <div className="max-h-28 overflow-y-auto text-xs text-rose-800">
+                        {permissionDiff.removed.length === 0 ? "ללא" : permissionDiff.removed.join(", ")}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {PERMISSION_CATEGORIES.map((category) => {
                     const Icon = categoryIcons[category.id] || BookOpen
@@ -800,13 +968,51 @@ export default function UsersPage() {
                               <Icon className="h-6 w-6 shrink-0" />
                               <CardTitle className="text-base font-semibold sm:text-lg">{category.name}</CardTitle>
                             </div>
-                            <Badge
-                              variant="secondary"
-                              className="w-fit shrink-0 cursor-pointer px-3 py-1 text-sm"
-                              onClick={() => toggleCategoryAll(category)}
-                            >
-                              {allSelected ? "ביטול" : "הכל"}
-                            </Badge>
+                            <div className="flex flex-wrap items-center gap-1 sm:justify-end">
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                className="h-7 px-2 text-[11px]"
+                                onClick={() => applyCategoryMacro(category, "read")}
+                              >
+                                קריאה בלבד
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                className="h-7 px-2 text-[11px]"
+                                onClick={() => applyCategoryMacro(category, "edit")}
+                              >
+                                קריאה+עריכה
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                className="h-7 px-2 text-[11px]"
+                                onClick={() => applyCategoryMacro(category, "full")}
+                              >
+                                מלא
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                className="h-7 px-2 text-[11px]"
+                                onClick={() => applyCategoryMacro(category, "clear")}
+                              >
+                                נקה
+                              </Button>
+                              <Badge
+                                variant="secondary"
+                                className="w-fit shrink-0 cursor-pointer px-2 py-1 text-[11px]"
+                                onClick={() => toggleCategoryAll(category)}
+                              >
+                                {allSelected ? "ביטול הכל" : "בחר הכל"}
+                              </Badge>
+                            </div>
                           </div>
                         </CardHeader>
                         <CardContent className="space-y-3 px-3 sm:space-y-5 sm:px-5">
