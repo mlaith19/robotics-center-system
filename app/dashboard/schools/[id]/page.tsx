@@ -163,6 +163,16 @@ type GafanHourRow = {
   pendingAssignment?: boolean
 }
 
+function isSameHourRow(a: GafanHourRow, b: GafanHourRow): boolean {
+  return (
+    a.date === b.date &&
+    a.startTime === b.startTime &&
+    a.endTime === b.endTime &&
+    Number(a.totalHours || 0) === Number(b.totalHours || 0) &&
+    Boolean(a.pendingAssignment) === Boolean(b.pendingAssignment)
+  )
+}
+
 function parseGafanHourRows(row: GafanRow): GafanHourRow[] {
   const rows = row.hourRows
   if (!Array.isArray(rows)) return []
@@ -538,14 +548,7 @@ export default function SchoolViewPage() {
     if (hourEditIdx != null && hourEditIdx >= 0 && hourEditIdx < next.length) {
       next[hourEditIdx] = row
     } else if (hourEditSourceRow) {
-      const fallbackIdx = next.findIndex(
-        (x) =>
-          x.date === hourEditSourceRow.date &&
-          x.startTime === hourEditSourceRow.startTime &&
-          x.endTime === hourEditSourceRow.endTime &&
-          Number(x.totalHours || 0) === Number(hourEditSourceRow.totalHours || 0) &&
-          Boolean(x.pendingAssignment) === Boolean(hourEditSourceRow.pendingAssignment),
-      )
+      const fallbackIdx = next.findIndex((x) => isSameHourRow(x, hourEditSourceRow))
       if (fallbackIdx >= 0) next[fallbackIdx] = row
       else next.push(row)
     } else {
@@ -581,10 +584,15 @@ export default function SchoolViewPage() {
     }
   }
 
-  const deleteHourRow = async (program: GafanRow, idx: number) => {
+  const deleteHourRow = async (program: GafanRow, idx: number, sourceRow?: GafanHourRow) => {
     if (!school?.id) return
     const rows = parseGafanHourRows(program)
-    const next = rows.filter((_, i) => i !== idx)
+    let targetIdx = Number.isInteger(idx) && idx >= 0 && idx < rows.length ? idx : -1
+    if (targetIdx < 0 && sourceRow) {
+      targetIdx = rows.findIndex((x) => isSameHourRow(x, sourceRow))
+    }
+    if (targetIdx < 0) return
+    const next = rows.filter((_, i) => i !== targetIdx)
     setHoursSaving(true)
     try {
       const res = await fetch(`/api/gafan/${encodeURIComponent(program.id)}`, {
@@ -638,6 +646,7 @@ export default function SchoolViewPage() {
           rowIndex: number
           date: string
           dayOfWeek: string
+          teacherName: string
           startTime: string
           endTime: string
           totalHours: number
@@ -664,6 +673,7 @@ export default function SchoolViewPage() {
           rowIndex,
           date: row.date,
           dayOfWeek: row.dayOfWeek || weekdayFromDate(row.date),
+          teacherName: row.teacherName || "",
           startTime: row.startTime,
           endTime: row.endTime,
           totalHours: Number(row.totalHours || 0),
@@ -1427,7 +1437,15 @@ export default function SchoolViewPage() {
                                             onClick={() => {
                                               const program = gafanPrograms.find((g) => g.id === row.programId)
                                               if (!program) return
-                                              void deleteHourRow(program, row.rowIndex)
+                                              void deleteHourRow(program, row.rowIndex, {
+                                                date: row.date,
+                                                dayOfWeek: row.dayOfWeek,
+                                                teacherName: row.teacherName,
+                                                startTime: row.startTime,
+                                                endTime: row.endTime,
+                                                totalHours: Number(row.totalHours || 0),
+                                                pendingAssignment: row.status === "pending",
+                                              })
                                             }}
                                           >
                                             <Trash2 className="h-4 w-4 text-red-600" />
