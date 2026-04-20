@@ -31,7 +31,7 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
       result = await db`
         SELECT DISTINCT s.*
         FROM "School" s
-        JOIN "GafanProgram" g ON g."schoolId" = s.id
+        JOIN "GafanSchoolLink" g ON g."schoolId" = s.id
         WHERE s.id = ${id}
           AND g."teacherIds" IS NOT NULL
           AND g."teacherIds" @> ${db.json([teacherId])}
