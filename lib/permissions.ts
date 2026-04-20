@@ -558,7 +558,7 @@ const NAV_PERM_TO_HREF: Record<string, string> = {
 /** תפקידים עם גישה מלאה לכל הדפים (כולל קופה, דוחות וכו') */
 const FULL_ACCESS_ROLES = new Set([
   "admin", "administrator", "center_admin", "super_admin", "owner", "manager",
-  "secretary", "coordinator", "אדמין", "מנהל", "מנהל מרכז", "מזכירה", "רכז",
+  "אדמין", "מנהל", "מנהל מרכז",
 ])
 
 function normalizeRoleToken(role: unknown): string {

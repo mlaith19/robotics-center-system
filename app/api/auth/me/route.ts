@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { getSession, sessionWithRefreshedActivity } from "@/lib/auth-server"
+import { requireTenant, ensureSessionMatchesTenant } from "@/lib/tenant/resolve-tenant"
 import {
   buildTenantSessionCookie,
   clearTenantSessionCookie,
@@ -25,12 +26,43 @@ export async function GET(request: Request) {
 
   const MISSING = ["user", "", undefined, null]
   const isDev = process.env.NODE_ENV !== "production"
-  const effectiveRole    = isDev && MISSING.includes(session.role    as string | null | undefined) ? "admin" : session.role
-  const effectiveRoleKey = isDev && MISSING.includes(session.roleKey as string | null | undefined) ? "admin" : session.roleKey
+  const effectiveSessionRole = isDev && MISSING.includes(session.role as string | null | undefined) ? "admin" : session.role
+  const effectiveSessionRoleKey = isDev && MISSING.includes(session.roleKey as string | null | undefined) ? "admin" : session.roleKey
 
-  let permissions = session.permissions ?? []
-  if (permissions.length === 0 && effectiveRoleKey) {
-    const roleDefaults = getPermissionsForRole(effectiveRoleKey as RoleType)
+  let effectiveRole = (effectiveSessionRoleKey || effectiveSessionRole || "").toString().trim()
+  let permissions = refreshed.permissions ?? []
+
+  // Always try to refresh role/permissions from tenant DB so changes in Users page
+  // apply immediately without requiring logout/login.
+  try {
+    const [tenant, tenantErr] = await requireTenant(request)
+    if (!tenantErr && tenant) {
+      const mismatch = ensureSessionMatchesTenant(refreshed, tenant)
+      if (!mismatch) {
+        const rows = await tenant.db`
+          SELECT role, permissions
+          FROM "User"
+          WHERE id = ${refreshed.id}
+          LIMIT 1
+        `
+        if (rows.length > 0) {
+          const row = rows[0] as { role?: string | null; permissions?: unknown }
+          const dbRole = (row.role || "").toString().trim()
+          if (dbRole) effectiveRole = dbRole
+          if (Array.isArray(row.permissions)) {
+            permissions = row.permissions.map((p) => String(p)).filter(Boolean)
+          } else {
+            permissions = []
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[auth/me] failed to refresh permissions from tenant DB:", err)
+  }
+
+  if (permissions.length === 0 && effectiveRole) {
+    const roleDefaults = getPermissionsForRole(effectiveRole as RoleType)
     if (roleDefaults.length > 0) permissions = roleDefaults
   }
 
@@ -38,8 +70,8 @@ export async function GET(request: Request) {
     id:          session.id,
     username:    session.username,
     full_name:   session.full_name,
-    role:        effectiveRole,
-    roleKey:     effectiveRoleKey,
+    role:        effectiveRole || effectiveSessionRole || null,
+    roleKey:     effectiveRole || effectiveSessionRoleKey || null,
     permissions,
     loginTime:   session.loginTime,
     centerId:    (session as Record<string, unknown>).centerId    ?? null,
