@@ -99,7 +99,7 @@ export default function NewSchoolPage() {
       {/* סטטוס בית הספר */}
       <Card className="border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-white">
         <CardHeader className="px-3 text-right sm:px-6">
-          <div className="flex flex-row-reverse items-center justify-end gap-3">
+          <div className="flex flex-col items-end gap-3 sm:flex-row-reverse sm:items-center sm:justify-end">
             <div className="p-2 bg-blue-500 rounded-lg">
               <ClipboardList className="h-5 w-5 text-white" />
             </div>
@@ -127,7 +127,7 @@ export default function NewSchoolPage() {
       {/* מידע כללי */}
       <Card className="border-2 border-green-200 bg-gradient-to-br from-green-50 to-white">
         <CardHeader className="px-3 text-right sm:px-6">
-          <div className="flex flex-row-reverse items-center justify-end gap-3">
+          <div className="flex flex-col items-end gap-3 sm:flex-row-reverse sm:items-center sm:justify-end">
             <div className="p-2 bg-green-500 rounded-lg">
               <Building2 className="h-5 w-5 text-white" />
             </div>
@@ -180,7 +180,7 @@ export default function NewSchoolPage() {
       {/* מיקום */}
       <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-white">
         <CardHeader className="px-3 text-right sm:px-6">
-          <div className="flex flex-row-reverse items-center justify-end gap-3">
+          <div className="flex flex-col items-end gap-3 sm:flex-row-reverse sm:items-center sm:justify-end">
             <div className="p-2 bg-purple-500 rounded-lg">
               <MapPin className="h-5 w-5 text-white" />
             </div>
@@ -232,7 +232,7 @@ export default function NewSchoolPage() {
       {/* פרטי קשר */}
       <Card className="border-2 border-cyan-200 bg-gradient-to-br from-cyan-50 to-white">
         <CardHeader className="px-3 text-right sm:px-6">
-          <div className="flex flex-row-reverse items-center justify-end gap-3">
+          <div className="flex flex-col items-end gap-3 sm:flex-row-reverse sm:items-center sm:justify-end">
             <div className="p-2 bg-cyan-500 rounded-lg">
               <Phone className="h-5 w-5 text-white" />
             </div>
@@ -286,7 +286,7 @@ export default function NewSchoolPage() {
       {/* פרטי חשבון בנק */}
       <Card className="border-2 border-orange-200 bg-gradient-to-br from-orange-50 to-white">
         <CardHeader className="px-3 text-right sm:px-6">
-          <div className="flex flex-row-reverse items-center justify-end gap-3">
+          <div className="flex flex-col items-end gap-3 sm:flex-row-reverse sm:items-center sm:justify-end">
             <div className="p-2 bg-orange-500 rounded-lg">
               <CreditCard className="h-5 w-5 text-white" />
             </div>
@@ -346,7 +346,7 @@ export default function NewSchoolPage() {
       {/* מידע נוסף */}
       <Card className="border-2 border-pink-200 bg-gradient-to-br from-pink-50 to-white">
         <CardHeader className="px-3 text-right sm:px-6">
-          <div className="flex flex-row-reverse items-center justify-end gap-3">
+          <div className="flex flex-col items-end gap-3 sm:flex-row-reverse sm:items-center sm:justify-end">
             <div className="p-2 bg-pink-500 rounded-lg">
               <FileText className="h-5 w-5 text-white" />
             </div>
@@ -371,7 +371,7 @@ export default function NewSchoolPage() {
       </Card>
 
       {/* כפתורי פעולה */}
-      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-start">
+      <div className="sticky bottom-0 z-10 -mx-3 flex flex-col-reverse gap-3 border-t bg-background/95 px-3 py-3 backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0">
         <Button onClick={save} disabled={!form.name.trim() || saving} className="w-full gap-2 sm:w-auto">
           {saving ? (
             <>

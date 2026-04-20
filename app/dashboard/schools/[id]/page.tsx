@@ -515,7 +515,7 @@ export default function SchoolViewPage() {
       setHourSaveError("טווח השעות לא תקין. שעת סיום חייבת להיות אחרי שעת התחלה.")
       return
     }
-    const holderProgramId = hourDialogContext === "attendance" ? (gafanPrograms[0]?.id || "") : hoursProgramId
+    const holderProgramId = hourDialogContext === "attendance" ? (hoursProgramId || gafanPrograms[0]?.id || "") : hoursProgramId
     if (!holderProgramId) return
     const hoursProgram = gafanPrograms.find((g) => g.id === holderProgramId)
     if (!hoursProgram) return
@@ -612,9 +612,11 @@ export default function SchoolViewPage() {
       {
         monthLabel: string
         totalHours: number
+        approvedHours: number
         rows: Array<{
           programId: string
           programName: string
+          rowIndex: number
           date: string
           dayOfWeek: string
           startTime: string
@@ -629,17 +631,18 @@ export default function SchoolViewPage() {
       const programIndex = gafanPrograms.findIndex((g) => g.id === program.id)
       const programSerial = programIndex >= 0 ? programIndex + 1 : 0
       const programName = `${program.name}${programSerial ? ` (#${programSerial})` : ""}`
-      for (const row of rows) {
+      rows.forEach((row, rowIndex) => {
         const d = new Date(`${row.date}T12:00:00`)
         const isValidDate = !Number.isNaN(d.getTime())
         const key = isValidDate ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}` : "unknown"
         const monthLabel = isValidDate
           ? new Intl.DateTimeFormat("he-IL", { month: "long", year: "numeric" }).format(d)
           : "ללא תאריך תקין"
-        const bucket = monthMap.get(key) ?? { monthLabel, totalHours: 0, rows: [] }
+        const bucket = monthMap.get(key) ?? { monthLabel, totalHours: 0, approvedHours: 0, rows: [] }
         bucket.rows.push({
           programId: program.id,
           programName,
+          rowIndex,
           date: row.date,
           dayOfWeek: row.dayOfWeek || weekdayFromDate(row.date),
           startTime: row.startTime,
@@ -648,8 +651,11 @@ export default function SchoolViewPage() {
           status: row.pendingAssignment ? "pending" : "approved",
         })
         bucket.totalHours += Number(row.totalHours || 0)
+        if (!row.pendingAssignment) {
+          bucket.approvedHours += Number(row.totalHours || 0)
+        }
         monthMap.set(key, bucket)
-      }
+      })
     }
     const out = Array.from(monthMap.entries())
       .sort((a, b) => {
@@ -661,6 +667,7 @@ export default function SchoolViewPage() {
         monthKey,
         monthLabel: value.monthLabel,
         totalHours: Math.round(value.totalHours * 100) / 100,
+        approvedHours: Math.round(value.approvedHours * 100) / 100,
         rows: value.rows.sort((a, b) => a.date.localeCompare(b.date)),
       }))
     return out
@@ -1113,7 +1120,7 @@ export default function SchoolViewPage() {
                   )}
 
                   <Dialog open={gafanLinkOpen} onOpenChange={setGafanLinkOpen}>
-                    <DialogContent dir="rtl" className="sm:max-w-md">
+                    <DialogContent dir="rtl" className="max-h-[85vh] overflow-y-auto sm:max-w-md">
                       <DialogHeader>
                         <DialogTitle>שיוך תוכנית גפ&quot;ן לבית הספר</DialogTitle>
                       </DialogHeader>
@@ -1166,7 +1173,7 @@ export default function SchoolViewPage() {
                       }
                     }}
                   >
-                    <DialogContent dir="rtl" className="sm:max-w-md">
+                    <DialogContent dir="rtl" className="max-h-[85vh] overflow-y-auto sm:max-w-md">
                       <DialogHeader>
                         <DialogTitle>
                           שיוך מורה לתוכנית
@@ -1228,7 +1235,7 @@ export default function SchoolViewPage() {
                   </Dialog>
 
                   <Dialog open={workshopProgram !== null} onOpenChange={(open) => !open && setWorkshopProgram(null)}>
-                    <DialogContent dir="rtl" className="sm:max-w-lg">
+                    <DialogContent dir="rtl" className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
                       <DialogHeader>
                         <DialogTitle>הוספת שורה לתוכנית</DialogTitle>
                       </DialogHeader>
@@ -1326,7 +1333,7 @@ export default function SchoolViewPage() {
                         <TabsList className="h-auto w-full flex-wrap justify-start gap-2">
                           {attendanceMonthGroups.map((group) => (
                             <TabsTrigger key={group.monthKey} value={group.monthKey}>
-                              {group.monthLabel} ({group.totalHours.toLocaleString("he-IL")})
+                              {group.monthLabel} (מאושר: {group.approvedHours.toLocaleString("he-IL")})
                             </TabsTrigger>
                           ))}
                         </TabsList>
@@ -1344,6 +1351,7 @@ export default function SchoolViewPage() {
                                     <TableHead className="text-right">שעת סיום</TableHead>
                                     <TableHead className="text-right">סה&quot;כ שעות</TableHead>
                                     <TableHead className="text-right">סטטוס</TableHead>
+                                    <TableHead className="text-center">פעולות</TableHead>
                                   </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -1363,6 +1371,41 @@ export default function SchoolViewPage() {
                                           <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">ממתין לאישור</span>
                                         )}
                                       </TableCell>
+                                      <TableCell className="text-center">
+                                        <div className="flex items-center justify-center gap-1">
+                                          <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            title="עריכה"
+                                            onClick={() => {
+                                              setHourDialogContext("attendance")
+                                              setHoursProgramId(row.programId)
+                                              setHourDate(row.date)
+                                              setHourStartTime(row.startTime)
+                                              setHourEndTime(row.endTime)
+                                              setHourTotal(String(row.totalHours))
+                                              setHourEditIdx(row.rowIndex)
+                                              setHourDialogOpen(true)
+                                            }}
+                                          >
+                                            <Pencil className="h-4 w-4" />
+                                          </Button>
+                                          <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            title="מחיקה"
+                                            onClick={() => {
+                                              const program = gafanPrograms.find((g) => g.id === row.programId)
+                                              if (!program) return
+                                              void deleteHourRow(program, row.rowIndex)
+                                            }}
+                                          >
+                                            <Trash2 className="h-4 w-4 text-red-600" />
+                                          </Button>
+                                        </div>
+                                      </TableCell>
                                     </TableRow>
                                   ))}
                                 </TableBody>
@@ -1375,7 +1418,7 @@ export default function SchoolViewPage() {
                   </>
                 )}
                 <Dialog open={hourDialogOpen} onOpenChange={setHourDialogOpen}>
-                  <DialogContent dir="rtl" className="sm:max-w-lg">
+                  <DialogContent dir="rtl" className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
                     <DialogHeader>
                       <DialogTitle>{hourDialogContext === "attendance" ? "הוספת נוכחות מורה" : "הוספת שעות"}</DialogTitle>
                     </DialogHeader>
@@ -1463,12 +1506,12 @@ export default function SchoolViewPage() {
                                 <TableCell>{Number(p.row.totalHours || 0)}</TableCell>
                                 <TableCell>{p.holderProgramName}</TableCell>
                                 <TableCell>
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
                                     <Select
                                       value={pendingAssignTargetByKey[p.key] || ""}
                                       onValueChange={(v) => setPendingAssignTargetByKey((prev) => ({ ...prev, [p.key]: v }))}
                                     >
-                                      <SelectTrigger className="w-[220px]">
+                                      <SelectTrigger className="w-full sm:w-[220px]">
                                         <SelectValue placeholder="בחר תוכנית לאישור" />
                                       </SelectTrigger>
                                       <SelectContent>

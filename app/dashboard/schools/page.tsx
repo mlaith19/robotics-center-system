@@ -129,9 +129,9 @@ export default function SchoolsPage() {
           <PageHeader title="בתי ספר" description="נהל את כל בתי הספר המשתפים פעולה" />
         </div>
 
-        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+        <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:w-auto sm:justify-end">
           {/* View Toggle */}
-          <div className="flex overflow-hidden rounded-lg border">
+          <div className="flex shrink-0 overflow-hidden rounded-lg border">
             <Button
               variant={viewMode === "list" ? "secondary" : "ghost"}
               size="sm"
@@ -252,7 +252,7 @@ export default function SchoolsPage() {
               </div>
 
               {/* Actions */}
-              <div className="flex flex-wrap gap-2 border-t pt-2">
+              <div className="flex flex-col gap-2 border-t pt-2 sm:flex-row sm:flex-wrap">
                 <Link href={`/dashboard/schools/${s.id}`} className="flex-1">
                   <Button variant="outline" className="gap-2 w-full bg-transparent">
                     <Eye className="h-4 w-4" />
@@ -272,11 +272,11 @@ export default function SchoolsPage() {
                 {canDeleteSchools && (
                   <Button 
                     variant="outline" 
-                    size="icon"
-                    className="text-destructive hover:bg-destructive hover:text-destructive-foreground shrink-0 bg-transparent" 
+                    className="w-full gap-2 text-destructive hover:bg-destructive hover:text-destructive-foreground sm:w-auto sm:px-3 bg-transparent" 
                     onClick={() => remove(s.id)}
                   >
                     <Trash2 className="h-4 w-4" />
+                    מחק
                   </Button>
                 )}
               </div>
