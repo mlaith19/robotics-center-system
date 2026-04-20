@@ -156,6 +156,7 @@ type TeacherAttRow = {
 type GafanHourRow = {
   date: string
   dayOfWeek?: string
+  teacherName?: string
   startTime: string
   endTime: string
   totalHours: number
@@ -170,6 +171,7 @@ function parseGafanHourRows(row: GafanRow): GafanHourRow[] {
     return {
       date: String(x.date ?? ""),
       dayOfWeek: String(x.dayOfWeek ?? ""),
+      teacherName: String(x.teacherName ?? ""),
       startTime: String(x.startTime ?? ""),
       endTime: String(x.endTime ?? ""),
       totalHours: Number(x.totalHours ?? 0) || 0,
@@ -273,6 +275,7 @@ export default function SchoolViewPage() {
   const [hourEndTime, setHourEndTime] = useState("")
   const [hourTotal, setHourTotal] = useState("0")
   const [hourEditIdx, setHourEditIdx] = useState<number | null>(null)
+  const [hourEditSourceRow, setHourEditSourceRow] = useState<GafanHourRow | null>(null)
   const [hourDialogContext, setHourDialogContext] = useState<"attendance" | "ngafan">("attendance")
   const [selectedAttendanceMonth, setSelectedAttendanceMonth] = useState("")
   const [pendingAssignTargetByKey, setPendingAssignTargetByKey] = useState<Record<string, string>>({})
@@ -496,6 +499,7 @@ export default function SchoolViewPage() {
     setHourEndTime("")
     setHourTotal("0")
     setHourEditIdx(null)
+    setHourEditSourceRow(null)
     setHourSaveError("")
   }
 
@@ -524,14 +528,29 @@ export default function SchoolViewPage() {
     const row: GafanHourRow = {
       date: hourDate,
       dayOfWeek: resolvedDayOfWeek,
+      teacherName: currentUser?.full_name || currentUser?.username || "",
       startTime: hourStartTime,
       endTime: hourEndTime,
       totalHours: Math.max(0, Number(computedHours || hourTotal || 0)),
       pendingAssignment: hourDialogContext === "attendance",
     }
     const next = [...rows]
-    if (hourEditIdx == null) next.push(row)
-    else next[hourEditIdx] = row
+    if (hourEditIdx != null && hourEditIdx >= 0 && hourEditIdx < next.length) {
+      next[hourEditIdx] = row
+    } else if (hourEditSourceRow) {
+      const fallbackIdx = next.findIndex(
+        (x) =>
+          x.date === hourEditSourceRow.date &&
+          x.startTime === hourEditSourceRow.startTime &&
+          x.endTime === hourEditSourceRow.endTime &&
+          Number(x.totalHours || 0) === Number(hourEditSourceRow.totalHours || 0) &&
+          Boolean(x.pendingAssignment) === Boolean(hourEditSourceRow.pendingAssignment),
+      )
+      if (fallbackIdx >= 0) next[fallbackIdx] = row
+      else next.push(row)
+    } else {
+      next.push(row)
+    }
     setHoursSaving(true)
     try {
       const res = await fetch(`/api/gafan/${encodeURIComponent(hoursProgram.id)}`, {
@@ -1386,6 +1405,15 @@ export default function SchoolViewPage() {
                                               setHourEndTime(row.endTime)
                                               setHourTotal(String(row.totalHours))
                                               setHourEditIdx(row.rowIndex)
+                                              setHourEditSourceRow({
+                                                date: row.date,
+                                                dayOfWeek: row.dayOfWeek,
+                                                teacherName: row.teacherName,
+                                                startTime: row.startTime,
+                                                endTime: row.endTime,
+                                                totalHours: Number(row.totalHours || 0),
+                                                pendingAssignment: row.status === "pending",
+                                              })
                                               setHourDialogOpen(true)
                                             }}
                                           >
@@ -1439,8 +1467,13 @@ export default function SchoolViewPage() {
                         </Select>
                       </div>
                     )}
-                    <div className="grid gap-2 md:grid-cols-4">
-                      <Input type="date" value={hourDate} onChange={(e) => setHourDate(e.target.value)} />
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-5">
+                      <Input
+                        type="date"
+                        className="sm:col-span-2 md:col-span-2"
+                        value={hourDate}
+                        onChange={(e) => setHourDate(e.target.value)}
+                      />
                       <Input type="time" value={hourStartTime} onChange={(e) => setHourStartTime(e.target.value)} />
                       <Input type="time" value={hourEndTime} onChange={(e) => setHourEndTime(e.target.value)} />
                       <Input type="number" min={0} step="0.25" value={hourTotal} readOnly />
@@ -1489,6 +1522,7 @@ export default function SchoolViewPage() {
                             <TableRow className="bg-muted/50">
                               <TableHead className="text-right">מס׳</TableHead>
                               <TableHead className="text-right">תאריך</TableHead>
+                              <TableHead className="text-right">שם מורה</TableHead>
                               <TableHead className="text-right">שעת התחלה</TableHead>
                               <TableHead className="text-right">שעת סיום</TableHead>
                               <TableHead className="text-right">סה&quot;כ שעות</TableHead>
@@ -1501,6 +1535,7 @@ export default function SchoolViewPage() {
                               <TableRow key={p.key}>
                                 <TableCell>{idx + 1}</TableCell>
                                 <TableCell>{safe(p.row.date)}</TableCell>
+                                <TableCell>{safe(p.row.teacherName)}</TableCell>
                                 <TableCell>{safe(p.row.startTime)}</TableCell>
                                 <TableCell>{safe(p.row.endTime)}</TableCell>
                                 <TableCell>{Number(p.row.totalHours || 0)}</TableCell>
@@ -1615,6 +1650,15 @@ export default function SchoolViewPage() {
                                             setHourEndTime(r.endTime)
                                             setHourTotal(String(r.totalHours))
                                             setHourEditIdx(idx)
+                                            setHourEditSourceRow({
+                                              date: r.date,
+                                              dayOfWeek: r.dayOfWeek,
+                                              teacherName: r.teacherName,
+                                              startTime: r.startTime,
+                                              endTime: r.endTime,
+                                              totalHours: Number(r.totalHours || 0),
+                                              pendingAssignment: false,
+                                            })
                                             setHourDialogOpen(true)
                                           }}
                                           title="עריכה"

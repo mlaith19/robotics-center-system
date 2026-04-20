@@ -112,6 +112,7 @@ export function normalizeGafanAllocatedHours(raw: unknown): number {
 export function normalizeGafanHourRows(raw: unknown): Array<{
   date: string
   dayOfWeek?: string
+  teacherName?: string
   startTime: string
   endTime: string
   totalHours: number
@@ -123,6 +124,7 @@ export function normalizeGafanHourRows(raw: unknown): Array<{
       const row = (r ?? {}) as Record<string, unknown>
       const date = String(row.date ?? "")
       const dayOfWeek = String(row.dayOfWeek ?? "")
+      const teacherName = String(row.teacherName ?? "")
       const startTime = String(row.startTime ?? "")
       const endTime = String(row.endTime ?? "")
       const totalHours = Number(row.totalHours ?? 0)
@@ -130,6 +132,7 @@ export function normalizeGafanHourRows(raw: unknown): Array<{
       return {
         date,
         dayOfWeek,
+        teacherName,
         startTime,
         endTime,
         totalHours: Number.isFinite(totalHours) && totalHours >= 0 ? totalHours : 0,
