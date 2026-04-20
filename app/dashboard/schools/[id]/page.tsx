@@ -270,8 +270,8 @@ export default function SchoolViewPage() {
   const [hourStartTime, setHourStartTime] = useState("")
   const [hourEndTime, setHourEndTime] = useState("")
   const [hourTotal, setHourTotal] = useState("0")
-  const [transferTargetProgramId, setTransferTargetProgramId] = useState("")
   const [hourEditIdx, setHourEditIdx] = useState<number | null>(null)
+  const [selectedAttendanceMonth, setSelectedAttendanceMonth] = useState("")
   const [hoursSaving, setHoursSaving] = useState(false)
   const currentUser = useCurrentUser()
   const userPerms = currentUser?.permissions || []
@@ -279,7 +279,6 @@ export default function SchoolViewPage() {
   const canViewGeneralTab = isFullAccess || hasPermission(userPerms, "schools.tab.general")
   const canViewGafanTab = isFullAccess || hasPermission(userPerms, "schools.tab.gafan")
   const canViewAttendanceTab = isFullAccess || hasPermission(userPerms, "schools.tab.attendance")
-  const canTransferAttendanceRows = isFullAccess || hasPermission(userPerms, "schools.tab.attendance.transfer")
   const canViewDebtorsTab = isFullAccess || hasPermission(userPerms, "schools.tab.debtors")
   const canViewPaymentsTab = isFullAccess || hasPermission(userPerms, "schools.tab.payments")
   const canEditSchool = isFullAccess || hasPermission(userPerms, "schools.edit")
@@ -484,7 +483,6 @@ export default function SchoolViewPage() {
     setHourStartTime("")
     setHourEndTime("")
     setHourTotal("0")
-    setTransferTargetProgramId("")
     setHourEditIdx(null)
   }
 
@@ -504,40 +502,15 @@ export default function SchoolViewPage() {
     const next = [...rows]
     if (hourEditIdx == null) next.push(row)
     else next[hourEditIdx] = row
-    const shouldTransferToOtherProgram =
-      canTransferAttendanceRows &&
-      hourEditIdx !== null &&
-      transferTargetProgramId &&
-      transferTargetProgramId !== hoursProgram.id
-    const sourceRowsAfterSave = shouldTransferToOtherProgram
-      ? rows.filter((_, i) => i !== hourEditIdx)
-      : next
     setHoursSaving(true)
     try {
       const res = await fetch(`/api/gafan/${encodeURIComponent(hoursProgram.id)}`, {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ schoolId: school.id, linkId: hoursProgram.linkId, hourRows: sourceRowsAfterSave }),
+        body: JSON.stringify({ schoolId: school.id, linkId: hoursProgram.linkId, hourRows: next }),
       })
       if (res.ok) {
-        if (shouldTransferToOtherProgram) {
-          const targetProgram = gafanPrograms.find((g) => g.id === transferTargetProgramId)
-          if (targetProgram) {
-            const targetRows = parseGafanHourRows(targetProgram)
-            const targetRes = await fetch(`/api/gafan/${encodeURIComponent(targetProgram.id)}`, {
-              method: "PATCH",
-              credentials: "include",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                schoolId: school.id,
-                linkId: targetProgram.linkId,
-                hourRows: [...targetRows, row],
-              }),
-            })
-            if (!targetRes.ok) throw new Error("Failed to transfer attendance row")
-          }
-        }
         resetHourForm()
         setHourDialogOpen(false)
         setHoursProgramId("")
@@ -591,6 +564,50 @@ export default function SchoolViewPage() {
     rows.sort((a, b) => a.studentName.localeCompare(b.studentName, "he", { sensitivity: "base" }))
     return { rows, totalDebt: rows.reduce((s, r) => s + r.balance, 0) }
   }, [schoolEnrollments, schoolPayments])
+
+  const attendanceMonthGroups = useMemo(() => {
+    const monthMap = new Map<
+      string,
+      { monthLabel: string; totalHours: number; rows: Array<{ date: string; startTime: string; endTime: string; totalHours: number }> }
+    >()
+    for (const program of gafanPrograms) {
+      const rows = parseGafanHourRows(program)
+      for (const row of rows) {
+        const d = new Date(`${row.date}T12:00:00`)
+        if (Number.isNaN(d.getTime())) continue
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+        const monthLabel = new Intl.DateTimeFormat("he-IL", { month: "long", year: "numeric" }).format(d)
+        const bucket = monthMap.get(key) ?? { monthLabel, totalHours: 0, rows: [] }
+        bucket.rows.push({
+          date: row.date,
+          startTime: row.startTime,
+          endTime: row.endTime,
+          totalHours: Number(row.totalHours || 0),
+        })
+        bucket.totalHours += Number(row.totalHours || 0)
+        monthMap.set(key, bucket)
+      }
+    }
+    const out = Array.from(monthMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([monthKey, value]) => ({
+        monthKey,
+        monthLabel: value.monthLabel,
+        totalHours: Math.round(value.totalHours * 100) / 100,
+        rows: value.rows.sort((a, b) => a.date.localeCompare(b.date)),
+      }))
+    return out
+  }, [gafanPrograms])
+
+  useEffect(() => {
+    if (attendanceMonthGroups.length === 0) {
+      setSelectedAttendanceMonth("")
+      return
+    }
+    if (!selectedAttendanceMonth || !attendanceMonthGroups.some((g) => g.monthKey === selectedAttendanceMonth)) {
+      setSelectedAttendanceMonth(attendanceMonthGroups[attendanceMonthGroups.length - 1].monthKey)
+    }
+  }, [attendanceMonthGroups, selectedAttendanceMonth])
 
   if (isNewPage) {
     return <NewSchoolPage />
@@ -1116,138 +1133,99 @@ export default function SchoolViewPage() {
                     <p>אין תוכניות גפ&quot;ן משויכות לבית הספר</p>
                   </div>
                 ) : (
-                  gafanPrograms.map((program) => {
-                    const workshopRows = parseGafanWorkshopRows(program)
-                    const allocated = workshopRows.reduce((s, r) => s + Number(r.hours || 0), 0)
-                    const hourRows = parseGafanHourRows(program)
-                    const used = hourRows.reduce((s, r) => s + Number(r.totalHours || 0), 0)
-                    const balance = allocated - used
-                    return (
-                      <div key={program.id} className="space-y-3 rounded-lg border p-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="font-semibold">{program.name}</div>
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={() => {
-                              setHoursProgramId(program.id)
-                              resetHourForm()
-                              setHourDialogOpen(true)
-                            }}
-                          >
-                            הוספה
-                          </Button>
-                        </div>
-                        <div className="grid gap-2 md:grid-cols-2">
-                          <div className="rounded-md border bg-muted/30 px-3 py-2">
-                            שעות מוקצה לתוכנית: <strong>{allocated.toFixed(2)}</strong>
-                          </div>
-                          <div className="rounded-md border bg-muted/30 px-3 py-2">
-                            יתרת שעות: <strong>{balance.toFixed(2)}</strong>
-                          </div>
-                        </div>
-                        <div className="overflow-x-auto rounded-md border">
-                          <Table>
-                            <TableHeader>
-                              <TableRow className="bg-muted/50">
-                                <TableHead className="text-right">תאריך</TableHead>
-                                <TableHead className="text-right">יום</TableHead>
-                                <TableHead className="text-right">שעת התחלה</TableHead>
-                                <TableHead className="text-right">שעת סיום</TableHead>
-                                <TableHead className="text-right">סה&quot;כ שעות</TableHead>
-                                <TableHead className="text-center">פעולות</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {hourRows.length === 0 ? (
-                                <TableRow>
-                                  <TableCell colSpan={6} className="text-center text-muted-foreground">אין נתוני שעות</TableCell>
-                                </TableRow>
-                              ) : (
-                                hourRows.map((r, idx) => (
-                                  <TableRow key={`${program.id}-hr-${idx}`}>
-                                    <TableCell>{safe(r.date)}</TableCell>
-                                    <TableCell>{safe(r.dayOfWeek || "—")}</TableCell>
-                                    <TableCell>{safe(r.startTime)}</TableCell>
-                                    <TableCell>{safe(r.endTime)}</TableCell>
-                                    <TableCell>{Number(r.totalHours || 0)}</TableCell>
-                                    <TableCell className="text-center">
-                                      <div className="flex items-center justify-center gap-1">
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          size="sm"
-                                          onClick={() => {
-                                            setHoursProgramId(program.id)
-                                            setHourDate(r.date)
-                                            setHourStartTime(r.startTime)
-                                            setHourEndTime(r.endTime)
-                                            setHourTotal(String(r.totalHours))
-                                            setTransferTargetProgramId("")
-                                            setHourEditIdx(idx)
-                                            setHourDialogOpen(true)
-                                          }}
-                                          title="עריכה"
-                                        >
-                                          <Pencil className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          size="sm"
-                                          onClick={() => void deleteHourRow(program, idx)}
-                                          title="מחיקה"
-                                        >
-                                          <Trash2 className="h-4 w-4 text-red-600" />
-                                        </Button>
-                                      </div>
-                                    </TableCell>
+                  <>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="font-semibold">רישום נוכחות מורים</div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          setHoursProgramId(gafanPrograms[0]?.id || "")
+                          resetHourForm()
+                          setHourDialogOpen(true)
+                        }}
+                      >
+                        הוספה
+                      </Button>
+                    </div>
+
+                    {attendanceMonthGroups.length === 0 ? (
+                      <div className="rounded-lg border p-6 text-center text-muted-foreground">אין נתוני נוכחות להצגה</div>
+                    ) : (
+                      <Tabs
+                        value={selectedAttendanceMonth}
+                        onValueChange={setSelectedAttendanceMonth}
+                        dir="rtl"
+                        className="space-y-3"
+                      >
+                        <TabsList className="h-auto w-full flex-wrap justify-start gap-2">
+                          {attendanceMonthGroups.map((group) => (
+                            <TabsTrigger key={group.monthKey} value={group.monthKey}>
+                              {group.monthLabel} ({group.totalHours.toLocaleString("he-IL")})
+                            </TabsTrigger>
+                          ))}
+                        </TabsList>
+                        {attendanceMonthGroups.map((group) => (
+                          <TabsContent key={group.monthKey} value={group.monthKey} className="mt-0">
+                            <div className="overflow-x-auto rounded-md border">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow className="bg-muted/50">
+                                    <TableHead className="text-right">מס׳</TableHead>
+                                    <TableHead className="text-right">תאריך</TableHead>
+                                    <TableHead className="text-right">שעת התחלה</TableHead>
+                                    <TableHead className="text-right">שעת סיום</TableHead>
+                                    <TableHead className="text-right">סה&quot;כ שעות</TableHead>
                                   </TableRow>
-                                ))
-                              )}
-                            </TableBody>
-                          </Table>
-                        </div>
-                      </div>
-                    )
-                  })
+                                </TableHeader>
+                                <TableBody>
+                                  {group.rows.map((row, idx) => (
+                                    <TableRow key={`${group.monthKey}-${idx}`}>
+                                      <TableCell>{idx + 1}</TableCell>
+                                      <TableCell>{safe(row.date)}</TableCell>
+                                      <TableCell>{safe(row.startTime)}</TableCell>
+                                      <TableCell>{safe(row.endTime)}</TableCell>
+                                      <TableCell>{Number(row.totalHours || 0)}</TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          </TabsContent>
+                        ))}
+                      </Tabs>
+                    )}
+                  </>
                 )}
                 <Dialog open={hourDialogOpen} onOpenChange={setHourDialogOpen}>
                   <DialogContent dir="rtl" className="sm:max-w-lg">
                     <DialogHeader>
-                      <DialogTitle>{hourEditIdx == null ? "הוספת שעות" : "עריכת שעות"}</DialogTitle>
+                      <DialogTitle>הוספת שעות</DialogTitle>
                     </DialogHeader>
+                    <div className="space-y-2">
+                      <Label>תוכנית</Label>
+                      <Select value={hoursProgramId} onValueChange={setHoursProgramId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="בחר תוכנית" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {gafanPrograms.map((program) => (
+                            <SelectItem key={program.id} value={program.id}>
+                              {program.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                     <div className="grid gap-2 md:grid-cols-4">
                       <Input type="date" value={hourDate} onChange={(e) => setHourDate(e.target.value)} />
                       <Input type="time" value={hourStartTime} onChange={(e) => setHourStartTime(e.target.value)} />
                       <Input type="time" value={hourEndTime} onChange={(e) => setHourEndTime(e.target.value)} />
                       <Input type="number" min={0} step="0.25" value={hourTotal} readOnly />
                     </div>
-                    {canTransferAttendanceRows && hourEditIdx !== null && (
-                      <div className="space-y-2">
-                        <Label>העברת השעות לתוכנית אחרת</Label>
-                        <Select value={transferTargetProgramId} onValueChange={setTransferTargetProgramId}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="בחר תוכנית יעד (לא חובה)" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {gafanPrograms
-                              .filter((p) => p.id !== hoursProgramId)
-                              .map((p) => (
-                                <SelectItem key={p.id} value={p.id}>
-                                  {p.name}
-                                </SelectItem>
-                              ))}
-                          </SelectContent>
-                        </Select>
-                        <p className="text-xs text-muted-foreground">
-                          אם תבחר תוכנית יעד, השורה תועבר מהתוכנית הנוכחית לתוכנית היעד.
-                        </p>
-                      </div>
-                    )}
                     <div className="flex gap-2">
                       <Button type="button" disabled={!hoursProgramId || hoursSaving} onClick={() => void saveHourRow()}>
-                        {hourEditIdx == null ? "הוספה" : "עדכון"}
+                        הוספה
                       </Button>
                       <Button type="button" variant="outline" onClick={resetHourForm}>נקה</Button>
                     </div>
