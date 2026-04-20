@@ -563,9 +563,15 @@ export default function TeacherViewPage() {
           <Button variant="outline" onClick={() => router.refresh()} className="bg-transparent">
             נסה שוב
           </Button>
-          <Button variant="outline" onClick={() => router.push("/dashboard/teachers")} className="bg-transparent">
-            חזרה למורים
-          </Button>
+          {isTeacherUser ? (
+            <Button variant="outline" onClick={() => router.push("/dashboard")} className="bg-transparent">
+              חזרה לדף הבית
+            </Button>
+          ) : (
+            <Button variant="outline" onClick={() => router.push("/dashboard/teachers")} className="bg-transparent">
+              חזרה למורים
+            </Button>
+          )}
         </div>
       </div>
     )
@@ -574,9 +580,15 @@ export default function TeacherViewPage() {
     return (
       <div className="p-3 sm:p-6" dir="rtl">
         <div className="font-medium">מורה לא נמצא</div>
-        <Button variant="outline" className="mt-4 bg-transparent" onClick={() => router.push("/dashboard/teachers")}>
-          חזרה למורים
-        </Button>
+        {isTeacherUser ? (
+          <Button variant="outline" className="mt-4 bg-transparent" onClick={() => router.push("/dashboard")}>
+            חזרה לדף הבית
+          </Button>
+        ) : (
+          <Button variant="outline" className="mt-4 bg-transparent" onClick={() => router.push("/dashboard/teachers")}>
+            חזרה למורים
+          </Button>
+        )}
       </div>
     )
 

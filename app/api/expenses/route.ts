@@ -2,11 +2,9 @@ import { handleDbError } from "@/lib/db"
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant, ensureSessionMatchesTenant } from "@/lib/tenant/resolve-tenant"
 import { requirePerm } from "@/lib/require-perm"
+import { sessionRolesGrantFullAccess } from "@/lib/permissions"
 
 export const GET = withTenantAuth(async (req, session) => {
-  const permErr = requirePerm(session, "cashier.view")
-  if (permErr) return permErr
-
   const [tenant, tenantErr] = await requireTenant(req)
   if (tenantErr) return tenantErr
   const mismatch = ensureSessionMatchesTenant(session, tenant)
@@ -19,6 +17,20 @@ export const GET = withTenantAuth(async (req, session) => {
     const endDate   = searchParams.get("endDate")
     const category  = searchParams.get("category")
     const teacherId = searchParams.get("teacherId")
+    const isFullAccess = sessionRolesGrantFullAccess(session.roleKey, session.role)
+
+    // Allow a teacher to read only their own expense records.
+    if (teacherId && !isFullAccess) {
+      const teacherRows = await db`SELECT id FROM "Teacher" WHERE "userId" = ${session.id} LIMIT 1`
+      const ownTeacherId = teacherRows.length > 0 ? String((teacherRows[0] as { id: string }).id) : null
+      if (!ownTeacherId || ownTeacherId !== teacherId) {
+        const permErr = requirePerm(session, "cashier.view")
+        if (permErr) return permErr
+      }
+    } else {
+      const permErr = requirePerm(session, "cashier.view")
+      if (permErr) return permErr
+    }
 
     let result
     if (teacherId) {

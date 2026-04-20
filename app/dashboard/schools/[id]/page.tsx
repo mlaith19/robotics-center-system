@@ -282,6 +282,7 @@ export default function SchoolViewPage() {
   const canTransferAttendanceRows = isFullAccess || hasPermission(userPerms, "schools.tab.attendance.transfer")
   const canViewDebtorsTab = isFullAccess || hasPermission(userPerms, "schools.tab.debtors")
   const canViewPaymentsTab = isFullAccess || hasPermission(userPerms, "schools.tab.payments")
+  const canEditSchool = isFullAccess || hasPermission(userPerms, "schools.edit")
   const defaultTab = canViewGeneralTab
     ? "general"
     : canViewGafanTab
@@ -624,12 +625,14 @@ export default function SchoolViewPage() {
           </div>
         </div>
 
-        <Link href={`/dashboard/schools/${school.id}/edit`} className="w-full shrink-0 sm:w-auto">
-          <Button className="w-full gap-2 sm:w-auto">
-            <Pencil className="h-4 w-4 shrink-0" />
-            ערוך פרטים
-          </Button>
-        </Link>
+        {canEditSchool && (
+          <Link href={`/dashboard/schools/${school.id}/edit`} className="w-full shrink-0 sm:w-auto">
+            <Button className="w-full gap-2 sm:w-auto">
+              <Pencil className="h-4 w-4 shrink-0" />
+              ערוך פרטים
+            </Button>
+          </Link>
+        )}
       </div>
 
       <Card className="overflow-hidden">

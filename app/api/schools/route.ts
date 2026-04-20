@@ -2,6 +2,7 @@ import { requireFeatureFromRequest } from "@/lib/feature-gate"
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant, ensureSessionMatchesTenant } from "@/lib/tenant/resolve-tenant"
 import { sessionRolesGrantFullAccess } from "@/lib/permissions"
+import { requirePerm } from "@/lib/require-perm"
 
 function s(v: unknown) {
   if (v === undefined || v === null) return null
@@ -46,6 +47,8 @@ export const GET = withTenantAuth(async (req, session) => {
 export const POST = withTenantAuth(async (req, session) => {
   const featureErr = await requireFeatureFromRequest(req, "schools", session)
   if (featureErr) return featureErr
+  const permErr = requirePerm(session, "schools.edit")
+  if (permErr) return permErr
   const [tenant, tenantErr] = await requireTenant(req)
   if (tenantErr) return tenantErr
   const mismatch = ensureSessionMatchesTenant(session, tenant)

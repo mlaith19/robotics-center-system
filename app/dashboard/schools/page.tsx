@@ -21,6 +21,8 @@ import {
 } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { deleteWithUndo } from "@/lib/notify"
+import { useCurrentUser } from "@/lib/auth-context"
+import { hasPermission, sessionRolesGrantFullAccess } from "@/lib/permissions"
 
 type School = {
   id: string
@@ -61,6 +63,11 @@ const schoolTypeLabels: Record<string, string> = {
 }
 
 export default function SchoolsPage() {
+  const currentUser = useCurrentUser()
+  const perms = currentUser?.permissions || []
+  const isFullAccess = sessionRolesGrantFullAccess(currentUser?.roleKey, currentUser?.role)
+  const canEditSchools = isFullAccess || hasPermission(perms, "schools.edit")
+  const canDeleteSchools = isFullAccess || hasPermission(perms, "schools.delete")
   const [schools, setSchools] = useState<School[]>([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
@@ -143,12 +150,14 @@ export default function SchoolsPage() {
             </Button>
           </div>
 
-          <Link href="/dashboard/schools/new" className="min-w-0 flex-1 sm:flex-none">
-            <Button className="w-full gap-2 sm:w-auto">
-              <Plus className="h-4 w-4 shrink-0" />
-              בית ספר חדש
-            </Button>
-          </Link>
+          {canEditSchools && (
+            <Link href="/dashboard/schools/new" className="min-w-0 flex-1 sm:flex-none">
+              <Button className="w-full gap-2 sm:w-auto">
+                <Plus className="h-4 w-4 shrink-0" />
+                בית ספר חדש
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -251,21 +260,25 @@ export default function SchoolsPage() {
                   </Button>
                 </Link>
 
-                <Link href={`/dashboard/schools/${s.id}/edit`} className="flex-1">
-                  <Button variant="outline" className="gap-2 w-full bg-transparent">
-                    <Pencil className="h-4 w-4" />
-                    ערוך
-                  </Button>
-                </Link>
+                {canEditSchools && (
+                  <Link href={`/dashboard/schools/${s.id}/edit`} className="flex-1">
+                    <Button variant="outline" className="gap-2 w-full bg-transparent">
+                      <Pencil className="h-4 w-4" />
+                      ערוך
+                    </Button>
+                  </Link>
+                )}
 
-                <Button 
-                  variant="outline" 
-                  size="icon"
-                  className="text-destructive hover:bg-destructive hover:text-destructive-foreground shrink-0 bg-transparent" 
-                  onClick={() => remove(s.id)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                {canDeleteSchools && (
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    className="text-destructive hover:bg-destructive hover:text-destructive-foreground shrink-0 bg-transparent" 
+                    onClick={() => remove(s.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
             </Card>
           ))}

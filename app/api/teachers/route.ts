@@ -9,6 +9,7 @@ import {
 } from "@/lib/teacher-attendance-hour-kind"
 import { ensureTeacherTariffTables, resolveHourlyRateForAttendance } from "@/lib/teacher-tariff-profiles"
 import { syncTeacherWeeklyActivityStatus } from "@/lib/teacher-weekly-activity-status"
+import { sessionRolesGrantFullAccess } from "@/lib/permissions"
 
 export const GET = withTenantAuth(async (req, session) => {
   const featureErr = await requireFeatureFromRequest(req, "teachers", session)
@@ -21,14 +22,25 @@ export const GET = withTenantAuth(async (req, session) => {
   try {
     await ensureTeacherTariffTables(db)
     await syncTeacherWeeklyActivityStatus(db)
+    const isFullAccess = sessionRolesGrantFullAccess(session.roleKey, session.role)
+    let teacherScopeId: string | null = null
+    if (!isFullAccess) {
+      const scopedRows = await db`SELECT id FROM "Teacher" WHERE "userId" = ${session.id} LIMIT 1`
+      teacherScopeId = scopedRows.length > 0 ? String((scopedRows[0] as { id: string }).id) : null
+    }
     const [teachers, expenses, attendances, enrollments, tariffLinks, monthlyTeacherPayRow] = await Promise.all([
-      db`SELECT * FROM "Teacher" ORDER BY "createdAt" DESC`,
-      db`SELECT "teacherId", SUM(amount) as total_paid FROM "Expense" WHERE "teacherId" IS NOT NULL GROUP BY "teacherId"`,
+      teacherScopeId
+        ? db`SELECT * FROM "Teacher" WHERE id = ${teacherScopeId} ORDER BY "createdAt" DESC`
+        : db`SELECT * FROM "Teacher" ORDER BY "createdAt" DESC`,
+      teacherScopeId
+        ? db`SELECT "teacherId", SUM(amount) as total_paid FROM "Expense" WHERE "teacherId" = ${teacherScopeId} GROUP BY "teacherId"`
+        : db`SELECT "teacherId", SUM(amount) as total_paid FROM "Expense" WHERE "teacherId" IS NOT NULL GROUP BY "teacherId"`,
       db`
         SELECT a."teacherId", a.status, a.hours, a."hourKind", c.id as "courseId", c.location, c."startTime", c."endTime"
         FROM "Attendance" a
         LEFT JOIN "Course" c ON a."courseId" = c.id
         WHERE a."teacherId" IS NOT NULL
+        ${teacherScopeId ? db`AND a."teacherId" = ${teacherScopeId}` : db``}
       `,
       db`SELECT "courseId", COUNT(*)::int as cnt FROM "Enrollment" GROUP BY "courseId"`,
       db`

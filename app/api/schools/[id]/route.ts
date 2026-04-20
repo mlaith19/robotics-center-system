@@ -2,6 +2,7 @@ import { requireFeatureFromRequest } from "@/lib/feature-gate"
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant, ensureSessionMatchesTenant } from "@/lib/tenant/resolve-tenant"
 import { sessionRolesGrantFullAccess } from "@/lib/permissions"
+import { requirePerm } from "@/lib/require-perm"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -48,6 +49,8 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
 export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
   const featureErr = await requireFeatureFromRequest(req, "schools", session)
   if (featureErr) return featureErr
+  const permErr = requirePerm(session, "schools.edit")
+  if (permErr) return permErr
   const [tenant, tenantErr] = await requireTenant(req)
   if (tenantErr) return tenantErr
   const mismatch = ensureSessionMatchesTenant(session, tenant)
@@ -94,6 +97,8 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
 export const DELETE = withTenantAuth(async (req, session, { params }: Ctx) => {
   const featureErr = await requireFeatureFromRequest(req, "schools", session)
   if (featureErr) return featureErr
+  const permErr = requirePerm(session, "schools.delete")
+  if (permErr) return permErr
   const [tenant, tenantErr] = await requireTenant(req)
   if (tenantErr) return tenantErr
   const mismatch = ensureSessionMatchesTenant(session, tenant)
