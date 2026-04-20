@@ -111,23 +111,29 @@ export function normalizeGafanAllocatedHours(raw: unknown): number {
 
 export function normalizeGafanHourRows(raw: unknown): Array<{
   date: string
+  dayOfWeek?: string
   startTime: string
   endTime: string
   totalHours: number
+  pendingAssignment?: boolean
 }> {
   if (!Array.isArray(raw)) return []
   return raw
     .map((r) => {
       const row = (r ?? {}) as Record<string, unknown>
       const date = String(row.date ?? "")
+      const dayOfWeek = String(row.dayOfWeek ?? "")
       const startTime = String(row.startTime ?? "")
       const endTime = String(row.endTime ?? "")
       const totalHours = Number(row.totalHours ?? 0)
+      const pendingAssignment = Boolean(row.pendingAssignment)
       return {
         date,
+        dayOfWeek,
         startTime,
         endTime,
         totalHours: Number.isFinite(totalHours) && totalHours >= 0 ? totalHours : 0,
+        pendingAssignment,
       }
     })
     .filter((x) => x.date || x.startTime || x.endTime || x.totalHours > 0)
