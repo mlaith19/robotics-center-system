@@ -33,6 +33,7 @@ import {
   DollarSign,
   Plus,
   UserPlus,
+  Trash2,
 } from "lucide-react"
 import {
   Dialog,
@@ -154,6 +155,7 @@ type TeacherAttRow = {
 
 type GafanHourRow = {
   date: string
+  dayOfWeek?: string
   startTime: string
   endTime: string
   totalHours: number
@@ -166,11 +168,22 @@ function parseGafanHourRows(row: GafanRow): GafanHourRow[] {
     const x = (r ?? {}) as Record<string, unknown>
     return {
       date: String(x.date ?? ""),
+      dayOfWeek: String(x.dayOfWeek ?? ""),
       startTime: String(x.startTime ?? ""),
       endTime: String(x.endTime ?? ""),
       totalHours: Number(x.totalHours ?? 0) || 0,
     }
   })
+}
+
+const WEEKDAY_OPTIONS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"]
+
+function weekdayFromDate(value: string): string {
+  const normalized = String(value || "").trim()
+  if (!normalized) return ""
+  const d = new Date(`${normalized}T12:00:00`)
+  if (Number.isNaN(d.getTime())) return ""
+  return WEEKDAY_OPTIONS[d.getDay()] || ""
 }
 
 function safe(v: unknown) {
@@ -257,6 +270,7 @@ export default function SchoolViewPage() {
   const [hourStartTime, setHourStartTime] = useState("")
   const [hourEndTime, setHourEndTime] = useState("")
   const [hourTotal, setHourTotal] = useState("0")
+  const [transferTargetProgramId, setTransferTargetProgramId] = useState("")
   const [hourEditIdx, setHourEditIdx] = useState<number | null>(null)
   const [hoursSaving, setHoursSaving] = useState(false)
   const currentUser = useCurrentUser()
@@ -265,6 +279,7 @@ export default function SchoolViewPage() {
   const canViewGeneralTab = isFullAccess || hasPermission(userPerms, "schools.tab.general")
   const canViewGafanTab = isFullAccess || hasPermission(userPerms, "schools.tab.gafan")
   const canViewAttendanceTab = isFullAccess || hasPermission(userPerms, "schools.tab.attendance")
+  const canTransferAttendanceRows = isFullAccess || hasPermission(userPerms, "schools.tab.attendance.transfer")
   const canViewDebtorsTab = isFullAccess || hasPermission(userPerms, "schools.tab.debtors")
   const canViewPaymentsTab = isFullAccess || hasPermission(userPerms, "schools.tab.payments")
   const defaultTab = canViewGeneralTab
@@ -468,6 +483,7 @@ export default function SchoolViewPage() {
     setHourStartTime("")
     setHourEndTime("")
     setHourTotal("0")
+    setTransferTargetProgramId("")
     setHourEditIdx(null)
   }
 
@@ -476,8 +492,10 @@ export default function SchoolViewPage() {
     const hoursProgram = gafanPrograms.find((g) => g.id === hoursProgramId)
     if (!hoursProgram) return
     const rows = parseGafanHourRows(hoursProgram)
+    const resolvedDayOfWeek = weekdayFromDate(hourDate)
     const row: GafanHourRow = {
       date: hourDate,
+      dayOfWeek: resolvedDayOfWeek,
       startTime: hourStartTime,
       endTime: hourEndTime,
       totalHours: Math.max(0, Number(hourTotal || 0)),
@@ -485,15 +503,40 @@ export default function SchoolViewPage() {
     const next = [...rows]
     if (hourEditIdx == null) next.push(row)
     else next[hourEditIdx] = row
+    const shouldTransferToOtherProgram =
+      canTransferAttendanceRows &&
+      hourEditIdx !== null &&
+      transferTargetProgramId &&
+      transferTargetProgramId !== hoursProgram.id
+    const sourceRowsAfterSave = shouldTransferToOtherProgram
+      ? rows.filter((_, i) => i !== hourEditIdx)
+      : next
     setHoursSaving(true)
     try {
       const res = await fetch(`/api/gafan/${encodeURIComponent(hoursProgram.id)}`, {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ schoolId: school.id, linkId: hoursProgram.linkId, hourRows: next }),
+        body: JSON.stringify({ schoolId: school.id, linkId: hoursProgram.linkId, hourRows: sourceRowsAfterSave }),
       })
       if (res.ok) {
+        if (shouldTransferToOtherProgram) {
+          const targetProgram = gafanPrograms.find((g) => g.id === transferTargetProgramId)
+          if (targetProgram) {
+            const targetRows = parseGafanHourRows(targetProgram)
+            const targetRes = await fetch(`/api/gafan/${encodeURIComponent(targetProgram.id)}`, {
+              method: "PATCH",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                schoolId: school.id,
+                linkId: targetProgram.linkId,
+                hourRows: [...targetRows, row],
+              }),
+            })
+            if (!targetRes.ok) throw new Error("Failed to transfer attendance row")
+          }
+        }
         resetHourForm()
         setHourDialogOpen(false)
         setHoursProgramId("")
@@ -1105,6 +1148,7 @@ export default function SchoolViewPage() {
                             <TableHeader>
                               <TableRow className="bg-muted/50">
                                 <TableHead className="text-right">תאריך</TableHead>
+                                <TableHead className="text-right">יום</TableHead>
                                 <TableHead className="text-right">שעת התחלה</TableHead>
                                 <TableHead className="text-right">שעת סיום</TableHead>
                                 <TableHead className="text-right">סה&quot;כ שעות</TableHead>
@@ -1114,12 +1158,13 @@ export default function SchoolViewPage() {
                             <TableBody>
                               {hourRows.length === 0 ? (
                                 <TableRow>
-                                  <TableCell colSpan={5} className="text-center text-muted-foreground">אין נתוני שעות</TableCell>
+                                  <TableCell colSpan={6} className="text-center text-muted-foreground">אין נתוני שעות</TableCell>
                                 </TableRow>
                               ) : (
                                 hourRows.map((r, idx) => (
                                   <TableRow key={`${program.id}-hr-${idx}`}>
                                     <TableCell>{safe(r.date)}</TableCell>
+                                    <TableCell>{safe(r.dayOfWeek || "—")}</TableCell>
                                     <TableCell>{safe(r.startTime)}</TableCell>
                                     <TableCell>{safe(r.endTime)}</TableCell>
                                     <TableCell>{Number(r.totalHours || 0)}</TableCell>
@@ -1135,14 +1180,22 @@ export default function SchoolViewPage() {
                                             setHourStartTime(r.startTime)
                                             setHourEndTime(r.endTime)
                                             setHourTotal(String(r.totalHours))
+                                            setTransferTargetProgramId("")
                                             setHourEditIdx(idx)
                                             setHourDialogOpen(true)
                                           }}
+                                          title="עריכה"
                                         >
-                                          עריכה
+                                          <Pencil className="h-4 w-4" />
                                         </Button>
-                                        <Button type="button" variant="outline" size="sm" onClick={() => void deleteHourRow(program, idx)}>
-                                          מחיקה
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => void deleteHourRow(program, idx)}
+                                          title="מחיקה"
+                                        >
+                                          <Trash2 className="h-4 w-4 text-red-600" />
                                         </Button>
                                       </div>
                                     </TableCell>
@@ -1167,6 +1220,28 @@ export default function SchoolViewPage() {
                       <Input type="time" value={hourEndTime} onChange={(e) => setHourEndTime(e.target.value)} />
                       <Input type="number" min={0} step="0.25" value={hourTotal} readOnly />
                     </div>
+                    {canTransferAttendanceRows && hourEditIdx !== null && (
+                      <div className="space-y-2">
+                        <Label>העברת השעות לתוכנית אחרת</Label>
+                        <Select value={transferTargetProgramId} onValueChange={setTransferTargetProgramId}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="בחר תוכנית יעד (לא חובה)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {gafanPrograms
+                              .filter((p) => p.id !== hoursProgramId)
+                              .map((p) => (
+                                <SelectItem key={p.id} value={p.id}>
+                                  {p.name}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          אם תבחר תוכנית יעד, השורה תועבר מהתוכנית הנוכחית לתוכנית היעד.
+                        </p>
+                      </div>
+                    )}
                     <div className="flex gap-2">
                       <Button type="button" disabled={!hoursProgramId || hoursSaving} onClick={() => void saveHourRow()}>
                         {hourEditIdx == null ? "הוספה" : "עדכון"}
