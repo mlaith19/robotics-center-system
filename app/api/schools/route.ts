@@ -1,6 +1,7 @@
 import { requireFeatureFromRequest } from "@/lib/feature-gate"
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant, ensureSessionMatchesTenant } from "@/lib/tenant/resolve-tenant"
+import { sessionRolesGrantFullAccess } from "@/lib/permissions"
 
 function s(v: unknown) {
   if (v === undefined || v === null) return null
@@ -17,7 +18,24 @@ export const GET = withTenantAuth(async (req, session) => {
   if (mismatch) return mismatch
   const db = tenant.db
   try {
-    const schools = await db`SELECT * FROM "School" ORDER BY "createdAt" DESC`
+    const isFullAccess = sessionRolesGrantFullAccess(session.roleKey, session.role)
+    if (isFullAccess) {
+      const schools = await db`SELECT * FROM "School" ORDER BY "createdAt" DESC`
+      return Response.json(schools)
+    }
+
+    const teacherRows = await db`SELECT id FROM "Teacher" WHERE "userId" = ${session.id} LIMIT 1`
+    if (teacherRows.length === 0) return Response.json([])
+    const teacherId = String((teacherRows[0] as { id: string }).id)
+
+    const schools = await db`
+      SELECT DISTINCT s.*
+      FROM "School" s
+      JOIN "GafanProgram" g ON g."schoolId" = s.id
+      WHERE g."teacherIds" IS NOT NULL
+        AND g."teacherIds" @> ${db.json([teacherId])}
+      ORDER BY s."createdAt" DESC
+    `
     return Response.json(schools)
   } catch (err) {
     console.error("GET /api/schools error:", err)

@@ -1,6 +1,7 @@
 import { requireFeatureFromRequest } from "@/lib/feature-gate"
 import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant, ensureSessionMatchesTenant } from "@/lib/tenant/resolve-tenant"
+import { sessionRolesGrantFullAccess } from "@/lib/permissions"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -20,7 +21,22 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
   const db = tenant.db
   const { id } = await params
   try {
-    const result = await db`SELECT * FROM "School" WHERE id = ${id}`
+    let result: any[] = []
+    if (sessionRolesGrantFullAccess(session.roleKey, session.role)) {
+      result = await db`SELECT * FROM "School" WHERE id = ${id}`
+    } else {
+      const teacherRows = await db`SELECT id FROM "Teacher" WHERE "userId" = ${session.id} LIMIT 1`
+      if (teacherRows.length === 0) return Response.json({ error: "School not found" }, { status: 404 })
+      const teacherId = String((teacherRows[0] as { id: string }).id)
+      result = await db`
+        SELECT DISTINCT s.*
+        FROM "School" s
+        JOIN "GafanProgram" g ON g."schoolId" = s.id
+        WHERE s.id = ${id}
+          AND g."teacherIds" IS NOT NULL
+          AND g."teacherIds" @> ${db.json([teacherId])}
+      `
+    }
     if (result.length === 0) return Response.json({ error: "School not found" }, { status: 404 })
     return Response.json(result[0])
   } catch (err) {

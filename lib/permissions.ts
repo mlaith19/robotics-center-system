@@ -119,6 +119,11 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       { id: "schools.view", name: "צפייה בבתי ספר", description: "צפייה ברשימת בתי ספר" },
       { id: "schools.edit", name: "עריכת בתי ספר", description: "יצירה ועריכת בתי ספר" },
       { id: "schools.delete", name: "מחיקת בתי ספר", description: "מחיקת בתי ספר" },
+      { id: "schools.tab.general", name: "טאב כללי (בית ספר)", description: "הצגת טאב כללי בדף פרטי בית ספר" },
+      { id: "schools.tab.gafan", name: "טאב תוכניות גפ\"ן (בית ספר)", description: "הצגת טאב תוכניות גפ\"ן בדף פרטי בית ספר" },
+      { id: "schools.tab.attendance", name: "טאב נוכחות (בית ספר)", description: "הצגת טאב נוכחות בדף פרטי בית ספר" },
+      { id: "schools.tab.debtors", name: "טאב חייבים (בית ספר)", description: "הצגת טאב חייבים בדף פרטי בית ספר" },
+      { id: "schools.tab.payments", name: "טאב תשלומים (בית ספר)", description: "הצגת טאב תשלומים בדף פרטי בית ספר" },
     ],
   },
   {
@@ -261,6 +266,17 @@ export function getAllKaytanaCampPermissionIds(): string[] {
 /** צפייה + עריכה בלבד לכל טאבי קייטנה */
 export function getKaytanaCampViewEditPermissionIds(): string[] {
   return CAMP_COURSE_TAB_KEYS.flatMap((key) => [`courses.camp.${key}.view`, `courses.camp.${key}.edit`])
+}
+
+/** כל הרשאות טאבי דף בית ספר */
+export function getAllSchoolTabPermissionIds(): string[] {
+  return [
+    "schools.tab.general",
+    "schools.tab.gafan",
+    "schools.tab.attendance",
+    "schools.tab.debtors",
+    "schools.tab.payments",
+  ]
 }
 
 const LEGACY_CAMP_TAB_VIEW: Record<CampCourseTabKey, readonly string[]> = {

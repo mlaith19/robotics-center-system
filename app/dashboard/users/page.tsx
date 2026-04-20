@@ -52,6 +52,7 @@ import {
   getRoleById,
   getAllKaytanaCampPermissionIds,
   getKaytanaCampViewEditPermissionIds,
+  getAllSchoolTabPermissionIds,
 } from "@/lib/permissions"
 import { PageHeader } from "@/components/page-header"
 import { useLanguage } from "@/lib/i18n/context"
@@ -741,6 +742,19 @@ export default function UsersPage() {
                   <Label className="text-lg font-semibold">הרשאות</Label>
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="outline">{selectedPermissions.length} הרשאות נבחרו</Badge>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() =>
+                        setSelectedPermissions((prev) => [
+                          ...new Set([...prev, ...getAllSchoolTabPermissionIds()]),
+                        ])
+                      }
+                    >
+                      + בית ספר: כל הטאבים
+                    </Button>
                     <Button
                       type="button"
                       variant="secondary"

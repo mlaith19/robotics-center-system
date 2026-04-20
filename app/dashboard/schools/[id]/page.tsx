@@ -48,6 +48,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { useCurrentUser } from "@/lib/auth-context"
+import { hasPermission, sessionRolesGrantFullAccess } from "@/lib/permissions"
 
 interface School {
   id: string
@@ -257,6 +259,25 @@ export default function SchoolViewPage() {
   const [hourTotal, setHourTotal] = useState("0")
   const [hourEditIdx, setHourEditIdx] = useState<number | null>(null)
   const [hoursSaving, setHoursSaving] = useState(false)
+  const currentUser = useCurrentUser()
+  const userPerms = currentUser?.permissions || []
+  const isFullAccess = sessionRolesGrantFullAccess(currentUser?.roleKey, currentUser?.role)
+  const canViewGeneralTab = isFullAccess || hasPermission(userPerms, "schools.tab.general")
+  const canViewGafanTab = isFullAccess || hasPermission(userPerms, "schools.tab.gafan")
+  const canViewAttendanceTab = isFullAccess || hasPermission(userPerms, "schools.tab.attendance")
+  const canViewDebtorsTab = isFullAccess || hasPermission(userPerms, "schools.tab.debtors")
+  const canViewPaymentsTab = isFullAccess || hasPermission(userPerms, "schools.tab.payments")
+  const defaultTab = canViewGeneralTab
+    ? "general"
+    : canViewGafanTab
+      ? "gafan"
+      : canViewAttendanceTab
+        ? "teacher-attendance"
+        : canViewDebtorsTab
+          ? "debtors"
+          : canViewPaymentsTab
+            ? "payments"
+            : "general"
 
   useEffect(() => {
     if (isNewPage) return
@@ -569,43 +590,53 @@ export default function SchoolViewPage() {
       </div>
 
       <Card className="overflow-hidden">
-        <Tabs defaultValue="general" dir="rtl">
+        <Tabs defaultValue={defaultTab} dir="rtl">
           <div className="overflow-x-auto border-b bg-muted/30">
             <TabsList className="inline-flex h-auto min-h-10 w-max min-w-full flex-wrap justify-start gap-0 rounded-none bg-transparent p-0 sm:grid sm:w-full sm:grid-cols-5">
-              <TabsTrigger
-                value="general"
-                className="rounded-none px-3 py-2.5 text-xs data-[state=active]:bg-background sm:text-sm"
-              >
-                כללי
-              </TabsTrigger>
-              <TabsTrigger
-                value="gafan"
-                className="rounded-none px-3 py-2.5 text-xs data-[state=active]:bg-background sm:text-sm"
-              >
-                תוכניות גפ&quot;ן
-              </TabsTrigger>
-              <TabsTrigger
-                value="teacher-attendance"
-                className="rounded-none px-3 py-2.5 text-xs data-[state=active]:bg-background sm:text-sm"
-              >
-                נוכחות
-              </TabsTrigger>
-              <TabsTrigger
-                value="debtors"
-                className="rounded-none px-3 py-2.5 text-xs data-[state=active]:bg-background sm:text-sm"
-              >
-                חייבים
-              </TabsTrigger>
-              <TabsTrigger
-                value="payments"
-                className="rounded-none px-3 py-2.5 text-xs data-[state=active]:bg-background sm:text-sm"
-              >
-                תשלומים
-              </TabsTrigger>
+              {canViewGeneralTab && (
+                <TabsTrigger
+                  value="general"
+                  className="rounded-none px-3 py-2.5 text-xs data-[state=active]:bg-background sm:text-sm"
+                >
+                  כללי
+                </TabsTrigger>
+              )}
+              {canViewGafanTab && (
+                <TabsTrigger
+                  value="gafan"
+                  className="rounded-none px-3 py-2.5 text-xs data-[state=active]:bg-background sm:text-sm"
+                >
+                  תוכניות גפ&quot;ן
+                </TabsTrigger>
+              )}
+              {canViewAttendanceTab && (
+                <TabsTrigger
+                  value="teacher-attendance"
+                  className="rounded-none px-3 py-2.5 text-xs data-[state=active]:bg-background sm:text-sm"
+                >
+                  נוכחות
+                </TabsTrigger>
+              )}
+              {canViewDebtorsTab && (
+                <TabsTrigger
+                  value="debtors"
+                  className="rounded-none px-3 py-2.5 text-xs data-[state=active]:bg-background sm:text-sm"
+                >
+                  חייבים
+                </TabsTrigger>
+              )}
+              {canViewPaymentsTab && (
+                <TabsTrigger
+                  value="payments"
+                  className="rounded-none px-3 py-2.5 text-xs data-[state=active]:bg-background sm:text-sm"
+                >
+                  תשלומים
+                </TabsTrigger>
+              )}
             </TabsList>
           </div>
 
-          <TabsContent value="general" className="space-y-4 p-3 sm:space-y-6 sm:p-6">
+          {canViewGeneralTab && <TabsContent value="general" className="space-y-4 p-3 sm:space-y-6 sm:p-6">
             <div className="flex flex-col items-center py-6 text-center">
               <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-blue-100">
                 <Users className="h-10 w-10 text-blue-600" />
@@ -700,9 +731,9 @@ export default function SchoolViewPage() {
                 <div className="whitespace-pre-wrap text-right font-medium">{school.notes}</div>
               </div>
             )}
-          </TabsContent>
+          </TabsContent>}
 
-          <TabsContent value="gafan" className="space-y-6 p-3 sm:p-6">
+          {canViewGafanTab && <TabsContent value="gafan" className="space-y-6 p-3 sm:p-6">
             {tabDataLoading ? (
               <div className="flex justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -1024,9 +1055,9 @@ export default function SchoolViewPage() {
 
               </>
             )}
-          </TabsContent>
+          </TabsContent>}
 
-          <TabsContent value="teacher-attendance" className="p-3 sm:p-6">
+          {canViewAttendanceTab && <TabsContent value="teacher-attendance" className="p-3 sm:p-6">
             {tabDataLoading ? (
               <div className="flex justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -1146,9 +1177,9 @@ export default function SchoolViewPage() {
                 </Dialog>
               </div>
             )}
-          </TabsContent>
+          </TabsContent>}
 
-          <TabsContent value="debtors" className="p-3 sm:p-6">
+          {canViewDebtorsTab && <TabsContent value="debtors" className="p-3 sm:p-6">
             {tabDataLoading ? (
               <div className="flex justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -1203,9 +1234,9 @@ export default function SchoolViewPage() {
                 </CardContent>
               </Card>
             )}
-          </TabsContent>
+          </TabsContent>}
 
-          <TabsContent value="payments" className="p-3 sm:p-6">
+          {canViewPaymentsTab && <TabsContent value="payments" className="p-3 sm:p-6">
             {tabDataLoading ? (
               <div className="flex justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -1247,7 +1278,7 @@ export default function SchoolViewPage() {
                 </Table>
               </div>
             )}
-          </TabsContent>
+          </TabsContent>}
         </Tabs>
       </Card>
     </div>
