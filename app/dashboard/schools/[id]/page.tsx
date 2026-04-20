@@ -524,6 +524,11 @@ export default function SchoolViewPage() {
         body: JSON.stringify({ schoolId: school.id, linkId: hoursProgram.linkId, hourRows: next }),
       })
       if (res.ok) {
+        const rowDate = new Date(`${row.date}T12:00:00`)
+        if (!Number.isNaN(rowDate.getTime())) {
+          const monthKey = `${rowDate.getFullYear()}-${String(rowDate.getMonth() + 1).padStart(2, "0")}`
+          setSelectedAttendanceMonth(monthKey)
+        }
         resetHourForm()
         setHourDialogOpen(false)
         setHoursProgramId("")
@@ -697,6 +702,9 @@ export default function SchoolViewPage() {
       setSelectedAttendanceMonth(attendanceMonthGroups[attendanceMonthGroups.length - 1].monthKey)
     }
   }, [attendanceMonthGroups, selectedAttendanceMonth])
+
+  const activeAttendanceMonth =
+    selectedAttendanceMonth || attendanceMonthGroups[attendanceMonthGroups.length - 1]?.monthKey || ""
 
   if (isNewPage) {
     return <NewSchoolPage />
@@ -1252,7 +1260,7 @@ export default function SchoolViewPage() {
                       <div className="rounded-lg border p-6 text-center text-muted-foreground">אין נתוני נוכחות להצגה</div>
                     ) : (
                       <Tabs
-                        value={selectedAttendanceMonth}
+                        value={activeAttendanceMonth}
                         onValueChange={setSelectedAttendanceMonth}
                         dir="rtl"
                         className="space-y-3"
