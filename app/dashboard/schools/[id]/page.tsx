@@ -277,6 +277,7 @@ export default function SchoolViewPage() {
   const [selectedAttendanceMonth, setSelectedAttendanceMonth] = useState("")
   const [pendingAssignTargetByKey, setPendingAssignTargetByKey] = useState<Record<string, string>>({})
   const [hoursSaving, setHoursSaving] = useState(false)
+  const [hourSaveError, setHourSaveError] = useState("")
   const currentUser = useCurrentUser()
   const userPerms = currentUser?.permissions || []
   const isFullAccess = sessionRolesGrantFullAccess(currentUser?.roleKey, currentUser?.role)
@@ -326,14 +327,15 @@ export default function SchoolViewPage() {
   const reloadTabData = useCallback(async () => {
     if (isNewPage || !school?.id) return
     const sid = school.id
+    const ts = Date.now()
     setTabDataLoading(true)
     try {
       const [gRes, eRes, pRes, aRes, tRes] = await Promise.all([
-        fetch(`/api/gafan?schoolId=${encodeURIComponent(sid)}`),
-        fetch(`/api/enrollments?schoolId=${encodeURIComponent(sid)}`),
-        fetch(`/api/payments?schoolId=${encodeURIComponent(sid)}`),
-        fetch(`/api/attendance?schoolId=${encodeURIComponent(sid)}`),
-        fetch(`/api/teachers`),
+        fetch(`/api/gafan?schoolId=${encodeURIComponent(sid)}&_ts=${ts}`, { cache: "no-store", credentials: "include" }),
+        fetch(`/api/enrollments?schoolId=${encodeURIComponent(sid)}&_ts=${ts}`, { cache: "no-store", credentials: "include" }),
+        fetch(`/api/payments?schoolId=${encodeURIComponent(sid)}&_ts=${ts}`, { cache: "no-store", credentials: "include" }),
+        fetch(`/api/attendance?schoolId=${encodeURIComponent(sid)}&_ts=${ts}`, { cache: "no-store", credentials: "include" }),
+        fetch(`/api/teachers?_ts=${ts}`, { cache: "no-store", credentials: "include" }),
       ])
       setGafanPrograms(gRes.ok ? await gRes.json() : [])
       setSchoolEnrollments(eRes.ok ? await eRes.json() : [])
@@ -494,9 +496,11 @@ export default function SchoolViewPage() {
     setHourEndTime("")
     setHourTotal("0")
     setHourEditIdx(null)
+    setHourSaveError("")
   }
 
   const saveHourRow = async () => {
+    setHourSaveError("")
     if (!school?.id) return
     const holderProgramId = hourDialogContext === "attendance" ? (gafanPrograms[0]?.id || "") : hoursProgramId
     if (!holderProgramId) return
@@ -533,7 +537,13 @@ export default function SchoolViewPage() {
         setHourDialogOpen(false)
         setHoursProgramId("")
         await reloadTabData()
+      } else {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null
+        setHourSaveError(body?.error?.trim() || "שמירת הנוכחות נכשלה. נסה שוב.")
       }
+    } catch (err) {
+      console.error("saveHourRow error:", err)
+      setHourSaveError("אירעה שגיאת רשת בזמן השמירה. בדוק חיבור ונסה שוב.")
     } finally {
       setHoursSaving(false)
     }
@@ -590,6 +600,8 @@ export default function SchoolViewPage() {
         monthLabel: string
         totalHours: number
         rows: Array<{
+          programId: string
+          programName: string
           date: string
           startTime: string
           endTime: string
@@ -600,6 +612,9 @@ export default function SchoolViewPage() {
     >()
     for (const program of gafanPrograms) {
       const rows = parseGafanHourRows(program)
+      const programIndex = gafanPrograms.findIndex((g) => g.id === program.id)
+      const programSerial = programIndex >= 0 ? programIndex + 1 : 0
+      const programName = `${program.name}${programSerial ? ` (#${programSerial})` : ""}`
       for (const row of rows) {
         const d = new Date(`${row.date}T12:00:00`)
         if (Number.isNaN(d.getTime())) continue
@@ -607,6 +622,8 @@ export default function SchoolViewPage() {
         const monthLabel = new Intl.DateTimeFormat("he-IL", { month: "long", year: "numeric" }).format(d)
         const bucket = monthMap.get(key) ?? { monthLabel, totalHours: 0, rows: [] }
         bucket.rows.push({
+          programId: program.id,
+          programName,
           date: row.date,
           startTime: row.startTime,
           endTime: row.endTime,
@@ -656,13 +673,33 @@ export default function SchoolViewPage() {
     if (!school?.id) return
     const pending = pendingAttendanceRows.find((r) => r.key === rowKey)
     const targetProgramId = pendingAssignTargetByKey[rowKey]
-    if (!pending || !targetProgramId || targetProgramId === pending.holderProgramId) return
+    if (!pending || !targetProgramId) return
     const sourceProgram = gafanPrograms.find((g) => g.id === pending.holderProgramId)
     const targetProgram = gafanPrograms.find((g) => g.id === targetProgramId)
     if (!sourceProgram || !targetProgram) return
 
     setHoursSaving(true)
     try {
+      if (targetProgramId === pending.holderProgramId) {
+        const sourceRowsAfterApprove = parseGafanHourRows(sourceProgram).map((r, idx) =>
+          idx === pending.rowIndex ? { ...r, pendingAssignment: false } : r,
+        )
+        const sourceRes = await fetch(`/api/gafan/${encodeURIComponent(sourceProgram.id)}`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ schoolId: school.id, linkId: sourceProgram.linkId, hourRows: sourceRowsAfterApprove }),
+        })
+        if (!sourceRes.ok) throw new Error("failed approving row in source")
+        setPendingAssignTargetByKey((prev) => {
+          const next = { ...prev }
+          delete next[rowKey]
+          return next
+        })
+        await reloadTabData()
+        return
+      }
+
       const sourceRows = parseGafanHourRows(sourceProgram).filter((_, idx) => idx !== pending.rowIndex)
       const sourceRes = await fetch(`/api/gafan/${encodeURIComponent(sourceProgram.id)}`, {
         method: "PATCH",
@@ -1279,6 +1316,7 @@ export default function SchoolViewPage() {
                                 <TableHeader>
                                   <TableRow className="bg-muted/50">
                                     <TableHead className="text-right">מס׳</TableHead>
+                                    <TableHead className="text-right">תוכנית</TableHead>
                                     <TableHead className="text-right">תאריך</TableHead>
                                     <TableHead className="text-right">שעת התחלה</TableHead>
                                     <TableHead className="text-right">שעת סיום</TableHead>
@@ -1290,6 +1328,7 @@ export default function SchoolViewPage() {
                                   {group.rows.map((row, idx) => (
                                     <TableRow key={`${group.monthKey}-${idx}`}>
                                       <TableCell>{idx + 1}</TableCell>
+                                      <TableCell>{row.programName}</TableCell>
                                       <TableCell>{safe(row.date)}</TableCell>
                                       <TableCell>{safe(row.startTime)}</TableCell>
                                       <TableCell>{safe(row.endTime)}</TableCell>
@@ -1340,6 +1379,11 @@ export default function SchoolViewPage() {
                       <Input type="time" value={hourEndTime} onChange={(e) => setHourEndTime(e.target.value)} />
                       <Input type="number" min={0} step="0.25" value={hourTotal} readOnly />
                     </div>
+                    {hourSaveError ? (
+                      <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                        {hourSaveError}
+                      </div>
+                    ) : null}
                     <div className="flex gap-2">
                       <Button
                         type="button"
@@ -1405,13 +1449,12 @@ export default function SchoolViewPage() {
                                         <SelectValue placeholder="בחר תוכנית לאישור" />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        {gafanPrograms
-                                          .filter((g) => g.id !== p.holderProgramId)
-                                          .map((g) => (
-                                            <SelectItem key={g.id} value={g.id}>
-                                              {g.name}
-                                            </SelectItem>
-                                          ))}
+                                        {gafanPrograms.map((g, programIdx) => (
+                                          <SelectItem key={g.id} value={g.id}>
+                                            {g.name} (#{programIdx + 1})
+                                            {g.id === p.holderProgramId ? " - אותה תוכנית" : ""}
+                                          </SelectItem>
+                                        ))}
                                       </SelectContent>
                                     </Select>
                                     <Button
@@ -1432,6 +1475,7 @@ export default function SchoolViewPage() {
                     </div>
                   )}
                   {gafanPrograms.map((program) => {
+                    const programIndex = gafanPrograms.findIndex((g) => g.id === program.id)
                     const workshopRows = parseGafanWorkshopRows(program)
                     const allocated = workshopRows.reduce((s, r) => s + Number(r.hours || 0), 0)
                     const hourRows = parseGafanHourRows(program)
@@ -1442,7 +1486,9 @@ export default function SchoolViewPage() {
                     return (
                       <div key={program.id} className="space-y-3 rounded-lg border p-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="font-semibold">{program.name}</div>
+                          <div className="font-semibold">
+                            {program.name} (#{programIndex + 1})
+                          </div>
                           <Button
                             type="button"
                             size="sm"
