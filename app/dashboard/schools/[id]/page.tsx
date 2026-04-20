@@ -159,6 +159,7 @@ type GafanHourRow = {
   startTime: string
   endTime: string
   totalHours: number
+  pendingAssignment?: boolean
 }
 
 function parseGafanHourRows(row: GafanRow): GafanHourRow[] {
@@ -172,6 +173,7 @@ function parseGafanHourRows(row: GafanRow): GafanHourRow[] {
       startTime: String(x.startTime ?? ""),
       endTime: String(x.endTime ?? ""),
       totalHours: Number(x.totalHours ?? 0) || 0,
+      pendingAssignment: Boolean(x.pendingAssignment),
     }
   })
 }
@@ -271,13 +273,19 @@ export default function SchoolViewPage() {
   const [hourEndTime, setHourEndTime] = useState("")
   const [hourTotal, setHourTotal] = useState("0")
   const [hourEditIdx, setHourEditIdx] = useState<number | null>(null)
+  const [hourDialogContext, setHourDialogContext] = useState<"attendance" | "ngafan">("attendance")
   const [selectedAttendanceMonth, setSelectedAttendanceMonth] = useState("")
+  const [pendingAssignTargetByKey, setPendingAssignTargetByKey] = useState<Record<string, string>>({})
   const [hoursSaving, setHoursSaving] = useState(false)
   const currentUser = useCurrentUser()
   const userPerms = currentUser?.permissions || []
   const isFullAccess = sessionRolesGrantFullAccess(currentUser?.roleKey, currentUser?.role)
   const canViewGeneralTab = isFullAccess || hasPermission(userPerms, "schools.tab.general")
   const canViewGafanTab = isFullAccess || hasPermission(userPerms, "schools.tab.gafan")
+  const roleToken = (currentUser?.roleKey ?? currentUser?.role ?? "").toString().trim().toLowerCase()
+  const isTeacherRole = roleToken === "teacher" || roleToken.includes("teacher") || roleToken.includes("מורה")
+  const canViewNgafanTab =
+    !isTeacherRole && (isFullAccess || hasPermission(userPerms, "schools.tab.ngafan"))
   const canViewAttendanceTab = isFullAccess || hasPermission(userPerms, "schools.tab.attendance")
   const canViewDebtorsTab = isFullAccess || hasPermission(userPerms, "schools.tab.debtors")
   const canViewPaymentsTab = isFullAccess || hasPermission(userPerms, "schools.tab.payments")
@@ -286,6 +294,8 @@ export default function SchoolViewPage() {
     ? "general"
     : canViewGafanTab
       ? "gafan"
+      : canViewNgafanTab
+        ? "ngafan"
       : canViewAttendanceTab
         ? "teacher-attendance"
         : canViewDebtorsTab
@@ -487,8 +497,10 @@ export default function SchoolViewPage() {
   }
 
   const saveHourRow = async () => {
-    if (!hoursProgramId || !school?.id) return
-    const hoursProgram = gafanPrograms.find((g) => g.id === hoursProgramId)
+    if (!school?.id) return
+    const holderProgramId = hourDialogContext === "attendance" ? (gafanPrograms[0]?.id || "") : hoursProgramId
+    if (!holderProgramId) return
+    const hoursProgram = gafanPrograms.find((g) => g.id === holderProgramId)
     if (!hoursProgram) return
     const rows = parseGafanHourRows(hoursProgram)
     const resolvedDayOfWeek = weekdayFromDate(hourDate)
@@ -498,6 +510,7 @@ export default function SchoolViewPage() {
       startTime: hourStartTime,
       endTime: hourEndTime,
       totalHours: Math.max(0, Number(hourTotal || 0)),
+      pendingAssignment: hourDialogContext === "attendance",
     }
     const next = [...rows]
     if (hourEditIdx == null) next.push(row)
@@ -568,7 +581,17 @@ export default function SchoolViewPage() {
   const attendanceMonthGroups = useMemo(() => {
     const monthMap = new Map<
       string,
-      { monthLabel: string; totalHours: number; rows: Array<{ date: string; startTime: string; endTime: string; totalHours: number }> }
+      {
+        monthLabel: string
+        totalHours: number
+        rows: Array<{
+          date: string
+          startTime: string
+          endTime: string
+          totalHours: number
+          status: "approved" | "pending"
+        }>
+      }
     >()
     for (const program of gafanPrograms) {
       const rows = parseGafanHourRows(program)
@@ -583,6 +606,7 @@ export default function SchoolViewPage() {
           startTime: row.startTime,
           endTime: row.endTime,
           totalHours: Number(row.totalHours || 0),
+          status: row.pendingAssignment ? "pending" : "approved",
         })
         bucket.totalHours += Number(row.totalHours || 0)
         monthMap.set(key, bucket)
@@ -598,6 +622,71 @@ export default function SchoolViewPage() {
       }))
     return out
   }, [gafanPrograms])
+
+  const pendingAttendanceRows = useMemo(() => {
+    const out: Array<{
+      key: string
+      holderProgramId: string
+      holderProgramName: string
+      rowIndex: number
+      row: GafanHourRow
+    }> = []
+    for (const program of gafanPrograms) {
+      const rows = parseGafanHourRows(program)
+      rows.forEach((row, idx) => {
+        if (!row.pendingAssignment) return
+        out.push({
+          key: `${program.id}::${idx}`,
+          holderProgramId: program.id,
+          holderProgramName: program.name,
+          rowIndex: idx,
+          row,
+        })
+      })
+    }
+    return out.sort((a, b) => a.row.date.localeCompare(b.row.date))
+  }, [gafanPrograms])
+
+  const assignPendingAttendanceRow = async (rowKey: string) => {
+    if (!school?.id) return
+    const pending = pendingAttendanceRows.find((r) => r.key === rowKey)
+    const targetProgramId = pendingAssignTargetByKey[rowKey]
+    if (!pending || !targetProgramId || targetProgramId === pending.holderProgramId) return
+    const sourceProgram = gafanPrograms.find((g) => g.id === pending.holderProgramId)
+    const targetProgram = gafanPrograms.find((g) => g.id === targetProgramId)
+    if (!sourceProgram || !targetProgram) return
+
+    setHoursSaving(true)
+    try {
+      const sourceRows = parseGafanHourRows(sourceProgram).filter((_, idx) => idx !== pending.rowIndex)
+      const sourceRes = await fetch(`/api/gafan/${encodeURIComponent(sourceProgram.id)}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schoolId: school.id, linkId: sourceProgram.linkId, hourRows: sourceRows }),
+      })
+      if (!sourceRes.ok) throw new Error("failed updating source")
+
+      const targetRows = parseGafanHourRows(targetProgram)
+      const assignedRow: GafanHourRow = { ...pending.row, pendingAssignment: false }
+      const targetRes = await fetch(`/api/gafan/${encodeURIComponent(targetProgram.id)}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schoolId: school.id, linkId: targetProgram.linkId, hourRows: [...targetRows, assignedRow] }),
+      })
+      if (!targetRes.ok) throw new Error("failed updating target")
+
+      setPendingAssignTargetByKey((prev) => {
+        const next = { ...prev }
+        delete next[rowKey]
+        return next
+      })
+      await reloadTabData()
+    } finally {
+      setHoursSaving(false)
+    }
+  }
 
   useEffect(() => {
     if (attendanceMonthGroups.length === 0) {
@@ -655,7 +744,7 @@ export default function SchoolViewPage() {
       <Card className="overflow-hidden">
         <Tabs defaultValue={defaultTab} dir="rtl">
           <div className="overflow-x-auto border-b bg-muted/30">
-            <TabsList className="inline-flex h-auto min-h-10 w-max min-w-full flex-wrap justify-start gap-0 rounded-none bg-transparent p-0 sm:grid sm:w-full sm:grid-cols-5">
+            <TabsList className="inline-flex h-auto min-h-10 w-max min-w-full flex-wrap justify-start gap-0 rounded-none bg-transparent p-0 sm:flex sm:w-full">
               {canViewGeneralTab && (
                 <TabsTrigger
                   value="general"
@@ -678,6 +767,14 @@ export default function SchoolViewPage() {
                   className="rounded-none px-3 py-2.5 text-xs data-[state=active]:bg-background sm:text-sm"
                 >
                   נוכחות
+                </TabsTrigger>
+              )}
+              {canViewNgafanTab && (
+                <TabsTrigger
+                  value="ngafan"
+                  className="rounded-none px-3 py-2.5 text-xs data-[state=active]:bg-background sm:text-sm"
+                >
+                  נ.גפ&quot;ן
                 </TabsTrigger>
               )}
               {canViewDebtorsTab && (
@@ -876,6 +973,7 @@ export default function SchoolViewPage() {
                                       variant="outline"
                                       size="sm"
                                       onClick={() => {
+                                        setHourDialogContext("ngafan")
                                         setHoursProgramId(g.id)
                                         resetHourForm()
                                         setHourDialogOpen(true)
@@ -1140,6 +1238,7 @@ export default function SchoolViewPage() {
                         type="button"
                         size="sm"
                         onClick={() => {
+                          setHourDialogContext("attendance")
                           setHoursProgramId(gafanPrograms[0]?.id || "")
                           resetHourForm()
                           setHourDialogOpen(true)
@@ -1176,6 +1275,7 @@ export default function SchoolViewPage() {
                                     <TableHead className="text-right">שעת התחלה</TableHead>
                                     <TableHead className="text-right">שעת סיום</TableHead>
                                     <TableHead className="text-right">סה&quot;כ שעות</TableHead>
+                                    <TableHead className="text-right">סטטוס</TableHead>
                                   </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -1186,6 +1286,13 @@ export default function SchoolViewPage() {
                                       <TableCell>{safe(row.startTime)}</TableCell>
                                       <TableCell>{safe(row.endTime)}</TableCell>
                                       <TableCell>{Number(row.totalHours || 0)}</TableCell>
+                                      <TableCell>
+                                        {row.status === "approved" ? (
+                                          <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">מאושר</span>
+                                        ) : (
+                                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">ממתין לאישור</span>
+                                        )}
+                                      </TableCell>
                                     </TableRow>
                                   ))}
                                 </TableBody>
@@ -1200,23 +1307,25 @@ export default function SchoolViewPage() {
                 <Dialog open={hourDialogOpen} onOpenChange={setHourDialogOpen}>
                   <DialogContent dir="rtl" className="sm:max-w-lg">
                     <DialogHeader>
-                      <DialogTitle>הוספת שעות</DialogTitle>
+                      <DialogTitle>{hourDialogContext === "attendance" ? "הוספת נוכחות מורה" : "הוספת שעות"}</DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-2">
-                      <Label>תוכנית</Label>
-                      <Select value={hoursProgramId} onValueChange={setHoursProgramId}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="בחר תוכנית" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {gafanPrograms.map((program) => (
-                            <SelectItem key={program.id} value={program.id}>
-                              {program.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    {hourDialogContext === "ngafan" && (
+                      <div className="space-y-2">
+                        <Label>תוכנית</Label>
+                        <Select value={hoursProgramId} onValueChange={setHoursProgramId}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="בחר תוכנית" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {gafanPrograms.map((program) => (
+                              <SelectItem key={program.id} value={program.id}>
+                                {program.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                     <div className="grid gap-2 md:grid-cols-4">
                       <Input type="date" value={hourDate} onChange={(e) => setHourDate(e.target.value)} />
                       <Input type="time" value={hourStartTime} onChange={(e) => setHourStartTime(e.target.value)} />
@@ -1224,13 +1333,197 @@ export default function SchoolViewPage() {
                       <Input type="number" min={0} step="0.25" value={hourTotal} readOnly />
                     </div>
                     <div className="flex gap-2">
-                      <Button type="button" disabled={!hoursProgramId || hoursSaving} onClick={() => void saveHourRow()}>
+                      <Button
+                        type="button"
+                        disabled={hourDialogContext === "ngafan" ? (!hoursProgramId || hoursSaving) : (gafanPrograms.length === 0 || hoursSaving)}
+                        onClick={() => void saveHourRow()}
+                      >
                         הוספה
                       </Button>
                       <Button type="button" variant="outline" onClick={resetHourForm}>נקה</Button>
                     </div>
                   </DialogContent>
                 </Dialog>
+              </div>
+            )}
+          </TabsContent>}
+
+          {canViewNgafanTab && <TabsContent value="ngafan" className="p-3 sm:p-6">
+            {tabDataLoading ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {gafanPrograms.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
+                    <CalendarCheck className="mb-4 h-12 w-12 opacity-50" />
+                    <p>אין תוכניות גפ&quot;ן משויכות לבית הספר</p>
+                  </div>
+                ) : (
+                  <>
+                  {pendingAttendanceRows.length > 0 && (
+                    <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50/40 p-3">
+                      <div className="font-semibold">שעות ממתינות לאישור</div>
+                      <div className="overflow-x-auto rounded-md border bg-white">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-muted/50">
+                              <TableHead className="text-right">מס׳</TableHead>
+                              <TableHead className="text-right">תאריך</TableHead>
+                              <TableHead className="text-right">שעת התחלה</TableHead>
+                              <TableHead className="text-right">שעת סיום</TableHead>
+                              <TableHead className="text-right">סה&quot;כ שעות</TableHead>
+                              <TableHead className="text-right">תוכנית מקור</TableHead>
+                              <TableHead className="text-right">אישור לתוכנית</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {pendingAttendanceRows.map((p, idx) => (
+                              <TableRow key={p.key}>
+                                <TableCell>{idx + 1}</TableCell>
+                                <TableCell>{safe(p.row.date)}</TableCell>
+                                <TableCell>{safe(p.row.startTime)}</TableCell>
+                                <TableCell>{safe(p.row.endTime)}</TableCell>
+                                <TableCell>{Number(p.row.totalHours || 0)}</TableCell>
+                                <TableCell>{p.holderProgramName}</TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    <Select
+                                      value={pendingAssignTargetByKey[p.key] || ""}
+                                      onValueChange={(v) => setPendingAssignTargetByKey((prev) => ({ ...prev, [p.key]: v }))}
+                                    >
+                                      <SelectTrigger className="w-[220px]">
+                                        <SelectValue placeholder="בחר תוכנית לאישור" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {gafanPrograms
+                                          .filter((g) => g.id !== p.holderProgramId)
+                                          .map((g) => (
+                                            <SelectItem key={g.id} value={g.id}>
+                                              {g.name}
+                                            </SelectItem>
+                                          ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      disabled={!pendingAssignTargetByKey[p.key] || hoursSaving}
+                                      onClick={() => void assignPendingAttendanceRow(p.key)}
+                                    >
+                                      אשר
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  )}
+                  {gafanPrograms.map((program) => {
+                    const workshopRows = parseGafanWorkshopRows(program)
+                    const allocated = workshopRows.reduce((s, r) => s + Number(r.hours || 0), 0)
+                    const hourRows = parseGafanHourRows(program)
+                      .filter((r) => !r.pendingAssignment)
+                      .sort((a, b) => a.date.localeCompare(b.date))
+                    const used = hourRows.reduce((s, r) => s + Number(r.totalHours || 0), 0)
+                    const balance = allocated - used
+                    return (
+                      <div key={program.id} className="space-y-3 rounded-lg border p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="font-semibold">{program.name}</div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => {
+                              setHourDialogContext("ngafan")
+                              setHoursProgramId(program.id)
+                              resetHourForm()
+                              setHourDialogOpen(true)
+                            }}
+                          >
+                            הוספה
+                          </Button>
+                        </div>
+                        <div className="grid gap-2 md:grid-cols-2">
+                          <div className="rounded-md border bg-muted/30 px-3 py-2">
+                            שעות מוקצה לתוכנית: <strong>{allocated.toFixed(2)}</strong>
+                          </div>
+                          <div className="rounded-md border bg-muted/30 px-3 py-2">
+                            יתרת שעות: <strong>{balance.toFixed(2)}</strong>
+                          </div>
+                        </div>
+                        <div className="overflow-x-auto rounded-md border">
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="bg-muted/50">
+                                <TableHead className="text-right">מס׳</TableHead>
+                                <TableHead className="text-right">תאריך</TableHead>
+                                <TableHead className="text-right">שעת התחלה</TableHead>
+                                <TableHead className="text-right">שעת סיום</TableHead>
+                                <TableHead className="text-right">סה&quot;כ שעות</TableHead>
+                                <TableHead className="text-center">פעולות</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {hourRows.length === 0 ? (
+                                <TableRow>
+                                  <TableCell colSpan={6} className="text-center text-muted-foreground">אין נתוני שעות</TableCell>
+                                </TableRow>
+                              ) : (
+                                hourRows.map((r, idx) => (
+                                  <TableRow key={`${program.id}-hr-${idx}`}>
+                                    <TableCell>{idx + 1}</TableCell>
+                                    <TableCell>{safe(r.date)}</TableCell>
+                                    <TableCell>{safe(r.startTime)}</TableCell>
+                                    <TableCell>{safe(r.endTime)}</TableCell>
+                                    <TableCell>{Number(r.totalHours || 0)}</TableCell>
+                                    <TableCell className="text-center">
+                                      <div className="flex items-center justify-center gap-1">
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => {
+                                            setHourDialogContext("ngafan")
+                                            setHoursProgramId(program.id)
+                                            setHourDate(r.date)
+                                            setHourStartTime(r.startTime)
+                                            setHourEndTime(r.endTime)
+                                            setHourTotal(String(r.totalHours))
+                                            setHourEditIdx(idx)
+                                            setHourDialogOpen(true)
+                                          }}
+                                          title="עריכה"
+                                        >
+                                          <Pencil className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => void deleteHourRow(program, idx)}
+                                          title="מחיקה"
+                                        >
+                                          <Trash2 className="h-4 w-4 text-red-600" />
+                                        </Button>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                ))
+                              )}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </div>
+                    )
+                  })
+                  }
+                  </>
+                )}
               </div>
             )}
           </TabsContent>}
