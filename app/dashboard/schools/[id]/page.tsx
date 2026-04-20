@@ -502,6 +502,19 @@ export default function SchoolViewPage() {
   const saveHourRow = async () => {
     setHourSaveError("")
     if (!school?.id) return
+    if (!hourDate) {
+      setHourSaveError("יש לבחור תאריך תקין.")
+      return
+    }
+    if (!hourStartTime || !hourEndTime) {
+      setHourSaveError("יש לבחור שעת התחלה ושעת סיום.")
+      return
+    }
+    const computedHours = calcHoursFromTimes(hourStartTime, hourEndTime)
+    if (!Number.isFinite(computedHours) || computedHours <= 0) {
+      setHourSaveError("טווח השעות לא תקין. שעת סיום חייבת להיות אחרי שעת התחלה.")
+      return
+    }
     const holderProgramId = hourDialogContext === "attendance" ? (gafanPrograms[0]?.id || "") : hoursProgramId
     if (!holderProgramId) return
     const hoursProgram = gafanPrograms.find((g) => g.id === holderProgramId)
@@ -513,7 +526,7 @@ export default function SchoolViewPage() {
       dayOfWeek: resolvedDayOfWeek,
       startTime: hourStartTime,
       endTime: hourEndTime,
-      totalHours: Math.max(0, Number(hourTotal || 0)),
+      totalHours: Math.max(0, Number(computedHours || hourTotal || 0)),
       pendingAssignment: hourDialogContext === "attendance",
     }
     const next = [...rows]
@@ -603,6 +616,7 @@ export default function SchoolViewPage() {
           programId: string
           programName: string
           date: string
+          dayOfWeek: string
           startTime: string
           endTime: string
           totalHours: number
@@ -617,14 +631,17 @@ export default function SchoolViewPage() {
       const programName = `${program.name}${programSerial ? ` (#${programSerial})` : ""}`
       for (const row of rows) {
         const d = new Date(`${row.date}T12:00:00`)
-        if (Number.isNaN(d.getTime())) continue
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
-        const monthLabel = new Intl.DateTimeFormat("he-IL", { month: "long", year: "numeric" }).format(d)
+        const isValidDate = !Number.isNaN(d.getTime())
+        const key = isValidDate ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}` : "unknown"
+        const monthLabel = isValidDate
+          ? new Intl.DateTimeFormat("he-IL", { month: "long", year: "numeric" }).format(d)
+          : "ללא תאריך תקין"
         const bucket = monthMap.get(key) ?? { monthLabel, totalHours: 0, rows: [] }
         bucket.rows.push({
           programId: program.id,
           programName,
           date: row.date,
+          dayOfWeek: row.dayOfWeek || weekdayFromDate(row.date),
           startTime: row.startTime,
           endTime: row.endTime,
           totalHours: Number(row.totalHours || 0),
@@ -635,7 +652,11 @@ export default function SchoolViewPage() {
       }
     }
     const out = Array.from(monthMap.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
+      .sort((a, b) => {
+        if (a[0] === "unknown") return 1
+        if (b[0] === "unknown") return -1
+        return a[0].localeCompare(b[0])
+      })
       .map(([monthKey, value]) => ({
         monthKey,
         monthLabel: value.monthLabel,
@@ -1318,6 +1339,7 @@ export default function SchoolViewPage() {
                                     <TableHead className="text-right">מס׳</TableHead>
                                     <TableHead className="text-right">תוכנית</TableHead>
                                     <TableHead className="text-right">תאריך</TableHead>
+                                    <TableHead className="text-right">יום</TableHead>
                                     <TableHead className="text-right">שעת התחלה</TableHead>
                                     <TableHead className="text-right">שעת סיום</TableHead>
                                     <TableHead className="text-right">סה&quot;כ שעות</TableHead>
@@ -1330,6 +1352,7 @@ export default function SchoolViewPage() {
                                       <TableCell>{idx + 1}</TableCell>
                                       <TableCell>{row.programName}</TableCell>
                                       <TableCell>{safe(row.date)}</TableCell>
+                                      <TableCell>{safe(row.dayOfWeek)}</TableCell>
                                       <TableCell>{safe(row.startTime)}</TableCell>
                                       <TableCell>{safe(row.endTime)}</TableCell>
                                       <TableCell>{Number(row.totalHours || 0)}</TableCell>
