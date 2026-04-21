@@ -3437,30 +3437,50 @@ tr:nth-child(even) td{background:#f9fafb}
                   presentByDate.set(d, present)
                   absentByDate.set(d, absent)
                 })
+                const needsHorizontalScroll = dates.length > 12
+                const dateColWidth = 90
+                const explicitTableWidth = 42 + 150 + dates.length * dateColWidth + 74
+                const tableStyle: React.CSSProperties | undefined = needsHorizontalScroll
+                  ? { width: `${explicitTableWidth}px`, tableLayout: "fixed" }
+                  : undefined
+                const dateHeadStyle: React.CSSProperties | undefined = needsHorizontalScroll
+                  ? { width: `${dateColWidth}px`, minWidth: `${dateColWidth}px` }
+                  : undefined
+                const tableLayoutClass = needsHorizontalScroll
+                  ? "text-xs"
+                  : "w-full table-fixed text-xs"
                 return students.length > 0 ? (
                   <div className="space-y-2">
                     <div className="overflow-x-auto rounded-md border bg-muted/20">
-                      <Table className="w-full table-fixed text-xs">
+                      <Table className={tableLayoutClass} style={tableStyle}>
                         <TableHeader>
                           <TableRow className="bg-emerald-50/60">
-                            <TableHead className="text-right px-2" colSpan={2}>נוכח</TableHead>
+                            <TableHead className="text-right px-2 w-[192px]" colSpan={2}>נוכח</TableHead>
                             {dates.map((d) => (
-                              <TableHead key={`present-${d}`} className="text-center text-emerald-700 font-semibold px-1 whitespace-nowrap">
+                              <TableHead
+                                key={`present-${d}`}
+                                className="text-center text-emerald-700 font-semibold px-1 whitespace-nowrap"
+                                style={dateHeadStyle}
+                              >
                                 {presentByDate.get(d) || 0}
                               </TableHead>
                             ))}
-                            <TableHead className="text-center text-emerald-700 font-semibold px-1 whitespace-nowrap">
+                            <TableHead className="text-center text-emerald-700 font-semibold px-1 whitespace-nowrap w-[74px]">
                               {Array.from(presentByDate.values()).reduce((sum, n) => sum + n, 0)}
                             </TableHead>
                           </TableRow>
                           <TableRow className="bg-rose-50/60">
-                            <TableHead className="text-right px-2" colSpan={2}>לא נכח</TableHead>
+                            <TableHead className="text-right px-2 w-[192px]" colSpan={2}>לא נכח</TableHead>
                             {dates.map((d) => (
-                              <TableHead key={`absent-${d}`} className="text-center text-rose-700 font-semibold px-1 whitespace-nowrap">
+                              <TableHead
+                                key={`absent-${d}`}
+                                className="text-center text-rose-700 font-semibold px-1 whitespace-nowrap"
+                                style={dateHeadStyle}
+                              >
                                 {absentByDate.get(d) || 0}
                               </TableHead>
                             ))}
-                            <TableHead className="text-center text-rose-700 font-semibold px-1 whitespace-nowrap">
+                            <TableHead className="text-center text-rose-700 font-semibold px-1 whitespace-nowrap w-[74px]">
                               {Array.from(absentByDate.values()).reduce((sum, n) => sum + n, 0)}
                             </TableHead>
                           </TableRow>
@@ -3468,13 +3488,19 @@ tr:nth-child(even) td{background:#f9fafb}
                       </Table>
                     </div>
                     <div className="overflow-x-auto rounded-md border">
-                    <Table className="w-full table-fixed text-xs">
+                    <Table className={tableLayoutClass} style={tableStyle}>
                       <TableHeader>
                         <TableRow className="bg-muted/50">
                           <TableHead className="text-right w-[42px] px-1">מס'</TableHead>
                           <TableHead className="text-right w-[150px] px-2">{tr.student}</TableHead>
                           {dates.map((d) => (
-                            <TableHead key={d} className="text-center px-1 whitespace-nowrap">{new Date(d).toLocaleDateString("he-IL")}</TableHead>
+                            <TableHead
+                              key={d}
+                              className="text-center px-1 whitespace-nowrap"
+                              style={dateHeadStyle}
+                            >
+                              {new Date(d).toLocaleDateString("he-IL")}
+                            </TableHead>
                           ))}
                           <TableHead className="text-center w-[74px] px-1 whitespace-nowrap">סה"כ נוכחות</TableHead>
                         </TableRow>
