@@ -1620,11 +1620,22 @@ export default function SchoolViewPage() {
                       .sort((a, b) => a.date.localeCompare(b.date))
                     const used = hourRows.reduce((s, r) => s + Number(r.totalHours || 0), 0)
                     const balance = allocated - used
+                    const programTeacherIds = parseGafanTeacherIds(program)
+                    const programTeacherNames = programTeacherIds
+                      .map((tid) => teacherNameById.get(tid) || tid)
+                      .filter(Boolean)
                     return (
                       <div key={program.id} className="space-y-3 rounded-lg border p-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="font-semibold">
-                            {program.name} (#{programIndex + 1})
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-semibold">
+                            <span>
+                              {program.name} (#{programIndex + 1})
+                            </span>
+                            {programTeacherNames.length > 0 && (
+                              <span className="text-sm font-normal text-muted-foreground">
+                                — מורה: {programTeacherNames.join(", ")}
+                              </span>
+                            )}
                           </div>
                           <Button
                             type="button"
