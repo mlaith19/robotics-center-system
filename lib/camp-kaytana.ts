@@ -82,12 +82,17 @@ export async function ensureCampTables(sql: Sql) {
         "courseId" TEXT NOT NULL REFERENCES "Course"("id") ON DELETE CASCADE,
         "sessionDate" TEXT NOT NULL,
         "sortOrder" INTEGER NOT NULL DEFAULT 0,
+        "isActive" BOOLEAN NOT NULL DEFAULT true,
         "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT "CampMeeting_course_sessionDate_key" UNIQUE ("courseId", "sessionDate")
       )
     `,
   )
   await safe("CampMeeting idx", sql`CREATE INDEX IF NOT EXISTS "CampMeeting_courseId_idx" ON "CampMeeting"("courseId")`)
+  await safe(
+    "CampMeeting isActive column",
+    sql`ALTER TABLE "CampMeeting" ADD COLUMN IF NOT EXISTS "isActive" BOOLEAN NOT NULL DEFAULT true`,
+  )
 
   await safe(
     "CampMeetingSlot",

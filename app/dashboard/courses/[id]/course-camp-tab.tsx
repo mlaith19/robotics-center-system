@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Switch } from "@/components/ui/switch"
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -27,7 +28,7 @@ type CampMeetingSlot = {
   breakTitle: string
   cells: CampMeetingCell[]
 }
-type CampMeeting = { id: string; sessionDate: string; sortOrder: number; slots: CampMeetingSlot[] }
+type CampMeeting = { id: string; sessionDate: string; sortOrder: number; isActive: boolean; slots: CampMeetingSlot[] }
 
 function newId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID()
@@ -40,8 +41,8 @@ function hebrewWeekday(ymd: string): string {
   return names[d.getDay()] || ""
 }
 
-export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
-  const { courseId, canEdit } = props
+export function CourseCampTab(props: { courseId: string; canEdit: boolean; onMeetingsSaved?: () => void }) {
+  const { courseId, canEdit, onMeetingsSaved } = props
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -70,7 +71,12 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
       setGroupLetters(Array.isArray(data.groupLetters) ? data.groupLetters : [])
       setClassroomsCount(Number(data.classroomsCount || 6))
       setClassroomsDef(Array.isArray(data.classrooms) ? data.classrooms : [])
-      const rawMeetings = Array.isArray(data.meetings) ? data.meetings : []
+      const rawMeetings = (Array.isArray(data.meetings) ? data.meetings : []).map(
+        (m: { isActive?: unknown } & CampMeeting) => ({
+          ...m,
+          isActive: m.isActive === undefined || m.isActive === null ? true : Boolean(m.isActive),
+        }),
+      ) as CampMeeting[]
       setMeetings(rawMeetings)
       setActiveMeetingId((prev) => {
         if (rawMeetings.length === 0) return ""
@@ -119,7 +125,13 @@ export function CourseCampTab(props: { courseId: string; canEdit: boolean }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ meetings }),
       })
-        .then((res) => { if (!res.ok) res.json().then((j) => setErr(String(j.error || "שמירה נכשלה"))) })
+        .then((res) => {
+          if (!res.ok) {
+            res.json().then((j) => setErr(String(j.error || "שמירה נכשלה")))
+            return
+          }
+          if (onMeetingsSaved) onMeetingsSaved()
+        })
         .catch(() => setErr("שגיאת רשת בשמירה"))
         .finally(() => setSaving(false))
     }, 1200)
@@ -233,9 +245,12 @@ tr:nth-child(even) td{background:#f9fafb}
               <TabsTrigger
                 key={meeting.id}
                 value={meeting.id}
-                className="h-auto min-w-[74px] flex-none px-1.5 py-1 leading-tight whitespace-normal text-center flex flex-col items-center gap-0 data-[state=active]:bg-gradient-to-b data-[state=active]:from-blue-600 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md"
+                className={`h-auto min-w-[74px] flex-none px-1.5 py-1 leading-tight whitespace-normal text-center flex flex-col items-center gap-0 data-[state=active]:bg-gradient-to-b data-[state=active]:from-blue-600 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md ${meeting.isActive === false ? "opacity-60" : ""}`}
               >
-                <span className="block">מפגש {i + 1}</span>
+                <span className="block">
+                  מפגש {i + 1}
+                  {meeting.isActive === false ? " (לא פעיל)" : ""}
+                </span>
                 <span className="block text-[11px] opacity-90">{hebrewWeekday(meeting.sessionDate)}</span>
               </TabsTrigger>
             ))}
@@ -244,10 +259,34 @@ tr:nth-child(even) td{background:#f9fafb}
             const sortedSlots = [...meeting.slots].sort((a, b) => a.sortOrder - b.sortOrder || a.startTime.localeCompare(b.startTime))
             return (
             <TabsContent key={meeting.id} value={meeting.id}>
-              <Card>
+              <Card className={meeting.isActive === false ? "opacity-75" : ""}>
                 <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <CardTitle className="text-base">מפגש {i + 1} - {hebrewWeekday(meeting.sessionDate)} ({meeting.sessionDate})</CardTitle>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <CardTitle className="text-base">
+                        מפגש {i + 1} - {hebrewWeekday(meeting.sessionDate)} ({meeting.sessionDate})
+                      </CardTitle>
+                      <label
+                        className={`flex items-center gap-2 rounded-md border px-2 py-1 text-xs ${
+                          meeting.isActive === false
+                            ? "border-red-200 bg-red-50 text-red-700"
+                            : "border-emerald-200 bg-emerald-50 text-emerald-800"
+                        }`}
+                      >
+                        <Switch
+                          checked={meeting.isActive !== false}
+                          disabled={!canEdit}
+                          onCheckedChange={(v) =>
+                            setMeetings((prev) =>
+                              prev.map((m) => (m.id === meeting.id ? { ...m, isActive: Boolean(v) } : m)),
+                            )
+                          }
+                        />
+                        <span className="font-semibold">
+                          {meeting.isActive === false ? "לא פעיל" : "פעיל"}
+                        </span>
+                      </label>
+                    </div>
                     {canEdit && (
                       <div className="flex items-center gap-2">
                         <Button

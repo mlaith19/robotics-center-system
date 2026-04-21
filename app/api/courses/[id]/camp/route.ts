@@ -111,7 +111,7 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
       `) || []
     const meetingsRows =
       (await db`
-        SELECT id, "sessionDate", "sortOrder"
+        SELECT id, "sessionDate", "sortOrder", "isActive"
         FROM "CampMeeting"
         WHERE "courseId" = ${courseId}
         ORDER BY "sortOrder", "sessionDate"
@@ -121,6 +121,7 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
       id: string
       sessionDate: string
       sortOrder: number
+      isActive: boolean
       slots: Array<{
         id: string
         sortOrder: number
@@ -138,7 +139,7 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
       }>
     }> = []
 
-    for (const m of meetingsRows as { id: string; sessionDate: string; sortOrder: number }[]) {
+    for (const m of meetingsRows as { id: string; sessionDate: string; sortOrder: number; isActive?: boolean }[]) {
       const slotRows =
         (await db`
           SELECT id, "sortOrder", "startTime", "endTime", "isBreak", "breakTitle"
@@ -194,6 +195,7 @@ export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
         id: m.id,
         sessionDate: m.sessionDate,
         sortOrder: Number(m.sortOrder || 0),
+        isActive: m.isActive !== false,
         slots,
       })
     }
@@ -253,18 +255,20 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
         const sessionDate = cleanStr((m as { sessionDate?: string }).sessionDate)
         if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) continue
         const sortOrder = Number((m as { sortOrder?: number }).sortOrder || 0)
+        const isActiveRaw = (m as { isActive?: unknown }).isActive
+        const isActive = isActiveRaw === undefined || isActiveRaw === null ? true : Boolean(isActiveRaw)
         let meetingId = cleanStr((m as { id?: string }).id)
         if (!meetingId || !isUuidLike(meetingId)) {
           meetingId = randomUUID()
           await sql`
-            INSERT INTO "CampMeeting" (id, "courseId", "sessionDate", "sortOrder")
-            VALUES (${meetingId}, ${courseId}, ${sessionDate}, ${sortOrder})
-            ON CONFLICT ("courseId","sessionDate") DO UPDATE SET "sortOrder" = EXCLUDED."sortOrder"
+            INSERT INTO "CampMeeting" (id, "courseId", "sessionDate", "sortOrder", "isActive")
+            VALUES (${meetingId}, ${courseId}, ${sessionDate}, ${sortOrder}, ${isActive})
+            ON CONFLICT ("courseId","sessionDate") DO UPDATE SET "sortOrder" = EXCLUDED."sortOrder", "isActive" = EXCLUDED."isActive"
           `
           const byDate = (await sql`SELECT id FROM "CampMeeting" WHERE "courseId"=${courseId} AND "sessionDate"=${sessionDate}`) || []
           meetingId = String((byDate[0] as { id: string }).id)
         } else {
-          await sql`UPDATE "CampMeeting" SET "sessionDate"=${sessionDate}, "sortOrder"=${sortOrder} WHERE id=${meetingId} AND "courseId"=${courseId}`
+          await sql`UPDATE "CampMeeting" SET "sessionDate"=${sessionDate}, "sortOrder"=${sortOrder}, "isActive"=${isActive} WHERE id=${meetingId} AND "courseId"=${courseId}`
         }
 
         const oldSlots = (await sql`SELECT id FROM "CampMeetingSlot" WHERE "meetingId" = ${meetingId}`) || []

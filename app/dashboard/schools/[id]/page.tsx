@@ -288,6 +288,7 @@ export default function SchoolViewPage() {
   const [hourEditSourceRow, setHourEditSourceRow] = useState<GafanHourRow | null>(null)
   const [hourDialogContext, setHourDialogContext] = useState<"attendance" | "ngafan">("attendance")
   const [selectedAttendanceMonth, setSelectedAttendanceMonth] = useState("")
+  const [selectedAttendanceTeacher, setSelectedAttendanceTeacher] = useState("")
   const [pendingAssignTargetByKey, setPendingAssignTargetByKey] = useState<Record<string, string>>({})
   const [hoursSaving, setHoursSaving] = useState(false)
   const [hourSaveError, setHourSaveError] = useState("")
@@ -649,41 +650,82 @@ export default function SchoolViewPage() {
     return { rows, totalDebt: rows.reduce((s, r) => s + r.balance, 0) }
   }, [schoolEnrollments, schoolPayments])
 
-  const attendanceMonthGroups = useMemo(() => {
-    const monthMap = new Map<
-      string,
-      {
-        monthLabel: string
-        totalHours: number
-        approvedHours: number
-        rows: Array<{
-          programId: string
-          programName: string
-          rowIndex: number
-          date: string
-          dayOfWeek: string
-          teacherName: string
-          startTime: string
-          endTime: string
-          totalHours: number
-          status: "approved" | "pending"
-        }>
-      }
-    >()
+  const attendanceByTeacher = useMemo(() => {
+    type AttendanceRow = {
+      programId: string
+      programName: string
+      rowIndex: number
+      date: string
+      dayOfWeek: string
+      teacherName: string
+      startTime: string
+      endTime: string
+      totalHours: number
+      status: "approved" | "pending"
+      teacherRoleLabel: string
+    }
+    type MonthBucket = {
+      monthKey: string
+      monthLabel: string
+      totalHours: number
+      approvedHours: number
+      rows: AttendanceRow[]
+    }
+    type TeacherBucket = {
+      teacherKey: string
+      teacherDisplayName: string
+      totalHours: number
+      approvedHours: number
+      monthMap: Map<string, MonthBucket>
+    }
+    const teacherMap = new Map<string, TeacherBucket>()
     for (const program of gafanPrograms) {
       const rows = parseGafanHourRows(program)
       const programIndex = gafanPrograms.findIndex((g) => g.id === program.id)
       const programSerial = programIndex >= 0 ? programIndex + 1 : 0
       const programName = `${program.name}${programSerial ? ` (#${programSerial})` : ""}`
+      const programTeacherIds = parseGafanTeacherIds(program)
+      const programTeacherNames = programTeacherIds.map((tid) =>
+        (teacherNameById.get(tid) || tid || "").toString().trim().toLowerCase(),
+      )
       rows.forEach((row, rowIndex) => {
         if (!rowBelongsToCurrentTeacher(row.teacherName)) return
+        const displayName = (row.teacherName || "").trim() || "ללא שם"
+        const teacherKey = displayName.toLowerCase()
+        const teacherPositionInProgram = programTeacherNames.indexOf(teacherKey)
+        const teacherRoleLabel =
+          programTeacherIds.length === 0 || teacherPositionInProgram < 0
+            ? ""
+            : teacherPositionInProgram === 0
+              ? "ראשי"
+              : "מחליף"
         const d = new Date(`${row.date}T12:00:00`)
         const isValidDate = !Number.isNaN(d.getTime())
-        const key = isValidDate ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}` : "unknown"
+        const monthKey = isValidDate
+          ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+          : "unknown"
         const monthLabel = isValidDate
           ? new Intl.DateTimeFormat("he-IL", { month: "long", year: "numeric" }).format(d)
           : "ללא תאריך תקין"
-        const bucket = monthMap.get(key) ?? { monthLabel, totalHours: 0, approvedHours: 0, rows: [] }
+
+        let teacher = teacherMap.get(teacherKey)
+        if (!teacher) {
+          teacher = {
+            teacherKey,
+            teacherDisplayName: displayName,
+            totalHours: 0,
+            approvedHours: 0,
+            monthMap: new Map(),
+          }
+          teacherMap.set(teacherKey, teacher)
+        }
+        let bucket = teacher.monthMap.get(monthKey)
+        if (!bucket) {
+          bucket = { monthKey, monthLabel, totalHours: 0, approvedHours: 0, rows: [] }
+          teacher.monthMap.set(monthKey, bucket)
+        }
+        const hrs = Number(row.totalHours || 0)
+        const status: "approved" | "pending" = row.pendingAssignment ? "pending" : "approved"
         bucket.rows.push({
           programId: program.id,
           programName,
@@ -693,31 +735,44 @@ export default function SchoolViewPage() {
           teacherName: row.teacherName || "",
           startTime: row.startTime,
           endTime: row.endTime,
-          totalHours: Number(row.totalHours || 0),
-          status: row.pendingAssignment ? "pending" : "approved",
+          totalHours: hrs,
+          status,
+          teacherRoleLabel,
         })
-        bucket.totalHours += Number(row.totalHours || 0)
-        if (!row.pendingAssignment) {
-          bucket.approvedHours += Number(row.totalHours || 0)
+        bucket.totalHours += hrs
+        teacher.totalHours += hrs
+        if (status === "approved") {
+          bucket.approvedHours += hrs
+          teacher.approvedHours += hrs
         }
-        monthMap.set(key, bucket)
       })
     }
-    const out = Array.from(monthMap.entries())
-      .sort((a, b) => {
-        if (a[0] === "unknown") return 1
-        if (b[0] === "unknown") return -1
-        return a[0].localeCompare(b[0])
+    return Array.from(teacherMap.values())
+      .map((t) => {
+        const months = Array.from(t.monthMap.values())
+          .sort((a, b) => {
+            if (a.monthKey === "unknown") return 1
+            if (b.monthKey === "unknown") return -1
+            return a.monthKey.localeCompare(b.monthKey)
+          })
+          .map((m) => ({
+            ...m,
+            totalHours: Math.round(m.totalHours * 100) / 100,
+            approvedHours: Math.round(m.approvedHours * 100) / 100,
+            rows: m.rows.sort((a, b) => a.date.localeCompare(b.date)),
+          }))
+        return {
+          teacherKey: t.teacherKey,
+          teacherDisplayName: t.teacherDisplayName,
+          totalHours: Math.round(t.totalHours * 100) / 100,
+          approvedHours: Math.round(t.approvedHours * 100) / 100,
+          months,
+        }
       })
-      .map(([monthKey, value]) => ({
-        monthKey,
-        monthLabel: value.monthLabel,
-        totalHours: Math.round(value.totalHours * 100) / 100,
-        approvedHours: Math.round(value.approvedHours * 100) / 100,
-        rows: value.rows.sort((a, b) => a.date.localeCompare(b.date)),
-      }))
-    return out
-  }, [gafanPrograms, rowBelongsToCurrentTeacher])
+      .sort((a, b) =>
+        a.teacherDisplayName.localeCompare(b.teacherDisplayName, "he", { sensitivity: "base" }),
+      )
+  }, [gafanPrograms, rowBelongsToCurrentTeacher, teacherNameById])
 
   const pendingAttendanceRows = useMemo(() => {
     const out: Array<{
@@ -806,17 +861,40 @@ export default function SchoolViewPage() {
   }
 
   useEffect(() => {
-    if (attendanceMonthGroups.length === 0) {
+    if (attendanceByTeacher.length === 0) {
+      setSelectedAttendanceTeacher("")
+      return
+    }
+    if (
+      !selectedAttendanceTeacher ||
+      !attendanceByTeacher.some((t) => t.teacherKey === selectedAttendanceTeacher)
+    ) {
+      setSelectedAttendanceTeacher(attendanceByTeacher[0].teacherKey)
+    }
+  }, [attendanceByTeacher, selectedAttendanceTeacher])
+
+  const activeAttendanceTeacher =
+    attendanceByTeacher.find((t) => t.teacherKey === selectedAttendanceTeacher) ||
+    attendanceByTeacher[0]
+  const activeTeacherMonths = activeAttendanceTeacher?.months ?? []
+
+  useEffect(() => {
+    if (activeTeacherMonths.length === 0) {
       setSelectedAttendanceMonth("")
       return
     }
-    if (!selectedAttendanceMonth || !attendanceMonthGroups.some((g) => g.monthKey === selectedAttendanceMonth)) {
-      setSelectedAttendanceMonth(attendanceMonthGroups[attendanceMonthGroups.length - 1].monthKey)
+    if (
+      !selectedAttendanceMonth ||
+      !activeTeacherMonths.some((m) => m.monthKey === selectedAttendanceMonth)
+    ) {
+      setSelectedAttendanceMonth(activeTeacherMonths[activeTeacherMonths.length - 1].monthKey)
     }
-  }, [attendanceMonthGroups, selectedAttendanceMonth])
+  }, [activeTeacherMonths, selectedAttendanceMonth])
 
   const activeAttendanceMonth =
-    selectedAttendanceMonth || attendanceMonthGroups[attendanceMonthGroups.length - 1]?.monthKey || ""
+    (activeTeacherMonths.some((m) => m.monthKey === selectedAttendanceMonth)
+      ? selectedAttendanceMonth
+      : activeTeacherMonths[activeTeacherMonths.length - 1]?.monthKey) || ""
 
   if (isNewPage) {
     return <NewSchoolPage />
@@ -1059,7 +1137,13 @@ export default function SchoolViewPage() {
                             const teacherLabel =
                               tids.length === 0
                                 ? "—"
-                                : tids.map((tid) => teacherNameById.get(tid) || tid).join(", ")
+                                : tids
+                                    .map((tid, i) => {
+                                      const name = teacherNameById.get(tid) || tid
+                                      const role = i === 0 ? "ראשי" : "מחליף"
+                                      return `${name} (${role})`
+                                    })
+                                    .join(", ")
                             return (
                               <Fragment key={g.id}>
                                 <TableRow key={`${g.id}-main`}>
@@ -1228,8 +1312,16 @@ export default function SchoolViewPage() {
                         </DialogTitle>
                       </DialogHeader>
                       <div className="space-y-4 py-2">
+                        <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+                          המורה הראשון שמשויך לתוכנית הוא <strong>המורה הראשי</strong>. כל מורה נוסף שיתווסף יישמר כ<strong>מחליף</strong>.
+                        </div>
                         <div className="space-y-2">
-                          <Label>בחר מורה</Label>
+                          <Label>
+                            {(() => {
+                              const assigned = gafanTeacherProgram ? parseGafanTeacherIds(gafanTeacherProgram) : []
+                              return assigned.length === 0 ? "בחר מורה ראשי" : "בחר מורה מחליף"
+                            })()}
+                          </Label>
                           {(() => {
                             const assigned = gafanTeacherProgram ? parseGafanTeacherIds(gafanTeacherProgram) : []
                             const pool = teachersMini.filter((t) => !assigned.includes(t.id))
@@ -1368,113 +1460,160 @@ export default function SchoolViewPage() {
                       </Button>
                     </div>
 
-                    {attendanceMonthGroups.length === 0 ? (
+                    {attendanceByTeacher.length === 0 ? (
                       <div className="rounded-lg border p-6 text-center text-muted-foreground">אין נתוני נוכחות להצגה</div>
                     ) : (
                       <Tabs
-                        value={activeAttendanceMonth}
-                        onValueChange={setSelectedAttendanceMonth}
+                        value={activeAttendanceTeacher?.teacherKey || ""}
+                        onValueChange={setSelectedAttendanceTeacher}
                         dir="rtl"
                         className="space-y-3"
                       >
                         <TabsList className="h-auto w-full flex-wrap justify-start gap-2">
-                          {attendanceMonthGroups.map((group) => (
-                            <TabsTrigger key={group.monthKey} value={group.monthKey}>
-                              {group.monthLabel} (מאושר: {group.approvedHours.toLocaleString("he-IL")})
+                          {attendanceByTeacher.map((teacher) => (
+                            <TabsTrigger key={teacher.teacherKey} value={teacher.teacherKey}>
+                              {teacher.teacherDisplayName} (סה&quot;כ: {teacher.approvedHours.toLocaleString("he-IL")})
                             </TabsTrigger>
                           ))}
                         </TabsList>
-                        {attendanceMonthGroups.map((group) => (
-                          <TabsContent key={group.monthKey} value={group.monthKey} className="mt-0">
-                            <div className="overflow-x-auto rounded-md border">
-                              <Table>
-                                <TableHeader>
-                                  <TableRow className="bg-muted/50">
-                                    <TableHead className="text-right">מס׳</TableHead>
-                                    <TableHead className="text-right">תוכנית</TableHead>
-                                    <TableHead className="text-right">תאריך</TableHead>
-                                    <TableHead className="text-right">יום</TableHead>
-                                    <TableHead className="text-right">שעת התחלה</TableHead>
-                                    <TableHead className="text-right">שעת סיום</TableHead>
-                                    <TableHead className="text-right">סה&quot;כ שעות</TableHead>
-                                    <TableHead className="text-right">סטטוס</TableHead>
-                                    <TableHead className="text-center">פעולות</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {group.rows.map((row, idx) => (
-                                    <TableRow key={`${group.monthKey}-${idx}`}>
-                                      <TableCell>{idx + 1}</TableCell>
-                                      <TableCell>{row.programName}</TableCell>
-                                      <TableCell>{safe(row.date)}</TableCell>
-                                      <TableCell>{safe(row.dayOfWeek)}</TableCell>
-                                      <TableCell>{safe(row.startTime)}</TableCell>
-                                      <TableCell>{safe(row.endTime)}</TableCell>
-                                      <TableCell>{Number(row.totalHours || 0)}</TableCell>
-                                      <TableCell>
-                                        {row.status === "approved" ? (
-                                          <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">מאושר</span>
-                                        ) : (
-                                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">ממתין לאישור</span>
-                                        )}
-                                      </TableCell>
-                                      <TableCell className="text-center">
-                                        <div className="flex items-center justify-center gap-1">
-                                          <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            title="עריכה"
-                                            onClick={() => {
-                                              setHourDialogContext("attendance")
-                                              setHoursProgramId(row.programId)
-                                              setHourDate(row.date)
-                                              setHourStartTime(row.startTime)
-                                              setHourEndTime(row.endTime)
-                                              setHourTotal(String(row.totalHours))
-                                              setHourEditIdx(row.rowIndex)
-                                              setHourEditSourceRow({
-                                                date: row.date,
-                                                dayOfWeek: row.dayOfWeek,
-                                                teacherName: row.teacherName,
-                                                startTime: row.startTime,
-                                                endTime: row.endTime,
-                                                totalHours: Number(row.totalHours || 0),
-                                                pendingAssignment: row.status === "pending",
-                                              })
-                                              setHourDialogOpen(true)
-                                            }}
-                                          >
-                                            <Pencil className="h-4 w-4" />
-                                          </Button>
-                                          <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            title="מחיקה"
-                                            onClick={() => {
-                                              const program = gafanPrograms.find((g) => g.id === row.programId)
-                                              if (!program) return
-                                              void deleteHourRow(program, row.rowIndex, {
-                                                date: row.date,
-                                                dayOfWeek: row.dayOfWeek,
-                                                teacherName: row.teacherName,
-                                                startTime: row.startTime,
-                                                endTime: row.endTime,
-                                                totalHours: Number(row.totalHours || 0),
-                                                pendingAssignment: row.status === "pending",
-                                              })
-                                            }}
-                                          >
-                                            <Trash2 className="h-4 w-4 text-red-600" />
-                                          </Button>
-                                        </div>
-                                      </TableCell>
-                                    </TableRow>
-                                  ))}
-                                </TableBody>
-                              </Table>
+                        {attendanceByTeacher.map((teacher) => (
+                          <TabsContent key={teacher.teacherKey} value={teacher.teacherKey} className="mt-0 space-y-3">
+                            <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+                              <div className="font-semibold">{teacher.teacherDisplayName}</div>
+                              <div className="text-muted-foreground">
+                                סה&quot;כ שעות מאושרות: <strong>{teacher.approvedHours.toLocaleString("he-IL")}</strong>
+                              </div>
+                              <div className="text-muted-foreground">
+                                סה&quot;כ שעות (כולל ממתין): <strong>{teacher.totalHours.toLocaleString("he-IL")}</strong>
+                              </div>
                             </div>
+                            {teacher.months.length === 0 ? (
+                              <div className="rounded-lg border p-6 text-center text-muted-foreground">אין נתוני נוכחות להצגה</div>
+                            ) : (
+                              <Tabs
+                                value={activeAttendanceMonth}
+                                onValueChange={setSelectedAttendanceMonth}
+                                dir="rtl"
+                                className="space-y-3"
+                              >
+                                <TabsList className="h-auto w-full flex-wrap justify-start gap-2">
+                                  {teacher.months.map((group) => (
+                                    <TabsTrigger key={group.monthKey} value={group.monthKey}>
+                                      {group.monthLabel} (מאושר: {group.approvedHours.toLocaleString("he-IL")})
+                                    </TabsTrigger>
+                                  ))}
+                                </TabsList>
+                                {teacher.months.map((group) => (
+                                  <TabsContent key={group.monthKey} value={group.monthKey} className="mt-0">
+                                    <div className="overflow-x-auto rounded-md border">
+                                      <Table>
+                                        <TableHeader>
+                                          <TableRow className="bg-muted/50">
+                                            <TableHead className="text-right">מס׳</TableHead>
+                                            <TableHead className="text-right">תוכנית</TableHead>
+                                            <TableHead className="text-right">תפקיד</TableHead>
+                                            <TableHead className="text-right">תאריך</TableHead>
+                                            <TableHead className="text-right">יום</TableHead>
+                                            <TableHead className="text-right">שעת התחלה</TableHead>
+                                            <TableHead className="text-right">שעת סיום</TableHead>
+                                            <TableHead className="text-right">סה&quot;כ שעות</TableHead>
+                                            <TableHead className="text-right">סטטוס</TableHead>
+                                            <TableHead className="text-center">פעולות</TableHead>
+                                          </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                          {group.rows.map((row, idx) => (
+                                            <TableRow key={`${teacher.teacherKey}-${group.monthKey}-${idx}`}>
+                                              <TableCell>{idx + 1}</TableCell>
+                                              <TableCell>{row.programName}</TableCell>
+                                              <TableCell>
+                                                {row.teacherRoleLabel ? (
+                                                  <span
+                                                    className={`rounded-full px-2 py-0.5 text-xs ${
+                                                      row.teacherRoleLabel === "ראשי"
+                                                        ? "bg-blue-100 text-blue-700"
+                                                        : "bg-purple-100 text-purple-700"
+                                                    }`}
+                                                  >
+                                                    {row.teacherRoleLabel}
+                                                  </span>
+                                                ) : (
+                                                  "—"
+                                                )}
+                                              </TableCell>
+                                              <TableCell>{safe(row.date)}</TableCell>
+                                              <TableCell>{safe(row.dayOfWeek)}</TableCell>
+                                              <TableCell>{safe(row.startTime)}</TableCell>
+                                              <TableCell>{safe(row.endTime)}</TableCell>
+                                              <TableCell>{Number(row.totalHours || 0)}</TableCell>
+                                              <TableCell>
+                                                {row.status === "approved" ? (
+                                                  <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">מאושר</span>
+                                                ) : (
+                                                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">ממתין לאישור</span>
+                                                )}
+                                              </TableCell>
+                                              <TableCell className="text-center">
+                                                <div className="flex items-center justify-center gap-1">
+                                                  <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    title="עריכה"
+                                                    onClick={() => {
+                                                      setHourDialogContext("attendance")
+                                                      setHoursProgramId(row.programId)
+                                                      setHourDate(row.date)
+                                                      setHourStartTime(row.startTime)
+                                                      setHourEndTime(row.endTime)
+                                                      setHourTotal(String(row.totalHours))
+                                                      setHourEditIdx(row.rowIndex)
+                                                      setHourEditSourceRow({
+                                                        date: row.date,
+                                                        dayOfWeek: row.dayOfWeek,
+                                                        teacherName: row.teacherName,
+                                                        startTime: row.startTime,
+                                                        endTime: row.endTime,
+                                                        totalHours: Number(row.totalHours || 0),
+                                                        pendingAssignment: row.status === "pending",
+                                                      })
+                                                      setHourDialogOpen(true)
+                                                    }}
+                                                  >
+                                                    <Pencil className="h-4 w-4" />
+                                                  </Button>
+                                                  <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    title="מחיקה"
+                                                    onClick={() => {
+                                                      const program = gafanPrograms.find((g) => g.id === row.programId)
+                                                      if (!program) return
+                                                      void deleteHourRow(program, row.rowIndex, {
+                                                        date: row.date,
+                                                        dayOfWeek: row.dayOfWeek,
+                                                        teacherName: row.teacherName,
+                                                        startTime: row.startTime,
+                                                        endTime: row.endTime,
+                                                        totalHours: Number(row.totalHours || 0),
+                                                        pendingAssignment: row.status === "pending",
+                                                      })
+                                                    }}
+                                                  >
+                                                    <Trash2 className="h-4 w-4 text-red-600" />
+                                                  </Button>
+                                                </div>
+                                              </TableCell>
+                                            </TableRow>
+                                          ))}
+                                        </TableBody>
+                                      </Table>
+                                    </div>
+                                  </TabsContent>
+                                ))}
+                              </Tabs>
+                            )}
                           </TabsContent>
                         ))}
                       </Tabs>
@@ -1621,8 +1760,13 @@ export default function SchoolViewPage() {
                     const used = hourRows.reduce((s, r) => s + Number(r.totalHours || 0), 0)
                     const balance = allocated - used
                     const programTeacherIds = parseGafanTeacherIds(program)
-                    const programTeacherNames = programTeacherIds
-                      .map((tid) => teacherNameById.get(tid) || tid)
+                    const programTeacherLabels = programTeacherIds
+                      .map((tid, i) => {
+                        const name = teacherNameById.get(tid) || tid
+                        if (!name) return ""
+                        const role = i === 0 ? "ראשי" : "מחליף"
+                        return `${name} (${role})`
+                      })
                       .filter(Boolean)
                     return (
                       <div key={program.id} className="space-y-3 rounded-lg border p-3">
@@ -1631,9 +1775,9 @@ export default function SchoolViewPage() {
                             <span>
                               {program.name} (#{programIndex + 1})
                             </span>
-                            {programTeacherNames.length > 0 && (
+                            {programTeacherLabels.length > 0 && (
                               <span className="text-sm font-normal text-muted-foreground">
-                                — מורה: {programTeacherNames.join(", ")}
+                                — מורה: {programTeacherLabels.join(", ")}
                               </span>
                             )}
                           </div>

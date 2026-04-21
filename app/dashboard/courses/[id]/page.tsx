@@ -618,6 +618,7 @@ export default function CourseViewPage() {
   const [campAttendanceEnrollments, setCampAttendanceEnrollments] = useState<Enrollment[] | null>(null)
   const [myTeacherId, setMyTeacherId] = useState<string | null>(null)
   const [campScheduleMeetings, setCampScheduleMeetings] = useState<Array<Record<string, unknown>>>([])
+  const [campScheduleRefreshTick, setCampScheduleRefreshTick] = useState(0)
   const [selectedCampCellId, setSelectedCampCellId] = useState("")
   const campGroups = HEBREW_GROUP_LETTERS
   const enrolledStudentIds = useMemo(() => new Set(enrollments.map((e) => String(e.studentId))), [enrollments])
@@ -685,14 +686,29 @@ export default function CourseViewPage() {
     return "__unassigned__"
   }, [campGroupTabsData])
 
+  const inactiveCampMeetingDates = useMemo(() => {
+    if (!isCampCourse) return new Set<string>()
+    const out = new Set<string>()
+    for (const m of campScheduleMeetings) {
+      const row = m as { sessionDate?: unknown; isActive?: unknown }
+      if (row.isActive === false) {
+        const date = String(row.sessionDate ?? "").trim().slice(0, 10)
+        if (/^\d{4}-\d{2}-\d{2}$/.test(date)) out.add(date)
+      }
+    }
+    return out
+  }, [isCampCourse, campScheduleMeetings])
+
   const allowedAttendanceDates = useMemo(() => {
     if (!course) return []
     const start = normalizeCourseCalendarYmd(course.startDate)
     const end = normalizeCourseCalendarYmd(course.endDate)
     const days = Array.isArray(course.daysOfWeek) && course.daysOfWeek.length > 0 ? course.daysOfWeek : []
     if (!start || !end || days.length === 0) return []
-    return listCampSessionDates(start, end, days)
-  }, [course?.startDate, course?.endDate, course?.daysOfWeek])
+    const base = listCampSessionDates(start, end, days)
+    if (!isCampCourse || inactiveCampMeetingDates.size === 0) return base
+    return base.filter((d) => !inactiveCampMeetingDates.has(d))
+  }, [course?.startDate, course?.endDate, course?.daysOfWeek, isCampCourse, inactiveCampMeetingDates])
 
   const attendanceDateBounds = useMemo(() => {
     if (!course) return { min: "", max: "" }
@@ -786,7 +802,7 @@ export default function CourseViewPage() {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setCampScheduleMeetings(Array.isArray(d?.meetings) ? d.meetings : []))
       .catch(() => setCampScheduleMeetings([]))
-  }, [id, canLoadCampScheduleApi])
+  }, [id, canLoadCampScheduleApi, campScheduleRefreshTick])
 
   /** מורה בקייטנה: לא ליפול לרשימת כל הרישומים כש־API נכשל או לפני סינון */
   const enrollmentsForAttendanceTab = useMemo(() => {
@@ -2663,7 +2679,11 @@ export default function CourseViewPage() {
 
         {canTabCamp && (
           <TabsContent value="camp" className="space-y-4">
-            <CourseCampTab courseId={id} canEdit={!isStudentUser && !!canEditCampPlanTab} />
+            <CourseCampTab
+              courseId={id}
+              canEdit={!isStudentUser && !!canEditCampPlanTab}
+              onMeetingsSaved={() => setCampScheduleRefreshTick((t) => t + 1)}
+            />
           </TabsContent>
         )}
 
