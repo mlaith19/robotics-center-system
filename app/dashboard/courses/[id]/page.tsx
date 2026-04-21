@@ -3449,47 +3449,46 @@ tr:nth-child(even) td{background:#f9fafb}
                 const tableLayoutClass = needsHorizontalScroll
                   ? "text-xs"
                   : "w-full table-fixed text-xs"
+                const weekdayNames = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"]
+                const weekdayForDate = (d: string) => {
+                  const dt = new Date(`${d}T12:00:00`)
+                  if (Number.isNaN(dt.getTime())) return ""
+                  return weekdayNames[dt.getDay()] || ""
+                }
                 return students.length > 0 ? (
-                  <div className="space-y-2">
-                    <div className="overflow-x-auto rounded-md border bg-muted/20">
-                      <Table className={tableLayoutClass} style={tableStyle}>
-                        <TableHeader>
-                          <TableRow className="bg-emerald-50/60">
-                            <TableHead className="text-right px-2 w-[192px]" colSpan={2}>נוכח</TableHead>
-                            {dates.map((d) => (
-                              <TableHead
-                                key={`present-${d}`}
-                                className="text-center text-emerald-700 font-semibold px-1 whitespace-nowrap"
-                                style={dateHeadStyle}
-                              >
-                                {presentByDate.get(d) || 0}
-                              </TableHead>
-                            ))}
-                            <TableHead className="text-center text-emerald-700 font-semibold px-1 whitespace-nowrap w-[74px]">
-                              {Array.from(presentByDate.values()).reduce((sum, n) => sum + n, 0)}
-                            </TableHead>
-                          </TableRow>
-                          <TableRow className="bg-rose-50/60">
-                            <TableHead className="text-right px-2 w-[192px]" colSpan={2}>לא נכח</TableHead>
-                            {dates.map((d) => (
-                              <TableHead
-                                key={`absent-${d}`}
-                                className="text-center text-rose-700 font-semibold px-1 whitespace-nowrap"
-                                style={dateHeadStyle}
-                              >
-                                {absentByDate.get(d) || 0}
-                              </TableHead>
-                            ))}
-                            <TableHead className="text-center text-rose-700 font-semibold px-1 whitespace-nowrap w-[74px]">
-                              {Array.from(absentByDate.values()).reduce((sum, n) => sum + n, 0)}
-                            </TableHead>
-                          </TableRow>
-                        </TableHeader>
-                      </Table>
-                    </div>
-                    <div className="overflow-x-auto rounded-md border">
+                  <div className="overflow-x-auto rounded-md border">
                     <Table className={tableLayoutClass} style={tableStyle}>
                       <TableHeader>
+                        <TableRow className="bg-emerald-50/60">
+                          <TableHead className="text-right px-2 w-[192px]" colSpan={2}>נוכח</TableHead>
+                          {dates.map((d) => (
+                            <TableHead
+                              key={`present-${d}`}
+                              className="text-center text-emerald-700 font-semibold px-1 whitespace-nowrap"
+                              style={dateHeadStyle}
+                            >
+                              {presentByDate.get(d) || 0}
+                            </TableHead>
+                          ))}
+                          <TableHead className="text-center text-emerald-700 font-semibold px-1 whitespace-nowrap w-[74px]">
+                            {Array.from(presentByDate.values()).reduce((sum, n) => sum + n, 0)}
+                          </TableHead>
+                        </TableRow>
+                        <TableRow className="bg-rose-50/60">
+                          <TableHead className="text-right px-2 w-[192px]" colSpan={2}>לא נכח</TableHead>
+                          {dates.map((d) => (
+                            <TableHead
+                              key={`absent-${d}`}
+                              className="text-center text-rose-700 font-semibold px-1 whitespace-nowrap"
+                              style={dateHeadStyle}
+                            >
+                              {absentByDate.get(d) || 0}
+                            </TableHead>
+                          ))}
+                          <TableHead className="text-center text-rose-700 font-semibold px-1 whitespace-nowrap w-[74px]">
+                            {Array.from(absentByDate.values()).reduce((sum, n) => sum + n, 0)}
+                          </TableHead>
+                        </TableRow>
                         <TableRow className="bg-muted/50">
                           <TableHead className="text-right w-[42px] px-1">מס'</TableHead>
                           <TableHead className="text-right w-[150px] px-2">{tr.student}</TableHead>
@@ -3499,7 +3498,12 @@ tr:nth-child(even) td{background:#f9fafb}
                               className="text-center px-1 whitespace-nowrap"
                               style={dateHeadStyle}
                             >
-                              {new Date(d).toLocaleDateString("he-IL")}
+                              <div className="flex flex-col items-center leading-tight">
+                                <span>{new Date(d).toLocaleDateString("he-IL")}</span>
+                                <span className="text-[10px] font-normal text-muted-foreground">
+                                  {weekdayForDate(d)}
+                                </span>
+                              </div>
                             </TableHead>
                           ))}
                           <TableHead className="text-center w-[74px] px-1 whitespace-nowrap">סה"כ נוכחות</TableHead>
@@ -3532,7 +3536,6 @@ tr:nth-child(even) td{background:#f9fafb}
                         })}
                       </TableBody>
                     </Table>
-                  </div>
                   </div>
                 ) : (
                   <p className="text-center text-muted-foreground py-6">{tr.noStudentAttendance}</p>

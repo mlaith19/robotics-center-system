@@ -464,10 +464,22 @@ export default function SettingsPage() {
     })
   }
   const openEditTeacherTariff = (row: TeacherTariffProfileRow) => {
+    let parsedStudentTierRates: Array<{ upToStudents?: unknown; hourlyRate?: unknown }> = []
+    const raw = row.studentTierRates
+    if (Array.isArray(raw)) {
+      parsedStudentTierRates = raw as Array<{ upToStudents?: unknown; hourlyRate?: unknown }>
+    } else if (typeof raw === "string" && raw.trim().length > 0) {
+      try {
+        const decoded = JSON.parse(raw)
+        if (Array.isArray(decoded)) {
+          parsedStudentTierRates = decoded as Array<{ upToStudents?: unknown; hourlyRate?: unknown }>
+        }
+      } catch {
+        parsedStudentTierRates = []
+      }
+    }
     const tiers = Array.from({ length: 10 }, (_, i) => {
-      const r = (Array.isArray(row.studentTierRates) ? row.studentTierRates : []).find(
-        (x) => Number(x?.upToStudents) === i + 1,
-      )
+      const r = parsedStudentTierRates.find((x) => Number(x?.upToStudents) === i + 1)
       return Number(r?.hourlyRate || 0)
     })
     setTariffDialog({

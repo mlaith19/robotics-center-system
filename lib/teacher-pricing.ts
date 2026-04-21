@@ -9,7 +9,20 @@ export type StudentTierRate = {
 }
 
 export function normalizeStudentTierRates(input: unknown): StudentTierRate[] {
-  const arr = Array.isArray(input) ? input : []
+  let raw: unknown = input
+  if (typeof raw === "string") {
+    const trimmed = raw.trim()
+    if (trimmed.length > 0) {
+      try {
+        raw = JSON.parse(trimmed)
+      } catch {
+        raw = []
+      }
+    } else {
+      raw = []
+    }
+  }
+  const arr = Array.isArray(raw) ? raw : []
   const normalized = arr
     .map((item: any) => ({
       upToStudents: Number(item?.upToStudents),
