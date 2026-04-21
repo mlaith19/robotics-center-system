@@ -298,6 +298,22 @@ export default function SchoolViewPage() {
   const canViewGafanTab = isFullAccess || hasPermission(userPerms, "schools.tab.gafan")
   const roleToken = (currentUser?.roleKey ?? currentUser?.role ?? "").toString().trim().toLowerCase()
   const isTeacherRole = roleToken === "teacher" || roleToken.includes("teacher") || roleToken.includes("מורה")
+  const teacherSelfNames = useMemo<string[]>(() => {
+    if (!isTeacherRole) return []
+    const names = [currentUser?.full_name, currentUser?.username]
+      .map((n) => (n ?? "").toString().trim().toLowerCase())
+      .filter((n) => n.length > 0)
+    return Array.from(new Set(names))
+  }, [isTeacherRole, currentUser?.full_name, currentUser?.username])
+  const rowBelongsToCurrentTeacher = useCallback(
+    (teacherName: string | null | undefined) => {
+      if (!isTeacherRole) return true
+      const normalized = (teacherName ?? "").toString().trim().toLowerCase()
+      if (!normalized) return false
+      return teacherSelfNames.includes(normalized)
+    },
+    [isTeacherRole, teacherSelfNames],
+  )
   const canViewNgafanTab =
     !isTeacherRole && (isFullAccess || hasPermission(userPerms, "schools.tab.ngafan"))
   const canViewAttendanceTab = isFullAccess || hasPermission(userPerms, "schools.tab.attendance")
@@ -660,6 +676,7 @@ export default function SchoolViewPage() {
       const programSerial = programIndex >= 0 ? programIndex + 1 : 0
       const programName = `${program.name}${programSerial ? ` (#${programSerial})` : ""}`
       rows.forEach((row, rowIndex) => {
+        if (!rowBelongsToCurrentTeacher(row.teacherName)) return
         const d = new Date(`${row.date}T12:00:00`)
         const isValidDate = !Number.isNaN(d.getTime())
         const key = isValidDate ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}` : "unknown"
@@ -700,7 +717,7 @@ export default function SchoolViewPage() {
         rows: value.rows.sort((a, b) => a.date.localeCompare(b.date)),
       }))
     return out
-  }, [gafanPrograms])
+  }, [gafanPrograms, rowBelongsToCurrentTeacher])
 
   const pendingAttendanceRows = useMemo(() => {
     const out: Array<{
@@ -714,6 +731,7 @@ export default function SchoolViewPage() {
       const rows = parseGafanHourRows(program)
       rows.forEach((row, idx) => {
         if (!row.pendingAssignment) return
+        if (!rowBelongsToCurrentTeacher(row.teacherName)) return
         out.push({
           key: `${program.id}::${idx}`,
           holderProgramId: program.id,
@@ -724,7 +742,7 @@ export default function SchoolViewPage() {
       })
     }
     return out.sort((a, b) => a.row.date.localeCompare(b.row.date))
-  }, [gafanPrograms])
+  }, [gafanPrograms, rowBelongsToCurrentTeacher])
 
   const assignPendingAttendanceRow = async (rowKey: string) => {
     if (!school?.id) return
