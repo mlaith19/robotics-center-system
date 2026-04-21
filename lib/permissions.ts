@@ -691,7 +691,7 @@ export function canAccessPage(
   }
 
   if (pagePath === "/dashboard") {
-    if (hasPermission(userPermissions, "settings.home")) return true
+    if (hasPermission(userPermissions, "settings.home") || hasPermission(userPermissions, "nav.myProfile")) return true
     return false
   }
 

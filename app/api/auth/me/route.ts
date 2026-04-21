@@ -49,11 +49,18 @@ export async function GET(request: Request) {
           const row = rows[0] as { role?: string | null; permissions?: unknown }
           const dbRole = (row.role || "").toString().trim()
           if (dbRole) effectiveRole = dbRole
+          let dbPerms: string[] = []
           if (Array.isArray(row.permissions)) {
-            permissions = row.permissions.map((p) => String(p)).filter(Boolean)
-          } else {
-            permissions = []
+            dbPerms = row.permissions.map((p) => String(p)).filter(Boolean)
+          } else if (typeof row.permissions === "string") {
+            try {
+              const parsed = JSON.parse(row.permissions)
+              if (Array.isArray(parsed)) dbPerms = parsed.map((p) => String(p)).filter(Boolean)
+            } catch {}
           }
+          // Keep existing session permissions if DB value is empty/missing
+          // to avoid accidental lockout during transitions/migrations.
+          if (dbPerms.length > 0) permissions = dbPerms
         }
       }
     }
@@ -61,8 +68,9 @@ export async function GET(request: Request) {
     console.warn("[auth/me] failed to refresh permissions from tenant DB:", err)
   }
 
-  if (permissions.length === 0 && effectiveRole) {
-    const roleDefaults = getPermissionsForRole(effectiveRole as RoleType)
+  const fallbackRoleForDefaults = (effectiveSessionRoleKey || effectiveSessionRole || effectiveRole || "").toString()
+  if (permissions.length === 0 && fallbackRoleForDefaults) {
+    const roleDefaults = getPermissionsForRole(fallbackRoleForDefaults as RoleType)
     if (roleDefaults.length > 0) permissions = roleDefaults
   }
 
