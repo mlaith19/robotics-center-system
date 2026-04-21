@@ -6,6 +6,14 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { 
   Trash2, 
   Pencil, 
@@ -189,8 +197,84 @@ export default function SchoolsPage() {
           <SchoolIcon className="h-12 w-12 mx-auto mb-4 opacity-50" />
           <p>אין בתי ספר</p>
         </Card>
+      ) : viewMode === "list" ? (
+        <Card className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="text-right">שם בית הספר</TableHead>
+                  <TableHead className="text-right">סוג</TableHead>
+                  <TableHead className="text-right">עיר / כתובת</TableHead>
+                  <TableHead className="text-right">טלפון</TableHead>
+                  <TableHead className="text-right">אימייל</TableHead>
+                  <TableHead className="text-right">איש קשר</TableHead>
+                  <TableHead className="text-right">סטטוס</TableHead>
+                  <TableHead className="text-center">פעולות</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((s) => (
+                  <TableRow key={s.id}>
+                    <TableCell className="font-medium">{s.name}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {s.schoolType ? schoolTypeLabels[s.schoolType] || s.schoolType : "—"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {getFullAddress(s) || "—"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground" dir="ltr">
+                      {s.phone || "—"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground" dir="ltr">
+                      {s.email || "—"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {s.contactPerson || "—"}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={`${statusColors[s.status || "active"]}`}
+                      >
+                        {statusLabels[s.status || "active"] || s.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <Link href={`/dashboard/schools/${s.id}`}>
+                          <Button variant="outline" size="sm" title="צפה">
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                        {canEditSchools && (
+                          <Link href={`/dashboard/schools/${s.id}/edit`}>
+                            <Button variant="outline" size="sm" title="ערוך">
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          </Link>
+                        )}
+                        {canDeleteSchools && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            title="מחק"
+                            className="text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                            onClick={() => remove(s.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </Card>
       ) : (
-        <div className={viewMode === "grid" ? "grid gap-4 md:grid-cols-2" : "space-y-4"}>
+        <div className="grid gap-4 md:grid-cols-2">
           {filtered.map((s) => (
             <Card key={s.id} className="space-y-4 p-4 sm:p-5">
               {/* Header with name and status */}
