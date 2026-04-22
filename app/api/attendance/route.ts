@@ -27,37 +27,6 @@ function extractAttendanceDateYmd(raw: unknown): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(head) ? head : ""
 }
 
-async function backfillCampTeacherRowsForTeacher(
-  db: ReturnType<typeof postgres>,
-  teacherId: string,
-) {
-  const tRows = await db`SELECT "userId" FROM "Teacher" WHERE id = ${teacherId} LIMIT 1`
-  const teacherUserId = String((tRows[0] as { userId?: string | null } | undefined)?.userId || "").trim()
-  const rows = await db`
-    SELECT DISTINCT
-      a."courseId" as "courseId",
-      LEFT(BTRIM(a."date"::text), 10) as "dateYmd",
-      c."courseType" as "courseType"
-    FROM "Attendance" a
-    INNER JOIN "Course" c ON c.id = a."courseId"
-    WHERE a."courseId" IS NOT NULL
-      AND a."studentId" IS NOT NULL
-      AND (
-        a."teacherId" = ${teacherId}
-        OR (${teacherUserId || null} IS NOT NULL AND a."createdByUserId" = ${teacherUserId || null})
-      )
-  `
-  const nowIso = new Date().toISOString()
-  for (const r of rows as Array<{ courseId?: string; dateYmd?: string; courseType?: string | null }>) {
-    const cid = String(r.courseId || "").trim()
-    const d = String(r.dateYmd || "").trim()
-    const courseType = String(r.courseType || "")
-    if (!cid || !d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) continue
-    if (!isCampCourseType(courseType)) continue
-    await resyncCampTeacherAttendanceForCourseDate(db, cid, d, nowIso)
-  }
-}
-
 export const GET = withTenantAuth(async (req, _session) => {
   const [tenant, tenantErr] = await requireTenant(req)
   if (tenantErr) return tenantErr
@@ -313,12 +282,8 @@ export const GET = withTenantAuth(async (req, _session) => {
 
   try {
     await ensureAttendanceCampColumns(db)
-    // Run dedupe on read as well, so existing duplicates are cleaned immediately.
-    await ensureAttendanceUniqueIndexes(db)
     if (teacherId) {
       await ensureAttendanceHourKindColumn(db)
-      // Backfill historical camp teacher rows so "courses" attendance is visible for the teacher.
-      await backfillCampTeacherRowsForTeacher(db, teacherId)
     }
     let result = (await runQuery(db, true)) as Record<string, unknown>[]
     if (teacherId && Array.isArray(result)) {
