@@ -15,7 +15,40 @@ export const GET = withTenantAuth(async (req, session) => {
     const result = await db`
       SELECT 
         (SELECT COUNT(*) FROM "Course" WHERE status = 'active' OR status = 'פעיל' OR status IS NULL) as "totalCourses",
-        (SELECT COUNT(*) FROM "Student" WHERE status = 'active' OR status = 'פעיל' OR status IS NULL) as "activeStudents",
+        (
+          SELECT COUNT(DISTINCT e."studentId")
+          FROM "Enrollment" e
+          LEFT JOIN "Course" c ON c.id = e."courseId"
+          WHERE e."studentId" IS NOT NULL
+            AND c.id IS NOT NULL
+            AND (c."startDate" IS NULL OR c."startDate"::date <= CURRENT_DATE)
+            AND (c."endDate" IS NULL OR c."endDate"::date >= CURRENT_DATE)
+            AND (
+              e.status IS NULL OR BTRIM(e.status) = ''
+              OR LOWER(BTRIM(e.status)) NOT IN ('inactive','cancelled','completed')
+              AND BTRIM(e.status) NOT IN ('לא פעיל','בוטל','הסתיים','סיים')
+            )
+        ) as "activeStudents",
+        (
+          SELECT COUNT(DISTINCT a."studentId")
+          FROM "Attendance" a
+          WHERE a."studentId" IS NOT NULL
+            AND a."date"::date = CURRENT_DATE
+            AND (
+              LOWER(BTRIM(COALESCE(a.status, ''))) = 'present'
+              OR BTRIM(COALESCE(a.status, '')) = 'נוכח'
+            )
+        ) as "activeStudentsToday",
+        (
+          SELECT COUNT(DISTINCT a."studentId")
+          FROM "Attendance" a
+          WHERE a."studentId" IS NOT NULL
+            AND date_trunc('month', a."date"::date) = date_trunc('month', CURRENT_DATE)
+            AND (
+              LOWER(BTRIM(COALESCE(a.status, ''))) = 'present'
+              OR BTRIM(COALESCE(a.status, '')) = 'נוכח'
+            )
+        ) as "activeStudentsCurrentMonth",
         (SELECT COUNT(*) FROM "Teacher" WHERE status = 'פעיל' OR status = 'active' OR status IS NULL) as "activeTeachers",
         (SELECT COUNT(*) FROM "School") as "totalSchools",
         (SELECT COUNT(*) FROM "Enrollment") as "totalEnrollments",
@@ -40,6 +73,8 @@ export const GET = withTenantAuth(async (req, session) => {
     return Response.json({
       totalCourses: Number(stats.totalCourses) || 0,
       activeStudents: Number(stats.activeStudents) || 0,
+      activeStudentsToday: Number((stats as any).activeStudentsToday) || 0,
+      activeStudentsCurrentMonth: Number((stats as any).activeStudentsCurrentMonth) || 0,
       activeTeachers: Number(stats.activeTeachers) || 0,
       totalSchools: Number(stats.totalSchools) || 0,
       totalEnrollments: Number(stats.totalEnrollments) || 0,

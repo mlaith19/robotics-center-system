@@ -19,6 +19,8 @@ interface TeacherDashboardAggregate {
 interface DashboardStats {
   totalCourses: number
   activeStudents: number
+  activeStudentsToday?: number
+  activeStudentsCurrentMonth?: number
   activeTeachers: number
   totalSchools: number
   totalEnrollments: number
@@ -182,7 +184,7 @@ export default function DashboardPage() {
         <Card className="border-green-200 bg-gradient-to-br from-green-50 to-green-100/50 p-4 dark:border-green-800 dark:from-green-950/30 dark:to-green-900/20 sm:p-5">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0 flex-1 text-right">
-              <p className="text-sm font-medium text-green-600 dark:text-green-400">תלמידים פעילים</p>
+              <p className="text-sm font-medium text-green-600 dark:text-green-400">תלמידים פעילים (רישום פעיל)</p>
               <p className="mt-1 text-2xl font-bold text-green-700 dark:text-green-300 sm:text-3xl">{stats?.activeStudents || 0}</p>
             </div>
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-500/20 sm:h-12 sm:w-12">
@@ -211,6 +213,36 @@ export default function DashboardPage() {
             </div>
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-orange-500/20 sm:h-12 sm:w-12">
               <Building2 className="h-5 w-5 text-orange-600 dark:text-orange-400 sm:h-6 sm:w-6" />
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Students activity by attendance */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+        <Card className="border-emerald-200 bg-gradient-to-br from-emerald-50 to-emerald-100/50 p-4 dark:border-emerald-800 dark:from-emerald-950/30 dark:to-emerald-900/20 sm:p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1 text-right">
+              <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">תלמידים פעילים היום</p>
+              <p className="mt-1 text-2xl font-bold text-emerald-800 dark:text-emerald-200 sm:text-3xl">
+                {stats?.activeStudentsToday || 0}
+              </p>
+            </div>
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500/20 sm:h-12 sm:w-12">
+              <Calendar className="h-5 w-5 text-emerald-700 dark:text-emerald-300 sm:h-6 sm:w-6" />
+            </div>
+          </div>
+        </Card>
+        <Card className="border-teal-200 bg-gradient-to-br from-teal-50 to-cyan-100/40 p-4 dark:border-teal-800 dark:from-teal-950/30 dark:to-cyan-950/20 sm:p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1 text-right">
+              <p className="text-sm font-medium text-teal-700 dark:text-teal-300">תלמידים פעילים החודש</p>
+              <p className="mt-1 text-2xl font-bold text-teal-800 dark:text-teal-200 sm:text-3xl">
+                {stats?.activeStudentsCurrentMonth || 0}
+              </p>
+            </div>
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-teal-500/20 sm:h-12 sm:w-12">
+              <Calendar className="h-5 w-5 text-teal-700 dark:text-teal-300 sm:h-6 sm:w-6" />
             </div>
           </div>
         </Card>

@@ -559,7 +559,7 @@ export const POST = withTenantAuth(async (req, session) => {
       if (studentId && courseId) {
         if (isCampCourse) {
           await resyncCampTeacherAttendanceForCourseDate(db, courseId, dateYmd, now)
-        } else if (status === "present" || status === "נוכח") {
+        } else {
           await syncTeacherAttendanceForCourseDate(db, courseId, date, createdByUserId, now)
         }
       }
@@ -630,7 +630,7 @@ export const POST = withTenantAuth(async (req, session) => {
     if (studentId && courseId) {
       if (isCampCourse) {
         await resyncCampTeacherAttendanceForCourseDate(db, courseId, dateYmd, now)
-      } else if (status === "present" || status === "נוכח") {
+      } else {
         await syncTeacherAttendanceForCourseDate(db, courseId, date, createdByUserId, now)
       }
     }
@@ -649,6 +649,20 @@ async function syncTeacherAttendanceForCourseDate(
   now: string
 ) {
   if (await courseIsCampType(db, courseId)) return
+  const hasPresentStudents = (
+    await db`
+      SELECT 1
+      FROM "Attendance"
+      WHERE "courseId" = ${courseId}
+        AND "date" = ${date}
+        AND "studentId" IS NOT NULL
+        AND (
+          LOWER(BTRIM(COALESCE(status, ''))) = 'present'
+          OR BTRIM(COALESCE(status, '')) = 'נוכח'
+        )
+      LIMIT 1
+    `
+  ).length > 0
   const courses = await db`SELECT "teacherIds" FROM "Course" WHERE id = ${courseId}`
   const raw = courses[0]?.teacherIds
   let teacherIds: string[] = []
@@ -669,6 +683,12 @@ async function syncTeacherAttendanceForCourseDate(
         AND "studentId" IS NULL
         AND "campMeetingCellId" IS NULL
     `
+    if (!hasPresentStudents) {
+      if (existingTeacher.length > 0) {
+        await db`DELETE FROM "Attendance" WHERE id = ${(existingTeacher[0] as { id: string }).id}`
+      }
+      continue
+    }
     if (existingTeacher.length > 0) {
       await db`
         UPDATE "Attendance"
@@ -763,6 +783,9 @@ export const DELETE = withTenantAuth(async (req, _session) => {
       if (camp && dateYmd) {
         const now = new Date().toISOString()
         await resyncCampTeacherAttendanceForCourseDate(db, courseId, dateYmd, now)
+      } else {
+        const now = new Date().toISOString()
+        await syncTeacherAttendanceForCourseDate(db, courseId, date, _session.id, now)
       }
       await syncTeacherWeeklyActivityStatus(db)
       return Response.json({ success: true })
