@@ -853,11 +853,37 @@ export default function CourseViewPage() {
 
   /** מורה רואה רק נוכחות מורה של עצמו; מנהלים — הכל */
   const courseTeacherAttendanceList = useMemo(() => {
-    const rows = attendanceList.filter((a) => a.teacherId != null)
-    if (isAdmin) return rows
-    if (myTeacherId) return rows.filter((a) => String(a.teacherId) === String(myTeacherId))
-    return []
-  }, [attendanceList, isAdmin, myTeacherId])
+    const teacherRows = attendanceList.filter((a) => a.teacherId != null)
+    const visibleByRole = isAdmin
+      ? teacherRows
+      : myTeacherId
+        ? teacherRows.filter((a) => String(a.teacherId) === String(myTeacherId))
+        : []
+
+    const presentStudentDateKeys = new Set<string>()
+    const presentStudentCellKeys = new Set<string>()
+    for (const row of attendanceList) {
+      if (row.studentId == null) continue
+      if (!isTeacherAttendancePresentStatus(row.status)) continue
+      const dateKey = attendanceDateYmdForSort(row.date)
+      if (!dateKey) continue
+      presentStudentDateKeys.add(dateKey)
+      const cellKey = String(row.campMeetingCellId || "").trim()
+      if (cellKey) {
+        presentStudentCellKeys.add(`${dateKey}::${cellKey}`)
+      }
+    }
+
+    return visibleByRole.filter((row) => {
+      const dateKey = attendanceDateYmdForSort(row.date)
+      if (!dateKey) return false
+      const cellKey = String(row.campMeetingCellId || "").trim()
+      if (isCampCourse && cellKey) {
+        return presentStudentCellKeys.has(`${dateKey}::${cellKey}`)
+      }
+      return presentStudentDateKeys.has(dateKey)
+    })
+  }, [attendanceList, isAdmin, myTeacherId, isCampCourse])
 
   /** אינדקס צבע לפי מורה — סדר אחיד עם שורות הטבלה (לפי שם מורה בעברית) */
   const teacherAttendanceColorIndexById = useMemo(() => {
