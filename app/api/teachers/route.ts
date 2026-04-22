@@ -28,7 +28,7 @@ export const GET = withTenantAuth(async (req, session) => {
       const scopedRows = await db`SELECT id FROM "Teacher" WHERE "userId" = ${session.id} LIMIT 1`
       teacherScopeId = scopedRows.length > 0 ? String((scopedRows[0] as { id: string }).id) : null
     }
-    const [teachers, expenses, attendances, enrollments, tariffLinks, monthlyTeacherPayRow] = await Promise.all([
+    const [teachers, expenses, attendances, enrollments, tariffLinks, monthlyTeacherPayRow, presentCounts] = await Promise.all([
       teacherScopeId
         ? db`SELECT * FROM "Teacher" WHERE id = ${teacherScopeId} ORDER BY "createdAt" DESC`
         : db`SELECT * FROM "Teacher" ORDER BY "createdAt" DESC`,
@@ -36,7 +36,8 @@ export const GET = withTenantAuth(async (req, session) => {
         ? db`SELECT "teacherId", SUM(amount) as total_paid FROM "Expense" WHERE "teacherId" = ${teacherScopeId} GROUP BY "teacherId"`
         : db`SELECT "teacherId", SUM(amount) as total_paid FROM "Expense" WHERE "teacherId" IS NOT NULL GROUP BY "teacherId"`,
       db`
-        SELECT a."teacherId", a.status, a.hours, a."hourKind", c.id as "courseId", c.location, c."startTime", c."endTime"
+        SELECT a."teacherId", a.id as "attId", a.status, a.hours, a."hourKind", a."date", a."campMeetingCellId",
+          c.id as "courseId", c.location, c."startTime", c."endTime"
         FROM "Attendance" a
         LEFT JOIN "Course" c ON a."courseId" = c.id
         WHERE a."teacherId" IS NOT NULL
@@ -53,6 +54,18 @@ export const GET = withTenantAuth(async (req, session) => {
         WHERE "teacherId" IS NOT NULL
           AND date >= date_trunc('month', CURRENT_TIMESTAMP)
           AND date < date_trunc('month', CURRENT_TIMESTAMP) + interval '1 month'
+      `,
+      db`
+        SELECT "courseId",
+               "date",
+               COALESCE("campMeetingCellId", '') AS cell_key,
+               COUNT(DISTINCT "studentId")::int AS cnt
+        FROM "Attendance"
+        WHERE "studentId" IS NOT NULL
+          AND LOWER(TRIM(COALESCE(status, ''))) IN ('present', 'נוכח')
+          AND "courseId" IS NOT NULL
+          AND "date" IS NOT NULL
+        GROUP BY "courseId", "date", COALESCE("campMeetingCellId", '')
       `,
     ])
 
@@ -76,6 +89,12 @@ export const GET = withTenantAuth(async (req, session) => {
     ;(tariffLinks as { courseId: string; teacherId: string; tariffProfileId: string }[]).forEach((l) => {
       const pr = profileById.get(String(l.tariffProfileId))
       if (pr) courseTeacherTariffProfile.set(`${String(l.courseId)}|${String(l.teacherId)}`, pr)
+    })
+
+    const presentCountByKey = new Map<string, number>()
+    ;(presentCounts as { courseId: string; date: string; cell_key: string; cnt: string | number }[]).forEach((p) => {
+      const key = `${String(p.courseId)}|${String(p.date).slice(0, 10)}|${String(p.cell_key || "")}`
+      presentCountByKey.set(key, Number(p.cnt || 0))
     })
 
     const owedMap = new Map<string, number>()
@@ -104,12 +123,19 @@ export const GET = withTenantAuth(async (req, session) => {
       const teacher = teacherMap.get(teacherId)
       if (!teacher) return
       const cid = a.courseId ? String(a.courseId) : ""
+      const ymd = String(a.date ?? "").trim().slice(0, 10)
+      const cell = a.campMeetingCellId ? String(a.campMeetingCellId) : ""
+      const presentCount =
+        cid && /^\d{4}-\d{2}-\d{2}$/.test(ymd)
+          ? presentCountByKey.get(`${cid}|${ymd}|${cell}`) ?? 0
+          : null
       const profileRow = cid ? courseTeacherTariffProfile.get(`${cid}|${teacherId}`) ?? null : null
       const rate = resolveHourlyRateForAttendance({
         tariffProfileRow: profileRow,
         teacherRow: teacher as Record<string, unknown>,
         location: a.location ? String(a.location) : null,
         enrollmentCount: a.courseId ? enrollmentMap.get(String(a.courseId)) ?? 0 : 0,
+        presentStudentsCount: presentCount,
         hourKind: normalizeTeacherAttendanceHourKind((a as { hourKind?: unknown }).hourKind),
       })
       const owed = (owedMap.get(teacherId) || 0) + rate * hours

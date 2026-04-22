@@ -18,6 +18,7 @@ import {
 import { ensureAttendanceHourKindColumn } from "@/lib/teacher-attendance-hour-kind"
 import { enrichTeacherAttendanceRowsWithRates } from "@/lib/teacher-tariff-profiles"
 import { syncTeacherWeeklyActivityStatus } from "@/lib/teacher-weekly-activity-status"
+import { ensureAttendanceUniqueIndexes } from "@/lib/attendance-uniqueness"
 
 function extractAttendanceDateYmd(raw: unknown): string {
   const s = String(raw ?? "").trim()
@@ -311,6 +312,7 @@ export const POST = withTenantAuth(async (req, session) => {
   try {
     await ensureAttendanceCampColumns(db)
     await ensureAttendanceHourKindColumn(db)
+    await ensureAttendanceUniqueIndexes(db)
     const body = await req.json()
     const { studentId, teacherId, courseId, date, status, notes, note, hours } = body
     const rawCampCell = (body as Record<string, unknown>).campMeetingCellId
@@ -454,14 +456,26 @@ export const POST = withTenantAuth(async (req, session) => {
         `) as { id: string; createdByUserId?: string | null }[]
       }
     } else if (courseId) {
-      existing = (await db`
-        SELECT id, "createdByUserId" FROM "Attendance" 
-        WHERE "teacherId" = ${teacherId} AND "courseId" = ${courseId} AND "date" = ${date}
-      `) as { id: string; createdByUserId?: string | null }[]
+      if (campMeetingCellId) {
+        existing = (await db`
+          SELECT id, "createdByUserId" FROM "Attendance"
+          WHERE "teacherId" = ${teacherId} AND "courseId" = ${courseId} AND "date" = ${date}
+            AND "campMeetingCellId" = ${campMeetingCellId}
+            AND "studentId" IS NULL
+        `) as { id: string; createdByUserId?: string | null }[]
+      } else {
+        existing = (await db`
+          SELECT id, "createdByUserId" FROM "Attendance"
+          WHERE "teacherId" = ${teacherId} AND "courseId" = ${courseId} AND "date" = ${date}
+            AND "campMeetingCellId" IS NULL
+            AND "studentId" IS NULL
+        `) as { id: string; createdByUserId?: string | null }[]
+      }
     } else {
       existing = (await db`
-        SELECT id, "createdByUserId" FROM "Attendance" 
+        SELECT id, "createdByUserId" FROM "Attendance"
         WHERE "teacherId" = ${teacherId} AND "courseId" IS NULL AND "date" = ${date}
+          AND "studentId" IS NULL
       `) as { id: string; createdByUserId?: string | null }[]
     }
 
@@ -502,21 +516,59 @@ export const POST = withTenantAuth(async (req, session) => {
     }
 
     const insertCreatorUserId = studentId ? session.id : createdByUserId
-    const result = await db`
-      INSERT INTO "Attendance" (
-        id, "studentId", "teacherId", "courseId", date, status, notes, hours, "hourKind",
-        "campMeetingCellId", "campLessonTitle", "campSlotStart", "campSlotEnd",
-        "createdByUserId", "createdAt"
-      )
-      VALUES (
-        ${id}, ${studentId || null}, ${teacherId || null}, ${courseId || null}, ${date}, ${status}, ${noteValue},
-        ${hours || null}, ${hourKindStored},
-        ${campMeetingCellId}, null, null, null,
-        ${insertCreatorUserId}, ${now}
-      )
-      RETURNING *
-    `
-    const saved = result[0]
+    let saved: Record<string, unknown>
+    try {
+      const result = await db`
+        INSERT INTO "Attendance" (
+          id, "studentId", "teacherId", "courseId", date, status, notes, hours, "hourKind",
+          "campMeetingCellId", "campLessonTitle", "campSlotStart", "campSlotEnd",
+          "createdByUserId", "createdAt"
+        )
+        VALUES (
+          ${id}, ${studentId || null}, ${teacherId || null}, ${courseId || null}, ${date}, ${status}, ${noteValue},
+          ${hours || null}, ${hourKindStored},
+          ${campMeetingCellId}, null, null, null,
+          ${insertCreatorUserId}, ${now}
+        )
+        RETURNING *
+      `
+      saved = result[0] as Record<string, unknown>
+    } catch (err) {
+      const code = (err as { code?: string }).code
+      if (code !== "23505") throw err
+      // כפילות ב-DB: בקשה מקבילה כבר יצרה את השורה. מבצעים UPDATE במקום.
+      let updated: Record<string, unknown>[] = []
+      if (studentId) {
+        updated = (await db`
+          UPDATE "Attendance"
+          SET status = ${status}, notes = ${noteValue}, hours = ${hours || null},
+              "hourKind" = ${hourKindStored}, "createdByUserId" = ${insertCreatorUserId}
+          WHERE "studentId" = ${studentId} AND "courseId" = ${courseId} AND "date" = ${date}
+            AND COALESCE("campMeetingCellId", '') = ${campMeetingCellId || ''}
+          RETURNING *
+        `) as Record<string, unknown>[]
+      } else if (teacherId && courseId) {
+        updated = (await db`
+          UPDATE "Attendance"
+          SET status = ${status}, notes = ${noteValue}, hours = ${hours || null},
+              "hourKind" = ${hourKindStored}, "createdByUserId" = ${insertCreatorUserId}
+          WHERE "teacherId" = ${teacherId} AND "courseId" = ${courseId} AND "date" = ${date}
+            AND COALESCE("campMeetingCellId", '') = ${campMeetingCellId || ''}
+            AND "studentId" IS NULL
+          RETURNING *
+        `) as Record<string, unknown>[]
+      } else if (teacherId) {
+        updated = (await db`
+          UPDATE "Attendance"
+          SET status = ${status}, notes = ${noteValue}, hours = ${hours || null},
+              "hourKind" = ${hourKindStored}, "createdByUserId" = ${insertCreatorUserId}
+          WHERE "teacherId" = ${teacherId} AND "courseId" IS NULL AND "date" = ${date}
+            AND "studentId" IS NULL
+          RETURNING *
+        `) as Record<string, unknown>[]
+      }
+      saved = updated[0] ?? ({} as Record<string, unknown>)
+    }
     if (studentId && courseId) {
       if (isCampCourse) {
         await resyncCampTeacherAttendanceForCourseDate(db, courseId, dateYmd, now)
@@ -550,24 +602,39 @@ async function syncTeacherAttendanceForCourseDate(
   if (teacherIds.length === 0) return
 
   const presentStatus = "נוכח"
+  await ensureAttendanceUniqueIndexes(db)
   for (const tid of teacherIds) {
     if (!tid) continue
     const existingTeacher = await db`
       SELECT id FROM "Attendance"
       WHERE "teacherId" = ${tid} AND "courseId" = ${courseId} AND "date" = ${date}
+        AND "studentId" IS NULL
+        AND "campMeetingCellId" IS NULL
     `
     if (existingTeacher.length > 0) {
       await db`
         UPDATE "Attendance"
         SET status = ${presentStatus}, "createdByUserId" = ${createdByUserId}
-        WHERE "teacherId" = ${tid} AND "courseId" = ${courseId} AND "date" = ${date}
+        WHERE id = ${(existingTeacher[0] as { id: string }).id}
       `
     } else {
       const teacherAttendanceId = crypto.randomUUID()
-      await db`
-        INSERT INTO "Attendance" (id, "studentId", "teacherId", "courseId", date, status, notes, hours, "createdByUserId", "createdAt")
-        VALUES (${teacherAttendanceId}, null, ${tid}, ${courseId}, ${date}, ${presentStatus}, null, null, ${createdByUserId}, ${now})
-      `
+      try {
+        await db`
+          INSERT INTO "Attendance" (id, "studentId", "teacherId", "courseId", date, status, notes, hours, "createdByUserId", "createdAt")
+          VALUES (${teacherAttendanceId}, null, ${tid}, ${courseId}, ${date}, ${presentStatus}, null, null, ${createdByUserId}, ${now})
+        `
+      } catch (err) {
+        // If a concurrent request inserted the same row, silently update instead.
+        const code = (err as { code?: string }).code
+        if (code !== "23505") throw err
+        await db`
+          UPDATE "Attendance"
+          SET status = ${presentStatus}, "createdByUserId" = ${createdByUserId}
+          WHERE "teacherId" = ${tid} AND "courseId" = ${courseId} AND "date" = ${date}
+            AND "studentId" IS NULL AND "campMeetingCellId" IS NULL
+        `
+      }
     }
   }
 }

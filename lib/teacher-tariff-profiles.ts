@@ -121,12 +121,14 @@ export function resolveHourlyRateFromTariffProfileRow(
   location: string | null,
   enrollmentCount: number,
   hourKind?: TeacherAttendanceHourKind | null,
+  presentStudentsCount?: number | null,
 ): number {
   const args = rowToTariffResolveArgs(profileRow)
   return resolveTeacherHourlyRate({
     ...args,
     location,
     enrollmentCount,
+    presentStudentsCount: presentStudentsCount ?? null,
     hourKind: hourKind ?? "teaching",
   })
 }
@@ -137,6 +139,8 @@ export function resolveHourlyRateForAttendance(params: {
   teacherRow: Record<string, unknown>
   location: string | null
   enrollmentCount: number
+  /** מספר תלמידים שסימנו "נוכח" באותו מפגש — רלוונטי בעיקר לפרופיל "לפי מדרגות תלמידים". */
+  presentStudentsCount?: number | null
   hourKind?: TeacherAttendanceHourKind | null
 }): number {
   const hourKind = params.hourKind === "office" ? "office" : "teaching"
@@ -146,6 +150,7 @@ export function resolveHourlyRateForAttendance(params: {
       params.location,
       params.enrollmentCount,
       hourKind,
+      params.presentStudentsCount ?? null,
     )
   }
   return resolveTeacherHourlyRate({
@@ -160,6 +165,7 @@ export function resolveHourlyRateForAttendance(params: {
     bonusPerHour: params.teacherRow.bonusPerHour != null ? Number(params.teacherRow.bonusPerHour) : 0,
     location: params.location,
     enrollmentCount: params.enrollmentCount,
+    presentStudentsCount: params.presentStudentsCount ?? null,
     hourKind,
   })
 }
@@ -248,19 +254,67 @@ export async function enrichTeacherAttendanceRowsWithRates(
       bonusPerHour: row.tp_bonusPerHour,
     })
   }
+
+  // ספירת תלמידים שסומנו "נוכח" לכל שילוב של (courseId, date, campMeetingCellId)
+  // כך שחישוב המדרגות יתבצע לפי נוכחות בפועל של אותו מפגש, ולא לפי סה"כ רשומים בקורס.
+  const courseDateKeys = new Set<string>()
+  const uniqueCourseIds = new Set<string>()
+  const uniqueDates = new Set<string>()
+  for (const r of rows) {
+    const cid = r.courseId ? String(r.courseId) : ""
+    const ymd = String(r.date ?? "").trim().slice(0, 10)
+    if (!cid || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) continue
+    uniqueCourseIds.add(cid)
+    uniqueDates.add(ymd)
+    const cell = r.campMeetingCellId ? String(r.campMeetingCellId) : ""
+    courseDateKeys.add(`${cid}|${ymd}|${cell}`)
+  }
+  const presentByKey = new Map<string, number>()
+  if (uniqueCourseIds.size > 0 && uniqueDates.size > 0) {
+    const courseIdsArr = Array.from(uniqueCourseIds)
+    const datesArr = Array.from(uniqueDates)
+    const presentRows = await sql`
+      SELECT "courseId",
+             "date",
+             COALESCE("campMeetingCellId", '') AS cell_key,
+             COUNT(DISTINCT "studentId")::int AS cnt
+      FROM "Attendance"
+      WHERE "studentId" IS NOT NULL
+        AND LOWER(TRIM(COALESCE(status, ''))) IN ('present', 'נוכח')
+        AND "courseId" = ANY(${courseIdsArr}::text[])
+        AND "date" = ANY(${datesArr}::text[])
+      GROUP BY "courseId", "date", COALESCE("campMeetingCellId", '')
+    `
+    for (const pr of presentRows as {
+      courseId: string
+      date: string
+      cell_key: string
+      cnt: string | number
+    }[]) {
+      const key = `${String(pr.courseId)}|${String(pr.date).slice(0, 10)}|${String(pr.cell_key || "")}`
+      presentByKey.set(key, Number(pr.cnt || 0))
+    }
+  }
+
   return rows.map((r) => {
     const cid = r.courseId ? String(r.courseId) : ""
     const prof = cid ? profileByCourse.get(cid) ?? null : null
     const loc = r.courseLocation != null ? String(r.courseLocation) : null
     const hourKind = normalizeTeacherAttendanceHourKind(r.hourKind)
+    const ymd = String(r.date ?? "").trim().slice(0, 10)
+    const cell = r.campMeetingCellId ? String(r.campMeetingCellId) : ""
+    const presentCountForThisSession = cid && /^\d{4}-\d{2}-\d{2}$/.test(ymd)
+      ? presentByKey.get(`${cid}|${ymd}|${cell}`) ?? 0
+      : null
     const rate = resolveHourlyRateForAttendance({
       tariffProfileRow: prof,
       teacherRow,
       location: loc,
       enrollmentCount: cid ? encMap.get(cid) ?? 0 : 0,
+      presentStudentsCount: presentCountForThisSession,
       hourKind,
     })
-    return { ...r, appliedHourlyRate: rate }
+    return { ...r, appliedHourlyRate: rate, presentStudentsCount: presentCountForThisSession }
   })
 }
 

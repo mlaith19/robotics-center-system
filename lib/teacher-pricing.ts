@@ -63,6 +63,8 @@ export function resolveTeacherHourlyRate(params: {
   bonusPerHour?: number | null
   location?: string | null
   enrollmentCount?: number | null
+  /** מספר תלמידים שסימנו "נוכח" במפגש הספציפי (לפי תאריך/תא-קייטנה). אם לא סופק — משתמש ב-enrollmentCount. */
+  presentStudentsCount?: number | null
   /** ברירת מחדל: הוראה; office = תעריף שעת משרד מהפרופיל (ללא בונוס לפי תלמידים) */
   hourKind?: TeacherAttendanceHourKind | null
 }): number {
@@ -74,13 +76,20 @@ export function resolveTeacherHourlyRate(params: {
 
   const method = params.pricingMethod === "per_student_tier" ? "per_student_tier" : "standard"
   const enrollmentCount = Math.max(0, Number(params.enrollmentCount || 0))
+  const hasPresentCount =
+    params.presentStudentsCount != null && Number.isFinite(Number(params.presentStudentsCount))
+  const presentStudentsCount = hasPresentCount ? Math.max(0, Number(params.presentStudentsCount)) : enrollmentCount
 
   let baseRate = 0
   if (method === "per_student_tier") {
     const tiers = normalizeStudentTierRates(params.studentTierRates || [])
     if (tiers.length > 0) {
-      const match = tiers.find((t) => enrollmentCount <= t.upToStudents)
-      baseRate = match ? match.hourlyRate : tiers[tiers.length - 1].hourlyRate
+      if (presentStudentsCount <= 0) {
+        baseRate = 0
+      } else {
+        const match = tiers.find((t) => presentStudentsCount <= t.upToStudents)
+        baseRate = match ? match.hourlyRate : tiers[tiers.length - 1].hourlyRate
+      }
     } else {
       baseRate = Number(params.centerHourlyRate || 0)
     }
@@ -99,7 +108,7 @@ export function resolveTeacherHourlyRate(params: {
   const bonusEnabled = params.bonusEnabled === true
   const bonusMinStudents = Number(params.bonusMinStudents || 0)
   const bonusPerHour = Number(params.bonusPerHour || 0)
-  if (bonusEnabled && bonusPerHour > 0 && enrollmentCount >= bonusMinStudents && bonusMinStudents > 0) {
+  if (bonusEnabled && bonusPerHour > 0 && presentStudentsCount >= bonusMinStudents && bonusMinStudents > 0) {
     baseRate += bonusPerHour
   }
 

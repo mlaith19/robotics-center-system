@@ -1,5 +1,6 @@
 import type postgres from "postgres"
 import { ensureCampTables, isCampCourseType } from "@/lib/camp-kaytana"
+import { ensureAttendanceUniqueIndexes } from "@/lib/attendance-uniqueness"
 
 export type CampMeetingSlotDetail = {
   id: string
@@ -211,6 +212,7 @@ export async function resyncCampTeacherAttendanceForCourseDate(
   if (!isCampCourseType(courseType)) return
 
   await ensureAttendanceCampColumns(db)
+  await ensureAttendanceUniqueIndexes(db)
 
   const meeting = await loadCampMeetingDetailForSessionDate(db, courseId, dateYmd)
   const presentStatus = "נוכח"
@@ -271,18 +273,36 @@ export async function resyncCampTeacherAttendanceForCourseDate(
                 WHERE id = ${(existing[0] as { id: string }).id}
               `
             } else {
-              await db`
-                INSERT INTO "Attendance" (
-                  id, "studentId", "teacherId", "courseId", date, status, notes, hours, "hourKind",
-                  "campMeetingCellId", "campLessonTitle", "campSlotStart", "campSlotEnd",
-                  "createdByUserId", "createdAt"
-                )
-                VALUES (
-                  ${crypto.randomUUID()}, null, ${tid}, ${courseId}, ${dateYmd}, ${presentStatus},
-                  null, ${hours}, null, ${cell.id}, ${lessonTitle || null}, ${st || null}, ${et || null},
-                  ${uid && typeof uid === "string" ? uid : null}, ${nowIso}
-                )
-              `
+              try {
+                await db`
+                  INSERT INTO "Attendance" (
+                    id, "studentId", "teacherId", "courseId", date, status, notes, hours, "hourKind",
+                    "campMeetingCellId", "campLessonTitle", "campSlotStart", "campSlotEnd",
+                    "createdByUserId", "createdAt"
+                  )
+                  VALUES (
+                    ${crypto.randomUUID()}, null, ${tid}, ${courseId}, ${dateYmd}, ${presentStatus},
+                    null, ${hours}, null, ${cell.id}, ${lessonTitle || null}, ${st || null}, ${et || null},
+                    ${uid && typeof uid === "string" ? uid : null}, ${nowIso}
+                  )
+                `
+              } catch (err) {
+                const code = (err as { code?: string }).code
+                if (code !== "23505") throw err
+                await db`
+                  UPDATE "Attendance"
+                  SET status = ${presentStatus},
+                      hours = ${hours},
+                      notes = null,
+                      "hourKind" = null,
+                      "campLessonTitle" = ${lessonTitle || null},
+                      "campSlotStart" = ${st || null},
+                      "campSlotEnd" = ${et || null}
+                  WHERE "teacherId" = ${tid} AND "courseId" = ${courseId} AND "date" = ${dateYmd}
+                    AND "campMeetingCellId" = ${cell.id}
+                    AND "studentId" IS NULL
+                `
+              }
             }
           } else if (existing.length > 0) {
             await db`DELETE FROM "Attendance" WHERE id = ${(existing[0] as { id: string }).id}`
