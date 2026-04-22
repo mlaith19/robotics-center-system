@@ -98,7 +98,10 @@ async function reconcileRegularTeacherAttendanceForTeacher(
       AND t."teacherId" = ${teacherId}
       AND t."studentId" IS NULL
       AND t."campMeetingCellId" IS NULL
-      AND NOT is_camp_course_type(c."courseType")
+      AND NOT (
+        BTRIM(COALESCE(c."courseType", '')) = 'camp'
+        OR BTRIM(COALESCE(c."courseType", '')) LIKE 'camp\_%' ESCAPE '\'
+      )
       AND NOT EXISTS (
         SELECT 1
         FROM "Attendance" s
@@ -370,7 +373,11 @@ export const GET = withTenantAuth(async (req, _session) => {
     await ensureAttendanceCampColumns(db)
     if (teacherId) {
       await ensureAttendanceHourKindColumn(db)
-      await reconcileRegularTeacherAttendanceForTeacher(db, teacherId)
+      try {
+        await reconcileRegularTeacherAttendanceForTeacher(db, teacherId)
+      } catch (reconcileErr) {
+        console.warn("[attendance] reconcile regular teacher rows skipped:", reconcileErr)
+      }
     }
     let result = (await runQuery(db, true)) as Record<string, unknown>[]
     if (teacherId && Array.isArray(result) && result.length === 0) {
@@ -385,7 +392,13 @@ export const GET = withTenantAuth(async (req, _session) => {
     if (err?.code === "42703" && String(err?.message || "").includes("createdByUserId")) {
       try {
         if (teacherId) await ensureAttendanceHourKindColumn(db)
-        if (teacherId) await reconcileRegularTeacherAttendanceForTeacher(db, teacherId)
+        if (teacherId) {
+          try {
+            await reconcileRegularTeacherAttendanceForTeacher(db, teacherId)
+          } catch (reconcileErr) {
+            console.warn("[attendance] reconcile regular teacher rows skipped (fallback):", reconcileErr)
+          }
+        }
         let result = (await runQuery(db, false)) as Record<string, unknown>[]
         if (teacherId && Array.isArray(result) && result.length === 0) {
           await backfillCampTeacherRowsIfMissing(db, teacherId)
