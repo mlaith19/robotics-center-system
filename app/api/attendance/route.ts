@@ -27,6 +27,26 @@ function extractAttendanceDateYmd(raw: unknown): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(head) ? head : ""
 }
 
+/** עמודת date ב־Attendance היא TIMESTAMP; משווים לפי יום קלנדרי כדי שלא ייווצרו «שעות רפאים» או סינון שגוי. */
+const attendancePresentStudentStatusSql = `(LOWER(BTRIM(COALESCE(s.status, ''))) = 'present' OR BTRIM(COALESCE(s.status, '')) = 'נוכח')`
+
+const sqlAttendanceTeacherRowAllowed = `(
+  a."studentId" IS NOT NULL
+  OR a."teacherId" IS NULL
+  OR EXISTS (
+    SELECT 1
+    FROM "Attendance" s
+    WHERE s."courseId" IS NOT DISTINCT FROM a."courseId"
+      AND (s."date"::date) = (a."date"::date)
+      AND s."studentId" IS NOT NULL
+      AND ${attendancePresentStudentStatusSql}
+      AND (
+        COALESCE(a."campMeetingCellId", '') = ''
+        OR s."campMeetingCellId" IS NOT DISTINCT FROM a."campMeetingCellId"
+      )
+  )
+)`
+
 async function backfillCampTeacherRowsIfMissing(
   db: ReturnType<typeof postgres>,
   teacherId: string,
@@ -106,7 +126,7 @@ async function reconcileRegularTeacherAttendanceForTeacher(
         SELECT 1
         FROM "Attendance" s
         WHERE s."courseId" = t."courseId"
-          AND s."date" = t."date"
+          AND (s."date"::date) = (t."date"::date)
           AND s."studentId" IS NOT NULL
           AND (
             LOWER(BTRIM(COALESCE(s.status, ''))) = 'present'
@@ -184,7 +204,7 @@ export const GET = withTenantAuth(async (req, _session) => {
                   SELECT 1
                   FROM "Attendance" s
                   WHERE s."courseId" = a."courseId"
-                    AND s."date" = a."date"
+                    AND (s."date"::date) = (a."date"::date)
                     AND s."studentId" IS NOT NULL
                     AND (LOWER(BTRIM(COALESCE(s.status, ''))) = 'present' OR BTRIM(COALESCE(s.status, '')) = 'נוכח')
                 )
@@ -214,7 +234,7 @@ export const GET = withTenantAuth(async (req, _session) => {
                 WHERE t."teacherId" = $1
                   AND t."studentId" IS NULL
                   AND t."courseId" IS NOT DISTINCT FROM a."courseId"
-                  AND t."date" = a."date"
+                  AND (t."date"::date) = (a."date"::date)
                   AND COALESCE(t."campMeetingCellId", '') = ''
               )
           )
@@ -240,7 +260,7 @@ export const GET = withTenantAuth(async (req, _session) => {
                 SELECT 1
                 FROM "Attendance" s
                 WHERE s."courseId" = a."courseId"
-                  AND s."date" = a."date"
+                  AND (s."date"::date) = (a."date"::date)
                   AND s."studentId" IS NOT NULL
                   AND (LOWER(BTRIM(COALESCE(s.status, ''))) = 'present' OR BTRIM(COALESCE(s.status, '')) = 'נוכח')
               )
@@ -268,7 +288,7 @@ export const GET = withTenantAuth(async (req, _session) => {
               WHERE t."teacherId" = $1
                 AND t."studentId" IS NULL
                 AND t."courseId" IS NOT DISTINCT FROM a."courseId"
-                AND t."date" = a."date"
+                AND (t."date"::date) = (a."date"::date)
                 AND COALESCE(t."campMeetingCellId", '') = ''
             )
         )
@@ -319,45 +339,62 @@ export const GET = withTenantAuth(async (req, _session) => {
       return rows.map((r: any) => ({ ...r, createdByUserName: null }))
     }
     if (courseId && date) {
+      const guard = sqlAttendanceTeacherRowAllowed
       if (withUserJoin) {
         if (campMeetingCellIdGet) {
-          return dbClient`
+          return dbClient.unsafe(
+            `
             SELECT a.*, c.name as "courseName", c.duration as "courseDuration", u.name as "createdByUserName"
             FROM "Attendance" a
             LEFT JOIN "Course" c ON a."courseId" = c.id
             LEFT JOIN "User" u ON a."createdByUserId" = u.id
-            WHERE a."courseId" = ${courseId} AND a."date" = ${date}
-              AND a."campMeetingCellId" = ${campMeetingCellIdGet}
+            WHERE a."courseId" = $1 AND a."date" = $2
+              AND a."campMeetingCellId" = $3
+              AND ${guard}
             ORDER BY a."date" DESC, a."createdAt" DESC
-          `
+            `,
+            [courseId, date, campMeetingCellIdGet],
+          )
         }
-        return dbClient`
+        return dbClient.unsafe(
+          `
           SELECT a.*, c.name as "courseName", c.duration as "courseDuration", u.name as "createdByUserName"
           FROM "Attendance" a
           LEFT JOIN "Course" c ON a."courseId" = c.id
           LEFT JOIN "User" u ON a."createdByUserId" = u.id
-          WHERE a."courseId" = ${courseId} AND a."date" = ${date}
+          WHERE a."courseId" = $1 AND a."date" = $2
+            AND ${guard}
           ORDER BY a."date" DESC, a."createdAt" DESC
-        `
+          `,
+          [courseId, date],
+        )
       }
       if (campMeetingCellIdGet) {
-        const rows = await dbClient`
+        const rows = await dbClient.unsafe(
+          `
           SELECT a.*, c.name as "courseName", c.duration as "courseDuration"
           FROM "Attendance" a
           LEFT JOIN "Course" c ON a."courseId" = c.id
-          WHERE a."courseId" = ${courseId} AND a."date" = ${date}
-            AND a."campMeetingCellId" = ${campMeetingCellIdGet}
+          WHERE a."courseId" = $1 AND a."date" = $2
+            AND a."campMeetingCellId" = $3
+            AND ${guard}
           ORDER BY a."date" DESC, a."createdAt" DESC
-        `
+          `,
+          [courseId, date, campMeetingCellIdGet],
+        )
         return rows.map((r: any) => ({ ...r, createdByUserName: null }))
       }
-      const rows = await dbClient`
+      const rows = await dbClient.unsafe(
+        `
         SELECT a.*, c.name as "courseName", c.duration as "courseDuration"
         FROM "Attendance" a
         LEFT JOIN "Course" c ON a."courseId" = c.id
-        WHERE a."courseId" = ${courseId} AND a."date" = ${date}
+        WHERE a."courseId" = $1 AND a."date" = $2
+          AND ${guard}
         ORDER BY a."date" DESC, a."createdAt" DESC
-      `
+        `,
+        [courseId, date],
+      )
       return rows.map((r: any) => ({ ...r, createdByUserName: null }))
     }
     if (studentId && date) {
@@ -381,26 +418,35 @@ export const GET = withTenantAuth(async (req, _session) => {
       return rows.map((r: any) => ({ ...r, createdByUserName: null }))
     }
     if (courseId) {
+      const guard = sqlAttendanceTeacherRowAllowed
       if (withUserJoin) {
-        return dbClient`
+        return dbClient.unsafe(
+          `
           SELECT a.*, c.name as "courseName", c.duration as "courseDuration",
             COALESCE(u.name, t.name) as "createdByUserName"
           FROM "Attendance" a
           LEFT JOIN "Course" c ON a."courseId" = c.id
           LEFT JOIN "User" u ON a."createdByUserId" = u.id
           LEFT JOIN "Teacher" t ON a."teacherId" = t.id
-          WHERE a."courseId" = ${courseId}
+          WHERE a."courseId" = $1
+            AND ${guard}
           ORDER BY a."date" DESC, a."createdAt" DESC
-        `
+          `,
+          [courseId],
+        )
       }
-      const rows = await dbClient`
+      const rows = await dbClient.unsafe(
+        `
         SELECT a.*, c.name as "courseName", c.duration as "courseDuration", t.name as "createdByUserName"
         FROM "Attendance" a
         LEFT JOIN "Course" c ON a."courseId" = c.id
         LEFT JOIN "Teacher" t ON a."teacherId" = t.id
-        WHERE a."courseId" = ${courseId}
+        WHERE a."courseId" = $1
+          AND ${guard}
         ORDER BY a."date" DESC, a."createdAt" DESC
-      `
+        `,
+        [courseId],
+      )
       return rows as Record<string, unknown>[]
     }
     if (studentId) {
@@ -799,13 +845,16 @@ async function syncTeacherAttendanceForCourseDate(
   now: string
 ) {
   if (await courseIsCampType(db, courseId)) return
+  const dateYmd = extractAttendanceDateYmd(date)
+  if (!dateYmd) return
   const hasPresentStudents = (
     await db`
       SELECT 1
       FROM "Attendance"
       WHERE "courseId" = ${courseId}
-        AND "date" = ${date}
+        AND ("date"::date) = ${dateYmd}::date
         AND "studentId" IS NOT NULL
+        AND COALESCE("campMeetingCellId", '') = ''
         AND (
           LOWER(BTRIM(COALESCE(status, ''))) = 'present'
           OR BTRIM(COALESCE(status, '')) = 'נוכח'
@@ -829,14 +878,19 @@ async function syncTeacherAttendanceForCourseDate(
     if (!tid) continue
     const existingTeacher = await db`
       SELECT id FROM "Attendance"
-      WHERE "teacherId" = ${tid} AND "courseId" = ${courseId} AND "date" = ${date}
+      WHERE "teacherId" = ${tid} AND "courseId" = ${courseId}
+        AND ("date"::date) = ${dateYmd}::date
         AND "studentId" IS NULL
         AND "campMeetingCellId" IS NULL
     `
     if (!hasPresentStudents) {
-      if (existingTeacher.length > 0) {
-        await db`DELETE FROM "Attendance" WHERE id = ${(existingTeacher[0] as { id: string }).id}`
-      }
+      await db`
+        DELETE FROM "Attendance"
+        WHERE "teacherId" = ${tid} AND "courseId" = ${courseId}
+          AND ("date"::date) = ${dateYmd}::date
+          AND "studentId" IS NULL
+          AND "campMeetingCellId" IS NULL
+      `
       continue
     }
     if (existingTeacher.length > 0) {
@@ -850,7 +904,7 @@ async function syncTeacherAttendanceForCourseDate(
       try {
         await db`
           INSERT INTO "Attendance" (id, "studentId", "teacherId", "courseId", date, status, notes, hours, "createdByUserId", "createdAt")
-          VALUES (${teacherAttendanceId}, null, ${tid}, ${courseId}, ${date}, ${presentStatus}, null, null, ${createdByUserId}, ${now})
+          VALUES (${teacherAttendanceId}, null, ${tid}, ${courseId}, ${dateYmd}, ${presentStatus}, null, null, ${createdByUserId}, ${now})
         `
       } catch (err) {
         // If a concurrent request inserted the same row, silently update instead.
@@ -859,7 +913,8 @@ async function syncTeacherAttendanceForCourseDate(
         await db`
           UPDATE "Attendance"
           SET status = ${presentStatus}, "createdByUserId" = ${createdByUserId}
-          WHERE "teacherId" = ${tid} AND "courseId" = ${courseId} AND "date" = ${date}
+          WHERE "teacherId" = ${tid} AND "courseId" = ${courseId}
+            AND ("date"::date) = ${dateYmd}::date
             AND "studentId" IS NULL AND "campMeetingCellId" IS NULL
         `
       }
