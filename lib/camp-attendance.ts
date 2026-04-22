@@ -233,80 +233,115 @@ export async function resyncCampTeacherAttendanceForCourseDate(
       const hours = slotDurationHours(slot.startTime, slot.endTime)
       const st = String(slot.startTime || "").trim().slice(0, 5)
       const et = String(slot.endTime || "").trim().slice(0, 5)
+      const cellsByTeacher = new Map<string, Array<{ id: string; lessonTitle: string }>>()
       for (const cell of slot.cells) {
         for (const tid of cell.teacherIds) {
-          if (!tid) continue
-          const trows = await db`SELECT "userId" FROM "Teacher" WHERE id = ${tid} LIMIT 1`
-          const uid = (trows[0] as { userId?: string | null } | undefined)?.userId
-          let shouldHave = false
-          if (uid && typeof uid === "string") {
-            const marked = await db`
-              SELECT 1 FROM "Attendance" a
-              WHERE a."courseId" = ${courseId} AND a."date" = ${dateYmd}
-                AND a."campMeetingCellId" = ${cell.id}
-                AND a."studentId" IS NOT NULL
-                AND a."createdByUserId" = ${uid}
-              LIMIT 1
-            `
-            shouldHave = marked.length > 0
-          }
+          const teacherId = String(tid || "").trim()
+          if (!teacherId) continue
+          const arr = cellsByTeacher.get(teacherId) ?? []
+          arr.push({ id: String(cell.id), lessonTitle: String(cell.lessonTitle || "").trim() })
+          cellsByTeacher.set(teacherId, arr)
+        }
+      }
 
-          const existing = await db`
-            SELECT id FROM "Attendance"
-            WHERE "teacherId" = ${tid} AND "courseId" = ${courseId} AND "date" = ${dateYmd}
-              AND "campMeetingCellId" = ${cell.id}
+      for (const [tid, teacherCells] of cellsByTeacher.entries()) {
+        const trows = await db`SELECT "userId" FROM "Teacher" WHERE id = ${tid} LIMIT 1`
+        const uid = (trows[0] as { userId?: string | null } | undefined)?.userId
+        const cellIds = teacherCells.map((x) => x.id).filter(Boolean)
+        if (cellIds.length === 0) continue
+
+        let shouldHave = false
+        let chosenCellId = cellIds[0]
+        if (uid && typeof uid === "string") {
+          const marked = await db`
+            SELECT a."campMeetingCellId" as "campMeetingCellId"
+            FROM "Attendance" a
+            WHERE a."courseId" = ${courseId} AND a."date" = ${dateYmd}
+              AND a."campMeetingCellId" = ANY(${db.array(cellIds)})
+              AND a."studentId" IS NOT NULL
+              AND a."createdByUserId" = ${uid}
+            ORDER BY a."createdAt" ASC, a.id ASC
+            LIMIT 1
           `
-          const lessonTitle = String(cell.lessonTitle || "").trim()
+          shouldHave = marked.length > 0
+          if (shouldHave) {
+            const cellFromMark = String((marked[0] as { campMeetingCellId?: string }).campMeetingCellId || "").trim()
+            if (cellFromMark) chosenCellId = cellFromMark
+          }
+        }
 
-          if (shouldHave && hours > 0) {
-            if (existing.length > 0) {
+        const chosenLessonTitle =
+          teacherCells.find((x) => x.id === chosenCellId)?.lessonTitle || teacherCells[0]?.lessonTitle || ""
+
+        const existing = await db`
+          SELECT id, "campMeetingCellId"
+          FROM "Attendance"
+          WHERE "teacherId" = ${tid} AND "courseId" = ${courseId} AND "date" = ${dateYmd}
+            AND "studentId" IS NULL
+            AND "campMeetingCellId" = ANY(${db.array(cellIds)})
+          ORDER BY "createdAt" ASC, id ASC
+        `
+
+        if (shouldHave && hours > 0) {
+          if (existing.length > 0) {
+            const keepId = String((existing[0] as { id: string }).id)
+            await db`
+              UPDATE "Attendance"
+              SET status = ${presentStatus},
+                  hours = ${hours},
+                  notes = null,
+                  "hourKind" = null,
+                  "campMeetingCellId" = ${chosenCellId},
+                  "campLessonTitle" = ${chosenLessonTitle || null},
+                  "campSlotStart" = ${st || null},
+                  "campSlotEnd" = ${et || null},
+                  "createdByUserId" = COALESCE("createdByUserId", ${uid && typeof uid === "string" ? uid : null})
+              WHERE id = ${keepId}
+            `
+            if (existing.length > 1) {
+              const extraIds = (existing.slice(1) as Array<{ id: string }>).map((x) => String(x.id)).filter(Boolean)
+              if (extraIds.length) {
+                await db`DELETE FROM "Attendance" WHERE id = ANY(${db.array(extraIds)})`
+              }
+            }
+          } else {
+            try {
+              await db`
+                INSERT INTO "Attendance" (
+                  id, "studentId", "teacherId", "courseId", date, status, notes, hours, "hourKind",
+                  "campMeetingCellId", "campLessonTitle", "campSlotStart", "campSlotEnd",
+                  "createdByUserId", "createdAt"
+                )
+                VALUES (
+                  ${crypto.randomUUID()}, null, ${tid}, ${courseId}, ${dateYmd}, ${presentStatus},
+                  null, ${hours}, null, ${chosenCellId}, ${chosenLessonTitle || null}, ${st || null}, ${et || null},
+                  ${uid && typeof uid === "string" ? uid : null}, ${nowIso}
+                )
+              `
+            } catch (err) {
+              const code = (err as { code?: string }).code
+              if (code !== "23505") throw err
               await db`
                 UPDATE "Attendance"
                 SET status = ${presentStatus},
                     hours = ${hours},
                     notes = null,
                     "hourKind" = null,
-                    "campLessonTitle" = ${lessonTitle || null},
+                    "campMeetingCellId" = ${chosenCellId},
+                    "campLessonTitle" = ${chosenLessonTitle || null},
                     "campSlotStart" = ${st || null},
-                    "campSlotEnd" = ${et || null},
-                    "createdByUserId" = COALESCE("createdByUserId", ${uid && typeof uid === "string" ? uid : null})
-                WHERE id = ${(existing[0] as { id: string }).id}
+                    "campSlotEnd" = ${et || null}
+                WHERE "teacherId" = ${tid} AND "courseId" = ${courseId} AND "date" = ${dateYmd}
+                  AND "studentId" IS NULL
+                  AND "campMeetingCellId" = ANY(${db.array(cellIds)})
               `
-            } else {
-              try {
-                await db`
-                  INSERT INTO "Attendance" (
-                    id, "studentId", "teacherId", "courseId", date, status, notes, hours, "hourKind",
-                    "campMeetingCellId", "campLessonTitle", "campSlotStart", "campSlotEnd",
-                    "createdByUserId", "createdAt"
-                  )
-                  VALUES (
-                    ${crypto.randomUUID()}, null, ${tid}, ${courseId}, ${dateYmd}, ${presentStatus},
-                    null, ${hours}, null, ${cell.id}, ${lessonTitle || null}, ${st || null}, ${et || null},
-                    ${uid && typeof uid === "string" ? uid : null}, ${nowIso}
-                  )
-                `
-              } catch (err) {
-                const code = (err as { code?: string }).code
-                if (code !== "23505") throw err
-                await db`
-                  UPDATE "Attendance"
-                  SET status = ${presentStatus},
-                      hours = ${hours},
-                      notes = null,
-                      "hourKind" = null,
-                      "campLessonTitle" = ${lessonTitle || null},
-                      "campSlotStart" = ${st || null},
-                      "campSlotEnd" = ${et || null}
-                  WHERE "teacherId" = ${tid} AND "courseId" = ${courseId} AND "date" = ${dateYmd}
-                    AND "campMeetingCellId" = ${cell.id}
-                    AND "studentId" IS NULL
-                `
-              }
             }
-          } else if (existing.length > 0) {
-            await db`DELETE FROM "Attendance" WHERE id = ${(existing[0] as { id: string }).id}`
           }
+        } else if (existing.length > 0) {
+          await db`
+            DELETE FROM "Attendance"
+            WHERE id = ANY(${db.array((existing as Array<{ id: string }>).map((x) => String(x.id)).filter(Boolean))})
+          `
         }
       }
     }

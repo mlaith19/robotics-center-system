@@ -162,6 +162,14 @@ function normalizeTeacherRatesMap(
   return out
 }
 
+function normalizePersonName(raw: unknown): string {
+  return String(raw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/["'`׳״]/g, "")
+    .replace(/\s+/g, " ")
+}
+
 export default function TeacherViewPage() {
   const router = useRouter()
   const params = useParams<{ id: string }>()
@@ -449,22 +457,26 @@ export default function TeacherViewPage() {
 
   const teacherSchoolAttendanceRows = useMemo(() => {
     if (!teacher || !id || selectedAttendanceCourse !== "all") return [] as any[]
-    const teacherNameNormalized = String(teacher.name || "").trim().toLowerCase()
+    const teacherNameNormalized = normalizePersonName(teacher.name)
     const teacherIdStr = String(id)
     const out: any[] = []
     for (const program of schoolGafanPrograms) {
-      const teacherIds = Array.isArray(program.teacherIds) ? program.teacherIds.map((x) => String(x)) : []
+      const teacherIds = Array.isArray(program.teacherIds)
+        ? program.teacherIds.map((x) => String(x || "").trim()).filter(Boolean)
+        : []
       const rateMap = normalizeTeacherRatesMap(program.teacherRates)
       const assignedById = teacherIds.includes(teacherIdStr)
       const programRows = Array.isArray(program.hourRows) ? program.hourRows : []
       for (const r of programRows) {
         if (r?.pendingAssignment === true) continue
         const rowTeacherId = String(r?.teacherId || "").trim()
-        const rowTeacherName = String(r?.teacherName || "").trim().toLowerCase()
-        const belongs =
-          (rowTeacherId && rowTeacherId === teacherIdStr) ||
-          (teacherNameNormalized && rowTeacherName === teacherNameNormalized) ||
-          (!rowTeacherId && !rowTeacherName && assignedById)
+        const rowTeacherName = normalizePersonName(r?.teacherName)
+        const belongsById = rowTeacherId && rowTeacherId === teacherIdStr
+        const belongsByName = teacherNameNormalized && rowTeacherName && rowTeacherName === teacherNameNormalized
+        // Legacy rows may miss teacherId. If only one teacher is assigned to this program,
+        // we can still safely attribute the row to that teacher.
+        const belongsBySingleAssignedFallback = !rowTeacherId && assignedById && teacherIds.length === 1
+        const belongs = Boolean(belongsById || belongsByName || belongsBySingleAssignedFallback)
         if (!belongs) continue
         const date = String(r?.date || "").trim().slice(0, 10)
         if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue
