@@ -96,7 +96,7 @@ function parseGafanTeacherIds(row: GafanRow): string[] {
   return []
 }
 
-type GafanTeacherRate = { teachingHourlyRate: number; officeHourlyRate: number }
+type GafanTeacherRate = { teachingHourlyRate: number; travelHourlyRate: number }
 
 function parseGafanTeacherRates(row: GafanRow): Record<string, GafanTeacherRate> {
   const raw = row.teacherRates
@@ -107,10 +107,10 @@ function parseGafanTeacherRates(row: GafanRow): Record<string, GafanTeacherRate>
     if (!tid) continue
     const v = (value ?? {}) as Record<string, unknown>
     const teaching = Number(v.teachingHourlyRate ?? 0)
-    const office = Number(v.officeHourlyRate ?? 0)
+    const travel = Number(v.travelHourlyRate ?? v.officeHourlyRate ?? 0)
     out[tid] = {
       teachingHourlyRate: Number.isFinite(teaching) && teaching >= 0 ? teaching : 0,
-      officeHourlyRate: Number.isFinite(office) && office >= 0 ? office : 0,
+      travelHourlyRate: Number.isFinite(travel) && travel >= 0 ? travel : 0,
     }
   }
   return out
@@ -485,7 +485,7 @@ export default function SchoolViewPage() {
       ...currentRates,
       [gafanTeacherPickId]: {
         teachingHourlyRate: Math.max(0, Number(gafanTeacherTeachingRate || 0)),
-        officeHourlyRate: Math.max(0, Number(gafanTeacherOfficeRate || 0)),
+        travelHourlyRate: Math.max(0, Number(gafanTeacherOfficeRate || 0)),
       },
     }
     setGafanTeacherSaving(true)
@@ -1190,7 +1190,7 @@ export default function SchoolViewPage() {
                                       const role = i === 0 ? "ראשי" : "מחליף"
                                       const rr = rateMap[tid]
                                       const ratePart = rr
-                                        ? ` | הוראה ₪${Number(rr.teachingHourlyRate || 0).toLocaleString("he-IL")}/שעה, משרד ₪${Number(rr.officeHourlyRate || 0).toLocaleString("he-IL")}/שעה`
+                                        ? ` | שעה ₪${Number(rr.teachingHourlyRate || 0).toLocaleString("he-IL")}, נסיעות ₪${Number(rr.travelHourlyRate || 0).toLocaleString("he-IL")}`
                                         : ""
                                       return `${name} (${role}${ratePart})`
                                     })
@@ -1407,7 +1407,7 @@ export default function SchoolViewPage() {
                         </div>
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                           <div className="space-y-1">
-                            <Label>מחיר שעת הוראה</Label>
+                            <Label>מחיר שעה</Label>
                             <Input
                               type="number"
                               min={0}
@@ -1418,7 +1418,7 @@ export default function SchoolViewPage() {
                             />
                           </div>
                           <div className="space-y-1">
-                            <Label>מחיר שעת משרד</Label>
+                            <Label>נסיעות לשעה</Label>
                             <Input
                               type="number"
                               min={0}

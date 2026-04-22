@@ -75,18 +75,18 @@ export function normalizeGafanTeacherIds(raw: unknown): string[] {
   return []
 }
 
-export function normalizeGafanTeacherRates(raw: unknown): Record<string, { teachingHourlyRate: number; officeHourlyRate: number }> {
-  const out: Record<string, { teachingHourlyRate: number; officeHourlyRate: number }> = {}
+export function normalizeGafanTeacherRates(raw: unknown): Record<string, { teachingHourlyRate: number; travelHourlyRate: number }> {
+  const out: Record<string, { teachingHourlyRate: number; travelHourlyRate: number }> = {}
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out
   for (const [teacherId, value] of Object.entries(raw as Record<string, unknown>)) {
     const tid = String(teacherId || "").trim()
     if (!tid) continue
     const v = (value ?? {}) as Record<string, unknown>
     const teaching = Number(v.teachingHourlyRate ?? 0)
-    const office = Number(v.officeHourlyRate ?? 0)
+    const travel = Number(v.travelHourlyRate ?? v.officeHourlyRate ?? 0)
     out[tid] = {
       teachingHourlyRate: Number.isFinite(teaching) && teaching >= 0 ? teaching : 0,
-      officeHourlyRate: Number.isFinite(office) && office >= 0 ? office : 0,
+      travelHourlyRate: Number.isFinite(travel) && travel >= 0 ? travel : 0,
     }
   }
   return out

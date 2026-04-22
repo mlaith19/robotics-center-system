@@ -79,7 +79,7 @@ type GafanProgramForTeacher = {
   schoolId?: string | null
   schoolName?: string | null
   teacherIds?: string[]
-  teacherRates?: Record<string, { teachingHourlyRate?: number; officeHourlyRate?: number }>
+  teacherRates?: Record<string, { teachingHourlyRate?: number; travelHourlyRate?: number; officeHourlyRate?: number }>
   hourRows?: Array<{
     date?: string
     teacherName?: string
@@ -412,7 +412,7 @@ export default function TeacherViewPage() {
       const teacherIds = Array.isArray(program.teacherIds) ? program.teacherIds.map((x) => String(x)) : []
       const rateMap =
         program.teacherRates && typeof program.teacherRates === "object" && !Array.isArray(program.teacherRates)
-          ? (program.teacherRates as Record<string, { teachingHourlyRate?: number; officeHourlyRate?: number }>)
+          ? (program.teacherRates as Record<string, { teachingHourlyRate?: number; travelHourlyRate?: number; officeHourlyRate?: number }>)
           : {}
       const assignedById = teacherIds.includes(teacherIdStr)
       const programRows = Array.isArray(program.hourRows) ? program.hourRows : []
@@ -430,18 +430,21 @@ export default function TeacherViewPage() {
         const startTime = String(r?.startTime || "").slice(0, 5)
         const endTime = String(r?.endTime || "").slice(0, 5)
         const hours = Number(r?.totalHours || 0)
-        const teacherRateRow = rateMap[teacherIdStr] || { teachingHourlyRate: 0, officeHourlyRate: 0 }
+        const teacherRateRow = rateMap[teacherIdStr] || { teachingHourlyRate: 0, travelHourlyRate: 0 }
+        const teachingRate = Number(teacherRateRow.teachingHourlyRate || 0)
+        const travelRate = Number(teacherRateRow.travelHourlyRate ?? teacherRateRow.officeHourlyRate ?? 0)
         out.push({
           id: `school-gafan-${program.id}-${date}-${startTime}-${endTime}-${out.length}`,
           date,
           status: "נוכח",
-          courseName: `${String(program.schoolName || "בית ספר")} · ${String(program.name || "גפ\"ן")}`,
+          courseName: `${String(program.name || "גפ\"ן")}`,
+          schoolName: String(program.schoolName || "בית ספר"),
           courseStartTime: startTime,
           courseEndTime: endTime,
           hours: Number.isFinite(hours) && hours > 0 ? hours : 0,
           notes: "נוכחות בית ספר (גפ\"ן)",
           hourKind: "teaching",
-          appliedHourlyRate: Number(teacherRateRow.teachingHourlyRate || 0),
+          appliedHourlyRate: Math.max(0, teachingRate + travelRate),
           sourceType: "school-gafan",
         })
       }
@@ -523,6 +526,30 @@ export default function TeacherViewPage() {
       totalPayment: Number(month?.totalPayment || 0),
     }
   }, [attendanceMonthStats, selectedAttendanceMonth])
+
+  const attendancePaymentSplitSummary = useMemo(() => {
+    let regularTotal = 0
+    let gafanTotal = 0
+    for (const a of filteredAttendanceByMonth) {
+      const status = String(a?.status || "").trim().toLowerCase()
+      const isPresent = status === "present" || status === "נוכח"
+      if (!isPresent) continue
+      const hours = calcAttendanceHours(a)
+      const rate =
+        a?.appliedHourlyRate != null && a?.appliedHourlyRate !== "" && Number.isFinite(Number(a.appliedHourlyRate))
+          ? Number(a.appliedHourlyRate)
+          : 0
+      const amount = hours * rate
+      if (String(a?.sourceType || "") === "school-gafan") gafanTotal += amount
+      else regularTotal += amount
+    }
+    const total = regularTotal + gafanTotal
+    return {
+      regularTotal: Math.round(regularTotal * 100) / 100,
+      gafanTotal: Math.round(gafanTotal * 100) / 100,
+      total: Math.round(total * 100) / 100,
+    }
+  }, [filteredAttendanceByMonth])
   
   // Helper to translate status to Hebrew
   const getStatusLabel = (status: string) => {
@@ -1131,7 +1158,7 @@ export default function TeacherViewPage() {
                   w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>נוכחות מורה - ${teacher?.name || ""}</title>
 <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;padding:32px 40px;color:#1f2937;max-width:900px;margin:0 auto}.header{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:20px;padding-bottom:12px;border-bottom:2px solid #3b82f6}.header h1{font-size:22px;color:#1e40af;margin-top:6px}.header h2{font-size:15px;color:#4b5563;font-weight:400;margin-top:2px}table{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px}th{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:8px 10px;text-align:center;font-weight:600}td{border:1px solid #d1d5db;padding:8px 10px;text-align:center;vertical-align:middle}tr:nth-child(even) td{background:#f9fafb}.status-present{color:#166534;font-weight:600}.status-absent{color:#991b1b;font-weight:600}@media print{body{padding:20px 28px;max-width:100%}@page{margin:20mm 15mm}}</style></head><body>`)
                   w.document.write(`<div class="header">${logoHtml}<h1>${centerName || "מרכז"}</h1><h2 style="font-size:17px;color:#1f2937;font-weight:600;margin-top:4px">${teacher?.name || "מורה"}</h2><h2>דוח נוכחות - ${activeAttendanceMonthSummary.label}</h2></div>`)
-                  w.document.write(`<table><thead><tr><th>#</th><th>תאריך</th><th>קורס</th><th>משעה</th><th>עד שעה</th><th>סה"כ שעות</th><th>סטטוס</th><th>הערה</th></tr></thead><tbody>`)
+                  w.document.write(`<table><thead><tr><th>#</th><th>תאריך</th><th>בית ספר</th><th>קורס/תוכנית</th><th>משעה</th><th>עד שעה</th><th>סה"כ שעות</th><th>סטטוס</th><th>הערה</th></tr></thead><tbody>`)
                   filteredAttendanceByMonth.forEach((a: any, idx: number) => {
                     const statusLabel = getStatusLabel(a.status)
                     const isPresent = statusLabel === "נוכח"
@@ -1139,7 +1166,8 @@ export default function TeacherViewPage() {
                     const endDisplay = courseTimeToDisplayValue(a.courseEndTime) || "—"
                     const hours = calcAttendanceHours(a)
                     const cls = isPresent ? "status-present" : "status-absent"
-                    w.document.write(`<tr><td>${idx + 1}</td><td>${fmtDate(a.date)}</td><td>${a.courseName || "—"}</td><td>${startDisplay}</td><td>${endDisplay}</td><td>${hours > 0 ? hours.toFixed(1) : "—"}</td><td class="${cls}">${statusLabel}</td><td>${a.notes || "—"}</td></tr>`)
+                    const schoolName = a.schoolName || "—"
+                    w.document.write(`<tr><td>${idx + 1}</td><td>${fmtDate(a.date)}</td><td>${schoolName}</td><td>${a.courseName || "—"}</td><td>${startDisplay}</td><td>${endDisplay}</td><td>${hours > 0 ? hours.toFixed(1) : "—"}</td><td class="${cls}">${statusLabel}</td><td>${a.notes || "—"}</td></tr>`)
                   })
                   w.document.write(`</tbody></table></body></html>`)
                   w.document.close()
@@ -1151,17 +1179,23 @@ export default function TeacherViewPage() {
               </Button>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <Card className="border-teal-200 bg-teal-50 p-3 dark:border-teal-800 dark:bg-teal-950/20">
-                <div className="text-sm text-teal-700 dark:text-teal-300">סה״כ שעות ({activeAttendanceMonthSummary.label})</div>
+                <div className="text-sm text-teal-700 dark:text-teal-300">סה״כ לתשלום קורסים רגילים ({activeAttendanceMonthSummary.label})</div>
                 <div className="text-2xl font-bold text-teal-700 dark:text-teal-200">
-                  {activeAttendanceMonthSummary.totalHours.toLocaleString("he-IL")}
+                  ₪{attendancePaymentSplitSummary.regularTotal.toLocaleString("he-IL")}
                 </div>
               </Card>
               <Card className="border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-950/20">
-                <div className="text-sm text-emerald-700 dark:text-emerald-300">סה״כ לתשלום ({activeAttendanceMonthSummary.label})</div>
+                <div className="text-sm text-emerald-700 dark:text-emerald-300">סה״כ לתשלום גפ״ן ({activeAttendanceMonthSummary.label})</div>
                 <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-200">
-                  ₪{activeAttendanceMonthSummary.totalPayment.toLocaleString("he-IL")}
+                  ₪{attendancePaymentSplitSummary.gafanTotal.toLocaleString("he-IL")}
+                </div>
+              </Card>
+              <Card className="border-purple-200 bg-purple-50 p-3 dark:border-purple-800 dark:bg-purple-950/20">
+                <div className="text-sm text-purple-700 dark:text-purple-300">סה״כ לתשלום כולל ({activeAttendanceMonthSummary.label})</div>
+                <div className="text-2xl font-bold text-purple-700 dark:text-purple-200">
+                  ₪{attendancePaymentSplitSummary.total.toLocaleString("he-IL")}
                 </div>
               </Card>
             </div>
@@ -1174,6 +1208,7 @@ export default function TeacherViewPage() {
                     <thead>
                       <tr className="bg-muted/50">
                         <th className="border p-2 text-right font-medium">תאריך</th>
+                        <th className="border p-2 text-right font-medium">בית ספר</th>
                         <th className="border p-2 text-right font-medium">קורס</th>
                         <th className="border p-2 text-center font-medium">משעה</th>
                         <th className="border p-2 text-center font-medium">עד שעה</th>
@@ -1200,6 +1235,7 @@ export default function TeacherViewPage() {
                         return (
                           <tr key={a.id} className={isPresent ? "bg-green-50/50" : isAbsent ? "bg-red-50/50" : "bg-orange-50/50"}>
                             <td className="border p-2 text-right font-medium">{fmtDate(a.date)}</td>
+                            <td className="border p-2 text-right text-muted-foreground">{a.schoolName || "—"}</td>
                             <td className="border p-2 text-right text-muted-foreground">{a.courseName ?? "—"}</td>
                             <td className="border p-2 text-center">{startDisplay}</td>
                             <td className="border p-2 text-center">{endDisplay}</td>
