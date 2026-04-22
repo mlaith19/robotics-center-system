@@ -16,6 +16,17 @@ function isUuidLike(s: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s)
 }
 
+function parseClockToMinutes(raw: unknown): number | null {
+  const hhmm = cleanStr(raw).slice(0, 5)
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm)
+  if (!m) return null
+  const h = Number(m[1])
+  const min = Number(m[2])
+  if (!Number.isFinite(h) || !Number.isFinite(min)) return null
+  if (h < 0 || h > 23 || min < 0 || min > 59) return null
+  return h * 60 + min
+}
+
 /** קריאת לוח קייטנה: טאב תכנון או נוכחות תלמידים (מורים בלי טאב לוח עדיין צריכים JSON לתא) */
 function canReadCampSchedule(session: { permissions?: string[]; roleKey?: string; role: string }): boolean {
   if (hasFullAccessRole(session.roleKey) || hasFullAccessRole(session.role)) return true
@@ -244,6 +255,75 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
 
     const meetingsIn = Array.isArray(body.meetings) ? body.meetings : []
 
+    // Validation: same teacher cannot be assigned to overlapping slots in the same meeting date.
+    const teacherIdsInPayload = new Set<string>()
+    for (const m of meetingsIn as Array<{ slots?: unknown[] }>) {
+      const slots = Array.isArray(m?.slots) ? m.slots : []
+      for (const s of slots as Array<{ cells?: unknown[] }>) {
+        const cells = Array.isArray(s?.cells) ? s.cells : []
+        for (const c of cells as Array<{ teacherIds?: unknown[] }>) {
+          const teacherIds = Array.isArray(c?.teacherIds) ? c.teacherIds : []
+          for (const t of teacherIds) {
+            const tid = String(t || "").trim()
+            if (isUuidLike(tid)) teacherIdsInPayload.add(tid)
+          }
+        }
+      }
+    }
+    const teacherNameById = new Map<string, string>()
+    if (teacherIdsInPayload.size > 0) {
+      const rows =
+        (await db`SELECT id, name FROM "Teacher" WHERE id = ANY(${db.array(Array.from(teacherIdsInPayload))})`) || []
+      for (const r of rows as Array<{ id: string; name?: string | null }>) {
+        teacherNameById.set(String(r.id), String(r.name || "").trim() || String(r.id))
+      }
+    }
+    for (const m of meetingsIn as Array<{ sessionDate?: string; slots?: unknown[] }>) {
+      const sessionDate = cleanStr(m?.sessionDate)
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) continue
+      const slots = Array.isArray(m?.slots) ? m.slots : []
+      const windowsByTeacher = new Map<string, Array<{ startMin: number; endMin: number; startTime: string; endTime: string }>>()
+      for (const s of slots as Array<{ startTime?: string; endTime?: string; isBreak?: boolean; cells?: unknown[] }>) {
+        if (Boolean(s?.isBreak)) continue
+        const startTime = cleanStr(s?.startTime).slice(0, 5)
+        const endTime = cleanStr(s?.endTime).slice(0, 5)
+        const startMin = parseClockToMinutes(startTime)
+        const endMin = parseClockToMinutes(endTime)
+        if (startMin == null || endMin == null || endMin <= startMin) continue
+        const cells = Array.isArray(s?.cells) ? s.cells : []
+        const slotTeacherIds = new Set<string>()
+        for (const c of cells as Array<{ teacherIds?: unknown[] }>) {
+          const teacherIds = Array.isArray(c?.teacherIds) ? c.teacherIds : []
+          for (const t of teacherIds) {
+            const tid = String(t || "").trim()
+            if (isUuidLike(tid)) slotTeacherIds.add(tid)
+          }
+        }
+        for (const tid of slotTeacherIds) {
+          const arr = windowsByTeacher.get(tid) ?? []
+          arr.push({ startMin, endMin, startTime, endTime })
+          windowsByTeacher.set(tid, arr)
+        }
+      }
+      for (const [tid, windows] of windowsByTeacher.entries()) {
+        if (windows.length < 2) continue
+        const sorted = [...windows].sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin)
+        for (let i = 0; i < sorted.length - 1; i += 1) {
+          const a = sorted[i]
+          const b = sorted[i + 1]
+          if (b.startMin < a.endMin) {
+            const teacherLabel = teacherNameById.get(tid) || tid
+            const msg = `לא ניתן לשמור: למורה ${teacherLabel} יש התנגשות סלוטים בתאריך ${sessionDate} (${a.startTime}-${a.endTime} ו-${b.startTime}-${b.endTime}). יש להסיר את ההתנגשות.`
+            throw Object.assign(new Error(msg), {
+              status: 400,
+              code: "camp.teacher_slot_overlap",
+              details: { teacherId: tid, sessionDate, firstSlot: a, secondSlot: b },
+            })
+          }
+        }
+      }
+    }
+
     await db.begin(async (sql) => {
       const meetingIds = meetingsIn.map((m: { id?: string }) => cleanStr(m.id)).filter((x: string) => x && isUuidLike(x))
       const existingMeetings = (await sql`SELECT id FROM "CampMeeting" WHERE "courseId" = ${courseId}`) || []
@@ -326,6 +406,18 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
 
     return Response.json({ ok: true })
   } catch (err) {
+    const status = Number((err as { status?: number })?.status || 500)
+    const code = String((err as { code?: string })?.code || "")
+    if (status >= 400 && status < 500) {
+      return Response.json(
+        {
+          error: (err as { message?: string })?.message || "נתוני לוח קייטנה לא תקינים",
+          code: code || "camp.validation_error",
+          details: (err as { details?: unknown })?.details,
+        },
+        { status },
+      )
+    }
     console.error("PUT /api/courses/[id]/camp error:", err)
     return Response.json({ error: "Failed to save camp data" }, { status: 500 })
   }

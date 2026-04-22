@@ -282,6 +282,8 @@ export const GET = withTenantAuth(async (req, _session) => {
 
   try {
     await ensureAttendanceCampColumns(db)
+    // Run dedupe on read as well, so existing duplicates are cleaned immediately.
+    await ensureAttendanceUniqueIndexes(db)
     if (teacherId) await ensureAttendanceHourKindColumn(db)
     let result = (await runQuery(db, true)) as Record<string, unknown>[]
     if (teacherId && Array.isArray(result)) {

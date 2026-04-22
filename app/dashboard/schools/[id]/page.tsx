@@ -636,12 +636,15 @@ export default function SchoolViewPage() {
     const hoursProgram = gafanPrograms.find((g) => g.id === holderProgramId)
     if (!hoursProgram) return
     const rows = parseGafanHourRows(hoursProgram)
+    const assignedTeacherIds = parseGafanTeacherIds(hoursProgram)
+    const fallbackTeacherId = assignedTeacherIds[0] ? String(assignedTeacherIds[0]) : ""
+    const fallbackTeacherName = fallbackTeacherId ? (teacherNameById.get(fallbackTeacherId) || "") : ""
     const resolvedDayOfWeek = weekdayFromDate(hourDate)
     const row: GafanHourRow = {
       date: hourDate,
       dayOfWeek: resolvedDayOfWeek,
-      teacherName: currentUser?.full_name || currentUser?.username || "",
-      teacherId: currentTeacherId || "",
+      teacherName: currentUser?.full_name || currentUser?.username || fallbackTeacherName || "",
+      teacherId: currentTeacherId || fallbackTeacherId,
       startTime: hourStartTime,
       endTime: hourEndTime,
       totalHours: Math.max(0, Number(computedHours || hourTotal || 0)),

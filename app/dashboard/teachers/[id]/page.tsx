@@ -162,6 +162,36 @@ function normalizeTeacherRatesMap(
   return out
 }
 
+function normalizeTeacherIdsList(raw: unknown): string[] {
+  let input: unknown = raw
+  if (typeof input === "string") {
+    const s = input.trim()
+    if (!s) return []
+    try {
+      input = JSON.parse(s)
+    } catch {
+      input = s.includes(",") ? s.split(",").map((x) => x.trim()) : [s]
+    }
+  }
+  if (!Array.isArray(input)) return []
+  return input.map((x) => String(x || "").trim()).filter(Boolean)
+}
+
+function normalizeGafanHourRowsList(
+  raw: unknown,
+): Array<{ date?: string; teacherName?: string; teacherId?: string; startTime?: string; endTime?: string; totalHours?: number | string; pendingAssignment?: boolean }> {
+  let input: unknown = raw
+  if (typeof input === "string") {
+    try {
+      input = JSON.parse(input)
+    } catch {
+      input = []
+    }
+  }
+  if (!Array.isArray(input)) return []
+  return input as Array<{ date?: string; teacherName?: string; teacherId?: string; startTime?: string; endTime?: string; totalHours?: number | string; pendingAssignment?: boolean }>
+}
+
 function normalizePersonName(raw: unknown): string {
   return String(raw || "")
     .trim()
@@ -461,22 +491,22 @@ export default function TeacherViewPage() {
     const teacherIdStr = String(id)
     const out: any[] = []
     for (const program of schoolGafanPrograms) {
-      const teacherIds = Array.isArray(program.teacherIds)
-        ? program.teacherIds.map((x) => String(x || "").trim()).filter(Boolean)
-        : []
+      const teacherIds = normalizeTeacherIdsList(program.teacherIds)
       const rateMap = normalizeTeacherRatesMap(program.teacherRates)
       const assignedById = teacherIds.includes(teacherIdStr)
-      const programRows = Array.isArray(program.hourRows) ? program.hourRows : []
+      const programRows = normalizeGafanHourRowsList(program.hourRows)
       for (const r of programRows) {
         if (r?.pendingAssignment === true) continue
         const rowTeacherId = String(r?.teacherId || "").trim()
         const rowTeacherName = normalizePersonName(r?.teacherName)
         const belongsById = rowTeacherId && rowTeacherId === teacherIdStr
         const belongsByName = teacherNameNormalized && rowTeacherName && rowTeacherName === teacherNameNormalized
-        // Legacy rows may miss teacherId. If only one teacher is assigned to this program,
-        // we can still safely attribute the row to that teacher.
+        // Legacy rows may miss teacherId.
+        // - If exactly one teacher is assigned: attribute safely to that teacher.
+        // - If multiple teachers are assigned: fallback only to the primary teacher.
         const belongsBySingleAssignedFallback = !rowTeacherId && assignedById && teacherIds.length === 1
-        const belongs = Boolean(belongsById || belongsByName || belongsBySingleAssignedFallback)
+        const belongsByPrimaryFallback = !rowTeacherId && assignedById && teacherIds.length > 1 && teacherIds[0] === teacherIdStr
+        const belongs = Boolean(belongsById || belongsByName || belongsBySingleAssignedFallback || belongsByPrimaryFallback)
         if (!belongs) continue
         const date = String(r?.date || "").trim().slice(0, 10)
         if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue
