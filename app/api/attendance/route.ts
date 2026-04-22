@@ -58,6 +58,61 @@ async function backfillCampTeacherRowsIfMissing(
   }
 }
 
+async function reconcileRegularTeacherAttendanceForTeacher(
+  db: ReturnType<typeof postgres>,
+  teacherId: string,
+): Promise<void> {
+  const teacherRows = await db`SELECT "userId" FROM "Teacher" WHERE id = ${teacherId} LIMIT 1`
+  const teacherUserId = String((teacherRows[0] as { userId?: string | null } | undefined)?.userId || "").trim()
+  const nowIso = new Date().toISOString()
+
+  // 1) Backfill missing regular teacher attendance rows for dates where this teacher marked students.
+  const markedRegularDates = await db`
+    SELECT DISTINCT
+      a."courseId" as "courseId",
+      LEFT(BTRIM(a."date"::text), 10) as "dateYmd",
+      c."courseType" as "courseType"
+    FROM "Attendance" a
+    INNER JOIN "Course" c ON c.id = a."courseId"
+    WHERE a."studentId" IS NOT NULL
+      AND a."courseId" IS NOT NULL
+      AND (
+        a."teacherId" = ${teacherId}
+        OR (${teacherUserId || null} IS NOT NULL AND a."createdByUserId" = ${teacherUserId || null})
+      )
+  `
+  for (const row of markedRegularDates as Array<{ courseId?: string; dateYmd?: string; courseType?: string | null }>) {
+    const courseId = String(row.courseId || "").trim()
+    const dateYmd = String(row.dateYmd || "").trim()
+    const courseType = String(row.courseType || "")
+    if (!courseId || !dateYmd || !/^\d{4}-\d{2}-\d{2}$/.test(dateYmd)) continue
+    if (isCampCourseType(courseType)) continue
+    await syncTeacherAttendanceForCourseDate(db, courseId, dateYmd, teacherUserId || null, nowIso)
+  }
+
+  // 2) Cleanup orphan regular teacher rows where no student is present on that date.
+  await db`
+    DELETE FROM "Attendance" t
+    USING "Course" c
+    WHERE t."courseId" = c.id
+      AND t."teacherId" = ${teacherId}
+      AND t."studentId" IS NULL
+      AND t."campMeetingCellId" IS NULL
+      AND NOT is_camp_course_type(c."courseType")
+      AND NOT EXISTS (
+        SELECT 1
+        FROM "Attendance" s
+        WHERE s."courseId" = t."courseId"
+          AND s."date" = t."date"
+          AND s."studentId" IS NOT NULL
+          AND (
+            LOWER(BTRIM(COALESCE(s.status, ''))) = 'present'
+            OR BTRIM(COALESCE(s.status, '')) = 'נוכח'
+          )
+      )
+  `
+}
+
 export const GET = withTenantAuth(async (req, _session) => {
   const [tenant, tenantErr] = await requireTenant(req)
   if (tenantErr) return tenantErr
@@ -315,6 +370,7 @@ export const GET = withTenantAuth(async (req, _session) => {
     await ensureAttendanceCampColumns(db)
     if (teacherId) {
       await ensureAttendanceHourKindColumn(db)
+      await reconcileRegularTeacherAttendanceForTeacher(db, teacherId)
     }
     let result = (await runQuery(db, true)) as Record<string, unknown>[]
     if (teacherId && Array.isArray(result) && result.length === 0) {
@@ -329,6 +385,7 @@ export const GET = withTenantAuth(async (req, _session) => {
     if (err?.code === "42703" && String(err?.message || "").includes("createdByUserId")) {
       try {
         if (teacherId) await ensureAttendanceHourKindColumn(db)
+        if (teacherId) await reconcileRegularTeacherAttendanceForTeacher(db, teacherId)
         let result = (await runQuery(db, false)) as Record<string, unknown>[]
         if (teacherId && Array.isArray(result) && result.length === 0) {
           await backfillCampTeacherRowsIfMissing(db, teacherId)
