@@ -372,6 +372,20 @@ export async function resyncCampTeacherAttendanceForCourseDate(
     meet: CampMeetingDetail,
     teacherId: string
   ): Promise<boolean> {
+    // Legacy fallback: if student attendance rows already carry this teacherId
+    // (older flows), treat as marked by this teacher even without createdByUserId.
+    const directTeacherRows = await db`
+      SELECT 1
+      FROM "Attendance" a
+      WHERE a."courseId" = ${courseId}
+        AND a."date" = ${dateYmd}
+        AND a."studentId" IS NOT NULL
+        AND a."campMeetingCellId" IS NULL
+        AND a."teacherId" = ${teacherId}
+      LIMIT 1
+    `
+    if (directTeacherRows.length > 0) return true
+
     const rows = await db`
       SELECT e."campGroupLabel"
       FROM "Attendance" a
