@@ -382,6 +382,15 @@ export default function TeacherViewPage() {
       cancelled = true
     }
   }, [id])
+
+  // When switching between teachers, reset attendance filters/tabs
+  // so stale month/course filters from previous teacher won't hide data.
+  useEffect(() => {
+    if (!id || id === "create") return
+    setSelectedAttendanceCourse("all")
+    setSelectedAttendanceMonth("all")
+    setAttendanceTableTab("regular")
+  }, [id])
   
   const refreshSchoolGafanPrograms = useCallback(() => {
     fetch("/api/gafan", { cache: "no-store", credentials: "include" })
