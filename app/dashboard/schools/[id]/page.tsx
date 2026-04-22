@@ -295,6 +295,8 @@ export default function SchoolViewPage() {
   const [gafanTeacherPickId, setGafanTeacherPickId] = useState("")
   const [gafanTeacherTeachingRate, setGafanTeacherTeachingRate] = useState("0")
   const [gafanTeacherOfficeRate, setGafanTeacherOfficeRate] = useState("0")
+  const [gafanTeacherEditIds, setGafanTeacherEditIds] = useState<string[]>([])
+  const [gafanTeacherEditRates, setGafanTeacherEditRates] = useState<Record<string, GafanTeacherRate>>({})
   const [gafanTeacherSaving, setGafanTeacherSaving] = useState(false)
   const [workshopProgram, setWorkshopProgram] = useState<GafanRow | null>(null)
   const [workshopKind, setWorkshopKind] = useState("סדנה כולל חומרים")
@@ -506,6 +508,44 @@ export default function SchoolViewPage() {
         setGafanTeacherPickId("")
         setGafanTeacherTeachingRate("0")
         setGafanTeacherOfficeRate("0")
+        await reloadTabData()
+      }
+    } finally {
+      setGafanTeacherSaving(false)
+    }
+  }
+
+  const saveGafanTeacherAssignments = async () => {
+    if (!gafanTeacherProgram) return
+    const nextIds = gafanTeacherEditIds.filter(Boolean)
+    const nextRates: Record<string, GafanTeacherRate> = {}
+    nextIds.forEach((tid) => {
+      const rr = gafanTeacherEditRates[tid]
+      nextRates[tid] = {
+        teachingHourlyRate: Math.max(0, Number(rr?.teachingHourlyRate || 0)),
+        travelHourlyRate: Math.max(0, Number(rr?.travelHourlyRate || 0)),
+      }
+    })
+    setGafanTeacherSaving(true)
+    try {
+      const res = await fetch(`/api/gafan/${encodeURIComponent(gafanTeacherProgram.id)}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          schoolId: school?.id,
+          linkId: gafanTeacherProgram.linkId,
+          teacherIds: nextIds,
+          teacherRates: nextRates,
+        }),
+      })
+      if (res.ok) {
+        setGafanTeacherProgram(null)
+        setGafanTeacherPickId("")
+        setGafanTeacherTeachingRate("0")
+        setGafanTeacherOfficeRate("0")
+        setGafanTeacherEditIds([])
+        setGafanTeacherEditRates({})
         await reloadTabData()
       }
     } finally {
@@ -1219,6 +1259,10 @@ export default function SchoolViewPage() {
                                           setGafanTeacherPickId("")
                                           setGafanTeacherTeachingRate("0")
                                           setGafanTeacherOfficeRate("0")
+                                        const assigned = parseGafanTeacherIds(g)
+                                        const rateMap = parseGafanTeacherRates(g)
+                                        setGafanTeacherEditIds(assigned)
+                                        setGafanTeacherEditRates(rateMap)
                                           setGafanTeacherProgram(g)
                                         }}
                                       >
@@ -1230,10 +1274,14 @@ export default function SchoolViewPage() {
                                       variant="outline"
                                       size="sm"
                                       onClick={() => {
-                                        setHourDialogContext("ngafan")
-                                        setHoursProgramId(g.id)
-                                        resetHourForm()
-                                        setHourDialogOpen(true)
+                                        const assigned = parseGafanTeacherIds(g)
+                                        const rateMap = parseGafanTeacherRates(g)
+                                        setGafanTeacherPickId("")
+                                        setGafanTeacherTeachingRate("0")
+                                        setGafanTeacherOfficeRate("0")
+                                        setGafanTeacherEditIds(assigned)
+                                        setGafanTeacherEditRates(rateMap)
+                                        setGafanTeacherProgram(g)
                                       }}
                                     >
                                       עריכת כרטסת
@@ -1356,6 +1404,8 @@ export default function SchoolViewPage() {
                         setGafanTeacherPickId("")
                         setGafanTeacherTeachingRate("0")
                         setGafanTeacherOfficeRate("0")
+                        setGafanTeacherEditIds([])
+                        setGafanTeacherEditRates({})
                       }
                     }}
                   >
@@ -1367,6 +1417,121 @@ export default function SchoolViewPage() {
                         </DialogTitle>
                       </DialogHeader>
                       <div className="space-y-4 py-2">
+                        <div className="space-y-2 rounded-md border p-3">
+                          <Label>מורים משויכים לתוכנית (ראשי ראשון)</Label>
+                          {gafanTeacherEditIds.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">אין מורים משויכים כרגע.</p>
+                          ) : (
+                            <div className="space-y-2">
+                              {gafanTeacherEditIds.map((tid, idx) => {
+                                const rr = gafanTeacherEditRates[tid] ?? { teachingHourlyRate: 0, travelHourlyRate: 0 }
+                                return (
+                                  <div key={`${tid}-${idx}`} className="rounded-md border p-2">
+                                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                      <div className="font-medium">
+                                        {teacherNameById.get(tid) || tid} ({idx === 0 ? "ראשי" : "מחליף"})
+                                      </div>
+                                      <div className="flex items-center gap-1">
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="outline"
+                                          disabled={idx === 0 || gafanTeacherSaving}
+                                          onClick={() => {
+                                            setGafanTeacherEditIds((prev) => {
+                                              const next = [...prev]
+                                              ;[next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]
+                                              return next
+                                            })
+                                          }}
+                                        >
+                                          למעלה
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="outline"
+                                          disabled={idx === gafanTeacherEditIds.length - 1 || gafanTeacherSaving}
+                                          onClick={() => {
+                                            setGafanTeacherEditIds((prev) => {
+                                              const next = [...prev]
+                                              ;[next[idx + 1], next[idx]] = [next[idx], next[idx + 1]]
+                                              return next
+                                            })
+                                          }}
+                                        >
+                                          למטה
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="destructive"
+                                          disabled={gafanTeacherSaving}
+                                          onClick={() => {
+                                            setGafanTeacherEditIds((prev) => prev.filter((x) => x !== tid))
+                                            setGafanTeacherEditRates((prev) => {
+                                              const next = { ...prev }
+                                              delete next[tid]
+                                              return next
+                                            })
+                                          }}
+                                        >
+                                          הסר
+                                        </Button>
+                                      </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                      <div className="space-y-1">
+                                        <Label>מחיר שעה</Label>
+                                        <Input
+                                          type="number"
+                                          min={0}
+                                          step="0.01"
+                                          value={String(rr.teachingHourlyRate ?? 0)}
+                                          onChange={(e) =>
+                                            setGafanTeacherEditRates((prev) => ({
+                                              ...prev,
+                                              [tid]: {
+                                                teachingHourlyRate: Math.max(0, Number(e.target.value || 0)),
+                                                travelHourlyRate: Math.max(0, Number(prev[tid]?.travelHourlyRate || 0)),
+                                              },
+                                            }))
+                                          }
+                                        />
+                                      </div>
+                                      <div className="space-y-1">
+                                        <Label>נסיעות לשעה</Label>
+                                        <Input
+                                          type="number"
+                                          min={0}
+                                          step="0.01"
+                                          value={String(rr.travelHourlyRate ?? 0)}
+                                          onChange={(e) =>
+                                            setGafanTeacherEditRates((prev) => ({
+                                              ...prev,
+                                              [tid]: {
+                                                teachingHourlyRate: Math.max(0, Number(prev[tid]?.teachingHourlyRate || 0)),
+                                                travelHourlyRate: Math.max(0, Number(e.target.value || 0)),
+                                              },
+                                            }))
+                                          }
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+                          <Button
+                            type="button"
+                            className="w-full"
+                            disabled={gafanTeacherSaving}
+                            onClick={() => void saveGafanTeacherAssignments()}
+                          >
+                            {gafanTeacherSaving ? "שומר..." : "שמור עדכון כרטסת מורים"}
+                          </Button>
+                        </div>
                         <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
                           המורה הראשון שמשויך לתוכנית הוא <strong>המורה הראשי</strong>. כל מורה נוסף שיתווסף יישמר כ<strong>מחליף</strong>.
                         </div>
