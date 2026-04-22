@@ -18,6 +18,7 @@ export async function ensureGafanLinkColumns(db: ReturnType<typeof postgres>): P
         "gafanId" TEXT NOT NULL,
         "schoolId" TEXT NOT NULL,
         "teacherIds" JSONB DEFAULT '[]'::jsonb,
+        "teacherRates" JSONB DEFAULT '{}'::jsonb,
         "workshopRows" JSONB DEFAULT '[]'::jsonb,
         "allocatedHours" NUMERIC DEFAULT 0,
         "hourRows" JSONB DEFAULT '[]'::jsonb,
@@ -38,6 +39,7 @@ export async function ensureGafanLinkColumns(db: ReturnType<typeof postgres>): P
   try {
     await db`ALTER TABLE "GafanSchoolLink" ADD COLUMN IF NOT EXISTS "allocatedHours" NUMERIC DEFAULT 0`
     await db`ALTER TABLE "GafanSchoolLink" ADD COLUMN IF NOT EXISTS "hourRows" JSONB DEFAULT '[]'::jsonb`
+    await db`ALTER TABLE "GafanSchoolLink" ADD COLUMN IF NOT EXISTS "teacherRates" JSONB DEFAULT '{}'::jsonb`
     await db`ALTER TABLE "GafanSchoolLink" ADD COLUMN IF NOT EXISTS "id" TEXT`
   } catch (e) {
     console.warn("[gafan] ensure hour columns:", e)
@@ -71,6 +73,23 @@ export function normalizeGafanTeacherIds(raw: unknown): string[] {
   if (raw == null) return []
   if (Array.isArray(raw)) return raw.map((x) => String(x)).filter(Boolean)
   return []
+}
+
+export function normalizeGafanTeacherRates(raw: unknown): Record<string, { teachingHourlyRate: number; officeHourlyRate: number }> {
+  const out: Record<string, { teachingHourlyRate: number; officeHourlyRate: number }> = {}
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out
+  for (const [teacherId, value] of Object.entries(raw as Record<string, unknown>)) {
+    const tid = String(teacherId || "").trim()
+    if (!tid) continue
+    const v = (value ?? {}) as Record<string, unknown>
+    const teaching = Number(v.teachingHourlyRate ?? 0)
+    const office = Number(v.officeHourlyRate ?? 0)
+    out[tid] = {
+      teachingHourlyRate: Number.isFinite(teaching) && teaching >= 0 ? teaching : 0,
+      officeHourlyRate: Number.isFinite(office) && office >= 0 ? office : 0,
+    }
+  }
+  return out
 }
 
 export function normalizeGafanWorkshopRows(raw: unknown): Array<{
@@ -113,6 +132,7 @@ export function normalizeGafanHourRows(raw: unknown): Array<{
   date: string
   dayOfWeek?: string
   teacherName?: string
+  teacherId?: string
   startTime: string
   endTime: string
   totalHours: number
@@ -125,6 +145,7 @@ export function normalizeGafanHourRows(raw: unknown): Array<{
       const date = String(row.date ?? "")
       const dayOfWeek = String(row.dayOfWeek ?? "")
       const teacherName = String(row.teacherName ?? "")
+      const teacherId = String(row.teacherId ?? "")
       const startTime = String(row.startTime ?? "")
       const endTime = String(row.endTime ?? "")
       const totalHours = Number(row.totalHours ?? 0)
@@ -133,6 +154,7 @@ export function normalizeGafanHourRows(raw: unknown): Array<{
         date,
         dayOfWeek,
         teacherName,
+        teacherId,
         startTime,
         endTime,
         totalHours: Number.isFinite(totalHours) && totalHours >= 0 ? totalHours : 0,

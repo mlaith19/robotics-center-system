@@ -51,6 +51,7 @@ import {
 } from "@/components/ui/select"
 import { useCurrentUser } from "@/lib/auth-context"
 import { hasPermission, sessionRolesGrantFullAccess } from "@/lib/permissions"
+import { useUserType } from "@/lib/use-user-type"
 
 interface School {
   id: string
@@ -83,6 +84,7 @@ type GafanRow = {
   status?: string | null
   schoolId?: string | null
   teacherIds?: unknown
+  teacherRates?: unknown
   workshopRows?: unknown
   allocatedHours?: number | string | null
   hourRows?: unknown
@@ -92,6 +94,26 @@ function parseGafanTeacherIds(row: GafanRow): string[] {
   const t = row.teacherIds
   if (Array.isArray(t)) return t.map((x) => String(x)).filter(Boolean)
   return []
+}
+
+type GafanTeacherRate = { teachingHourlyRate: number; officeHourlyRate: number }
+
+function parseGafanTeacherRates(row: GafanRow): Record<string, GafanTeacherRate> {
+  const raw = row.teacherRates
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {}
+  const out: Record<string, GafanTeacherRate> = {}
+  for (const [teacherId, value] of Object.entries(raw as Record<string, unknown>)) {
+    const tid = String(teacherId || "").trim()
+    if (!tid) continue
+    const v = (value ?? {}) as Record<string, unknown>
+    const teaching = Number(v.teachingHourlyRate ?? 0)
+    const office = Number(v.officeHourlyRate ?? 0)
+    out[tid] = {
+      teachingHourlyRate: Number.isFinite(teaching) && teaching >= 0 ? teaching : 0,
+      officeHourlyRate: Number.isFinite(office) && office >= 0 ? office : 0,
+    }
+  }
+  return out
 }
 
 type TeacherMini = { id: string; name: string }
@@ -157,6 +179,7 @@ type GafanHourRow = {
   date: string
   dayOfWeek?: string
   teacherName?: string
+  teacherId?: string
   startTime: string
   endTime: string
   totalHours: number
@@ -182,6 +205,7 @@ function parseGafanHourRows(row: GafanRow): GafanHourRow[] {
       date: String(x.date ?? ""),
       dayOfWeek: String(x.dayOfWeek ?? ""),
       teacherName: String(x.teacherName ?? ""),
+      teacherId: String(x.teacherId ?? ""),
       startTime: String(x.startTime ?? ""),
       endTime: String(x.endTime ?? ""),
       totalHours: Number(x.totalHours ?? 0) || 0,
@@ -269,6 +293,8 @@ export default function SchoolViewPage() {
   const [gafanLinkSaving, setGafanLinkSaving] = useState(false)
   const [gafanTeacherProgram, setGafanTeacherProgram] = useState<GafanRow | null>(null)
   const [gafanTeacherPickId, setGafanTeacherPickId] = useState("")
+  const [gafanTeacherTeachingRate, setGafanTeacherTeachingRate] = useState("0")
+  const [gafanTeacherOfficeRate, setGafanTeacherOfficeRate] = useState("0")
   const [gafanTeacherSaving, setGafanTeacherSaving] = useState(false)
   const [workshopProgram, setWorkshopProgram] = useState<GafanRow | null>(null)
   const [workshopKind, setWorkshopKind] = useState("סדנה כולל חומרים")
@@ -293,6 +319,8 @@ export default function SchoolViewPage() {
   const [hoursSaving, setHoursSaving] = useState(false)
   const [hourSaveError, setHourSaveError] = useState("")
   const currentUser = useCurrentUser()
+  const { data: currentUserTypeData } = useUserType(currentUser?.id, currentUser?.roleKey ?? currentUser?.role)
+  const currentTeacherId = currentUserTypeData?.teacherId ? String(currentUserTypeData.teacherId) : ""
   const userPerms = currentUser?.permissions || []
   const isFullAccess = sessionRolesGrantFullAccess(currentUser?.roleKey, currentUser?.role)
   const canViewGeneralTab = isFullAccess || hasPermission(userPerms, "schools.tab.general")
@@ -447,22 +475,37 @@ export default function SchoolViewPage() {
   const submitGafanTeacher = async () => {
     if (!gafanTeacherProgram || !gafanTeacherPickId) return
     const cur = parseGafanTeacherIds(gafanTeacherProgram)
+    const currentRates = parseGafanTeacherRates(gafanTeacherProgram)
     if (cur.includes(gafanTeacherPickId)) {
       setGafanTeacherProgram(null)
       return
     }
     const next = [...cur, gafanTeacherPickId]
+    const nextRates = {
+      ...currentRates,
+      [gafanTeacherPickId]: {
+        teachingHourlyRate: Math.max(0, Number(gafanTeacherTeachingRate || 0)),
+        officeHourlyRate: Math.max(0, Number(gafanTeacherOfficeRate || 0)),
+      },
+    }
     setGafanTeacherSaving(true)
     try {
       const res = await fetch(`/api/gafan/${encodeURIComponent(gafanTeacherProgram.id)}`, {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ schoolId: school?.id, linkId: gafanTeacherProgram.linkId, teacherIds: next }),
+        body: JSON.stringify({
+          schoolId: school?.id,
+          linkId: gafanTeacherProgram.linkId,
+          teacherIds: next,
+          teacherRates: nextRates,
+        }),
       })
       if (res.ok) {
         setGafanTeacherProgram(null)
         setGafanTeacherPickId("")
+        setGafanTeacherTeachingRate("0")
+        setGafanTeacherOfficeRate("0")
         await reloadTabData()
       }
     } finally {
@@ -556,6 +599,7 @@ export default function SchoolViewPage() {
       date: hourDate,
       dayOfWeek: resolvedDayOfWeek,
       teacherName: currentUser?.full_name || currentUser?.username || "",
+      teacherId: currentTeacherId || "",
       startTime: hourStartTime,
       endTime: hourEndTime,
       totalHours: Math.max(0, Number(computedHours || hourTotal || 0)),
@@ -658,6 +702,7 @@ export default function SchoolViewPage() {
       date: string
       dayOfWeek: string
       teacherName: string
+      teacherId: string
       startTime: string
       endTime: string
       totalHours: number
@@ -733,6 +778,7 @@ export default function SchoolViewPage() {
           date: row.date,
           dayOfWeek: row.dayOfWeek || weekdayFromDate(row.date),
           teacherName: row.teacherName || "",
+          teacherId: row.teacherId || "",
           startTime: row.startTime,
           endTime: row.endTime,
           totalHours: hrs,
@@ -1133,6 +1179,7 @@ export default function SchoolViewPage() {
                         <TableBody>
                           {gafanPrograms.map((g) => {
                             const tids = parseGafanTeacherIds(g)
+                            const rateMap = parseGafanTeacherRates(g)
                             const workshopRows = parseGafanWorkshopRows(g)
                             const teacherLabel =
                               tids.length === 0
@@ -1141,7 +1188,11 @@ export default function SchoolViewPage() {
                                     .map((tid, i) => {
                                       const name = teacherNameById.get(tid) || tid
                                       const role = i === 0 ? "ראשי" : "מחליף"
-                                      return `${name} (${role})`
+                                      const rr = rateMap[tid]
+                                      const ratePart = rr
+                                        ? ` | הוראה ₪${Number(rr.teachingHourlyRate || 0).toLocaleString("he-IL")}/שעה, משרד ₪${Number(rr.officeHourlyRate || 0).toLocaleString("he-IL")}/שעה`
+                                        : ""
+                                      return `${name} (${role}${ratePart})`
                                     })
                                     .join(", ")
                             return (
@@ -1166,6 +1217,8 @@ export default function SchoolViewPage() {
                                         className="gap-1"
                                         onClick={() => {
                                           setGafanTeacherPickId("")
+                                          setGafanTeacherTeachingRate("0")
+                                          setGafanTeacherOfficeRate("0")
                                           setGafanTeacherProgram(g)
                                         }}
                                       >
@@ -1301,6 +1354,8 @@ export default function SchoolViewPage() {
                       if (!open) {
                         setGafanTeacherProgram(null)
                         setGafanTeacherPickId("")
+                        setGafanTeacherTeachingRate("0")
+                        setGafanTeacherOfficeRate("0")
                       }
                     }}
                   >
@@ -1349,6 +1404,30 @@ export default function SchoolViewPage() {
                               </Select>
                             )
                           })()}
+                        </div>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          <div className="space-y-1">
+                            <Label>מחיר שעת הוראה</Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              value={gafanTeacherTeachingRate}
+                              onChange={(e) => setGafanTeacherTeachingRate(e.target.value)}
+                              placeholder="0"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label>מחיר שעת משרד</Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              value={gafanTeacherOfficeRate}
+                              onChange={(e) => setGafanTeacherOfficeRate(e.target.value)}
+                              placeholder="0"
+                            />
+                          </div>
                         </div>
                         <Button
                           type="button"
@@ -1572,6 +1651,7 @@ export default function SchoolViewPage() {
                                                         date: row.date,
                                                         dayOfWeek: row.dayOfWeek,
                                                         teacherName: row.teacherName,
+                                                teacherId: row.teacherId,
                                                         startTime: row.startTime,
                                                         endTime: row.endTime,
                                                         totalHours: Number(row.totalHours || 0),
@@ -1594,6 +1674,7 @@ export default function SchoolViewPage() {
                                                         date: row.date,
                                                         dayOfWeek: row.dayOfWeek,
                                                         teacherName: row.teacherName,
+                                                teacherId: row.teacherId,
                                                         startTime: row.startTime,
                                                         endTime: row.endTime,
                                                         totalHours: Number(row.totalHours || 0),
@@ -1845,6 +1926,7 @@ export default function SchoolViewPage() {
                                               date: r.date,
                                               dayOfWeek: r.dayOfWeek,
                                               teacherName: r.teacherName,
+                                              teacherId: r.teacherId,
                                               startTime: r.startTime,
                                               endTime: r.endTime,
                                               totalHours: Number(r.totalHours || 0),

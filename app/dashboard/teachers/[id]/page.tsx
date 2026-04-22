@@ -73,6 +73,24 @@ type Teacher = {
 
 type TeacherCourseRow = NonNullable<Teacher["teacherCourses"]>[number]["course"]
 
+type GafanProgramForTeacher = {
+  id: string
+  name?: string | null
+  schoolId?: string | null
+  schoolName?: string | null
+  teacherIds?: string[]
+  teacherRates?: Record<string, { teachingHourlyRate?: number; officeHourlyRate?: number }>
+  hourRows?: Array<{
+    date?: string
+    teacherName?: string
+    teacherId?: string
+    startTime?: string
+    endTime?: string
+    totalHours?: number | string
+    pendingAssignment?: boolean
+  }>
+}
+
 function fmtDate(d?: string) {
   if (!d) return "-"
   const dt = new Date(d)
@@ -125,6 +143,7 @@ export default function TeacherViewPage() {
   const [error, setError] = useState<string | null>(null)
   const [teacherExpenses, setTeacherExpenses] = useState<any[]>([])
   const [teacherAttendance, setTeacherAttendance] = useState<any[]>([])
+  const [schoolGafanPrograms, setSchoolGafanPrograms] = useState<GafanProgramForTeacher[]>([])
   const [centerName, setCenterName] = useState("")
   const [centerLogo, setCenterLogo] = useState("")
   const [selectedAttendanceCourse, setSelectedAttendanceCourse] = useState<string>("all")
@@ -312,6 +331,11 @@ export default function TeacherViewPage() {
         .then(data => setTeacherAttendance(Array.isArray(data) ? data : []))
         .catch(() => {})
     }, 500)
+
+    fetch("/api/gafan", { cache: "no-store", credentials: "include" })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setSchoolGafanPrograms(Array.isArray(data) ? data : []))
+      .catch(() => setSchoolGafanPrograms([]))
   }, [id, loading, teacher])
 
 
@@ -379,9 +403,60 @@ export default function TeacherViewPage() {
     return attendance.filter((a: any) => a.courseId === selectedAttendanceCourse)
   }, [attendance, selectedAttendanceCourse])
 
+  const teacherSchoolAttendanceRows = useMemo(() => {
+    if (!teacher || !id || selectedAttendanceCourse !== "all") return [] as any[]
+    const teacherNameNormalized = String(teacher.name || "").trim().toLowerCase()
+    const teacherIdStr = String(id)
+    const out: any[] = []
+    for (const program of schoolGafanPrograms) {
+      const teacherIds = Array.isArray(program.teacherIds) ? program.teacherIds.map((x) => String(x)) : []
+      const rateMap =
+        program.teacherRates && typeof program.teacherRates === "object" && !Array.isArray(program.teacherRates)
+          ? (program.teacherRates as Record<string, { teachingHourlyRate?: number; officeHourlyRate?: number }>)
+          : {}
+      const assignedById = teacherIds.includes(teacherIdStr)
+      const programRows = Array.isArray(program.hourRows) ? program.hourRows : []
+      for (const r of programRows) {
+        if (r?.pendingAssignment === true) continue
+        const rowTeacherId = String(r?.teacherId || "").trim()
+        const rowTeacherName = String(r?.teacherName || "").trim().toLowerCase()
+        const belongs =
+          (rowTeacherId && rowTeacherId === teacherIdStr) ||
+          (teacherNameNormalized && rowTeacherName === teacherNameNormalized) ||
+          (!rowTeacherId && !rowTeacherName && assignedById)
+        if (!belongs) continue
+        const date = String(r?.date || "").trim().slice(0, 10)
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue
+        const startTime = String(r?.startTime || "").slice(0, 5)
+        const endTime = String(r?.endTime || "").slice(0, 5)
+        const hours = Number(r?.totalHours || 0)
+        const teacherRateRow = rateMap[teacherIdStr] || { teachingHourlyRate: 0, officeHourlyRate: 0 }
+        out.push({
+          id: `school-gafan-${program.id}-${date}-${startTime}-${endTime}-${out.length}`,
+          date,
+          status: "נוכח",
+          courseName: `${String(program.schoolName || "בית ספר")} · ${String(program.name || "גפ\"ן")}`,
+          courseStartTime: startTime,
+          courseEndTime: endTime,
+          hours: Number.isFinite(hours) && hours > 0 ? hours : 0,
+          notes: "נוכחות בית ספר (גפ\"ן)",
+          hourKind: "teaching",
+          appliedHourlyRate: Number(teacherRateRow.teachingHourlyRate || 0),
+          sourceType: "school-gafan",
+        })
+      }
+    }
+    return out
+  }, [teacher, id, selectedAttendanceCourse, schoolGafanPrograms])
+
+  const combinedAttendance = useMemo(() => {
+    const merged = [...filteredAttendance, ...teacherSchoolAttendanceRows]
+    return merged.sort((a: any, b: any) => String(b.date || "").localeCompare(String(a.date || "")))
+  }, [filteredAttendance, teacherSchoolAttendanceRows])
+
   const attendanceMonthStats = useMemo(() => {
     const monthMap = new Map<string, { label: string; totalHours: number; totalPayment: number; count: number }>()
-    for (const a of filteredAttendance) {
+    for (const a of combinedAttendance) {
       const ymd = String(a?.date || "").trim().slice(0, 10)
       if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) continue
       const monthKey = ymd.slice(0, 7)
@@ -411,7 +486,7 @@ export default function TeacherViewPage() {
         totalPayment: Math.round(value.totalPayment * 100) / 100,
         count: value.count,
       }))
-  }, [filteredAttendance])
+  }, [combinedAttendance])
 
   useEffect(() => {
     if (attendanceMonthStats.length === 0) {
@@ -425,11 +500,11 @@ export default function TeacherViewPage() {
   }, [attendanceMonthStats, selectedAttendanceMonth])
 
   const filteredAttendanceByMonth = useMemo(() => {
-    if (selectedAttendanceMonth === "all") return filteredAttendance
-    return filteredAttendance.filter((a: any) =>
+    if (selectedAttendanceMonth === "all") return combinedAttendance
+    return combinedAttendance.filter((a: any) =>
       String(a?.date || "").trim().slice(0, 7) === selectedAttendanceMonth,
     )
-  }, [filteredAttendance, selectedAttendanceMonth])
+  }, [combinedAttendance, selectedAttendanceMonth])
 
   const activeAttendanceMonthSummary = useMemo(() => {
     if (selectedAttendanceMonth === "all") {

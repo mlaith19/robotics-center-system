@@ -2,6 +2,7 @@ import { requireFeatureFromRequest } from "@/lib/feature-gate"
 import {
   ensureGafanLinkColumns,
   normalizeGafanTeacherIds,
+  normalizeGafanTeacherRates,
   normalizeGafanWorkshopRows,
   normalizeGafanAllocatedHours,
   normalizeGafanHourRows,
@@ -23,16 +24,30 @@ export const GET = withTenantAuth(async (req, session) => {
     const schoolId = (searchParams.get("schoolId") || "").trim()
     const result = schoolId
       ? await db`
-          SELECT g.*, l."id" as "linkId", l."schoolId", COALESCE(l."teacherIds", '[]'::jsonb) as "teacherIds",
+          SELECT g.*, l."id" as "linkId", l."schoolId", s.name as "schoolName",
+                 COALESCE(l."teacherIds", '[]'::jsonb) as "teacherIds",
+                 COALESCE(l."teacherRates", '{}'::jsonb) as "teacherRates",
                  COALESCE(l."workshopRows", '[]'::jsonb) as "workshopRows",
                  COALESCE(l."allocatedHours", 0) as "allocatedHours",
                  COALESCE(l."hourRows", '[]'::jsonb) as "hourRows"
           FROM "Gafan" g
           INNER JOIN "GafanSchoolLink" l ON l."gafanId" = g.id
+          LEFT JOIN "School" s ON s.id = l."schoolId"
           WHERE l."schoolId" = ${schoolId}
           ORDER BY g."createdAt" DESC
         `
-      : await db`SELECT * FROM "Gafan" ORDER BY "createdAt" DESC`
+      : await db`
+          SELECT g.*, l."id" as "linkId", l."schoolId", s.name as "schoolName",
+                 COALESCE(l."teacherIds", '[]'::jsonb) as "teacherIds",
+                 COALESCE(l."teacherRates", '{}'::jsonb) as "teacherRates",
+                 COALESCE(l."workshopRows", '[]'::jsonb) as "workshopRows",
+                 COALESCE(l."allocatedHours", 0) as "allocatedHours",
+                 COALESCE(l."hourRows", '[]'::jsonb) as "hourRows"
+          FROM "Gafan" g
+          LEFT JOIN "GafanSchoolLink" l ON l."gafanId" = g.id
+          LEFT JOIN "School" s ON s.id = l."schoolId"
+          ORDER BY g."createdAt" DESC, l."createdAt" ASC
+        `
     return Response.json(result)
   } catch (err) {
     console.error("GET /api/gafan error:", err)
@@ -62,10 +77,12 @@ export const POST = withTenantAuth(async (req, session) => {
         ? String(schoolIdRaw).trim()
         : null
     const teacherIds = normalizeGafanTeacherIds(body.teacherIds)
+    const teacherRates = normalizeGafanTeacherRates(body.teacherRates)
     const workshopRows = normalizeGafanWorkshopRows(body.workshopRows)
     const allocatedHours = normalizeGafanAllocatedHours(body.allocatedHours)
     const hourRows = normalizeGafanHourRows(body.hourRows)
     const teacherIdsJson = db.json(teacherIds)
+    const teacherRatesJson = db.json(teacherRates)
     const workshopRowsJson = db.json(workshopRows)
     const hourRowsJson = db.json(hourRows)
     const result = await db`
@@ -100,12 +117,13 @@ export const POST = withTenantAuth(async (req, session) => {
     if (schoolId) {
       await db`
         INSERT INTO "GafanSchoolLink" (
-          "gafanId", "schoolId", "teacherIds", "workshopRows", "allocatedHours", "hourRows", "createdAt", "updatedAt"
+          "gafanId", "schoolId", "teacherIds", "teacherRates", "workshopRows", "allocatedHours", "hourRows", "createdAt", "updatedAt"
         )
-        VALUES (${id}, ${schoolId}, ${teacherIdsJson}, ${workshopRowsJson}, ${allocatedHours}, ${hourRowsJson}, ${now}, ${now})
+        VALUES (${id}, ${schoolId}, ${teacherIdsJson}, ${teacherRatesJson}, ${workshopRowsJson}, ${allocatedHours}, ${hourRowsJson}, ${now}, ${now})
         ON CONFLICT ("gafanId", "schoolId")
         DO UPDATE SET
           "teacherIds" = EXCLUDED."teacherIds",
+          "teacherRates" = EXCLUDED."teacherRates",
           "workshopRows" = EXCLUDED."workshopRows",
           "allocatedHours" = EXCLUDED."allocatedHours",
           "hourRows" = EXCLUDED."hourRows",
