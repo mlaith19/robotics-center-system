@@ -160,30 +160,122 @@ export const GET = withTenantAuth(async (req, _session) => {
       return rows as Record<string, unknown>[]
     }
     if (teacherId) {
+      const teacherRows = await dbClient`SELECT "userId" FROM "Teacher" WHERE id = ${teacherId} LIMIT 1`
+      const teacherUserId = String((teacherRows[0] as { userId?: string | null } | undefined)?.userId || "").trim()
+      const campExpr = `(BTRIM(COALESCE(c."courseType", '')) = 'camp' OR BTRIM(COALESCE(c."courseType", '')) LIKE 'camp\\_%' ESCAPE '\\')`
+      const presentExpr = `(LOWER(BTRIM(COALESCE(a.status, ''))) = 'present' OR BTRIM(COALESCE(a.status, '')) = 'נוכח')`
       if (withUserJoin) {
-        return dbClient`
+        return dbClient.unsafe(
+          `
+          (
+            SELECT a.*, c.name as "courseName", c.duration as "courseDuration",
+              to_char(c."startTime"::time, 'HH24:MI') as "courseStartTime",
+              to_char(c."endTime"::time, 'HH24:MI') as "courseEndTime",
+              c.location as "courseLocation",
+              u.name as "createdByUserName"
+            FROM "Attendance" a
+            LEFT JOIN "Course" c ON a."courseId" = c.id
+            LEFT JOIN "User" u ON a."createdByUserId" = u.id
+            WHERE a."teacherId" = $1
+              AND (
+                a."courseId" IS NULL
+                OR ${campExpr}
+                OR EXISTS (
+                  SELECT 1
+                  FROM "Attendance" s
+                  WHERE s."courseId" = a."courseId"
+                    AND s."date" = a."date"
+                    AND s."studentId" IS NOT NULL
+                    AND (LOWER(BTRIM(COALESCE(s.status, ''))) = 'present' OR BTRIM(COALESCE(s.status, '')) = 'נוכח')
+                )
+              )
+          )
+          UNION ALL
+          (
+            SELECT
+              a.*,
+              c.name as "courseName",
+              c.duration as "courseDuration",
+              to_char(c."startTime"::time, 'HH24:MI') as "courseStartTime",
+              to_char(c."endTime"::time, 'HH24:MI') as "courseEndTime",
+              c.location as "courseLocation",
+              u.name as "createdByUserName"
+            FROM "Attendance" a
+            LEFT JOIN "Course" c ON a."courseId" = c.id
+            LEFT JOIN "User" u ON a."createdByUserId" = u.id
+            WHERE a."studentId" IS NOT NULL
+              AND $2::text IS NOT NULL
+              AND a."createdByUserId" = $2
+              AND NOT ${campExpr}
+              AND ${presentExpr}
+              AND NOT EXISTS (
+                SELECT 1
+                FROM "Attendance" t
+                WHERE t."teacherId" = $1
+                  AND t."studentId" IS NULL
+                  AND t."courseId" IS NOT DISTINCT FROM a."courseId"
+                  AND t."date" = a."date"
+                  AND COALESCE(t."campMeetingCellId", '') = ''
+              )
+          )
+          ORDER BY "date" DESC, "createdAt" DESC
+          `,
+          [teacherId, teacherUserId || null],
+        )
+      }
+      const rows = await dbClient.unsafe(
+        `
+        (
           SELECT a.*, c.name as "courseName", c.duration as "courseDuration",
             to_char(c."startTime"::time, 'HH24:MI') as "courseStartTime",
             to_char(c."endTime"::time, 'HH24:MI') as "courseEndTime",
-            c.location as "courseLocation",
-            u.name as "createdByUserName"
+            c.location as "courseLocation"
           FROM "Attendance" a
           LEFT JOIN "Course" c ON a."courseId" = c.id
-          LEFT JOIN "User" u ON a."createdByUserId" = u.id
-          WHERE a."teacherId" = ${teacherId}
-          ORDER BY a."date" DESC, a."createdAt" DESC
-        `
-      }
-      const rows = await dbClient`
-        SELECT a.*, c.name as "courseName", c.duration as "courseDuration",
-          to_char(c."startTime"::time, 'HH24:MI') as "courseStartTime",
-          to_char(c."endTime"::time, 'HH24:MI') as "courseEndTime",
-          c.location as "courseLocation"
-        FROM "Attendance" a
-        LEFT JOIN "Course" c ON a."courseId" = c.id
-        WHERE a."teacherId" = ${teacherId}
-        ORDER BY a."date" DESC, a."createdAt" DESC
-      `
+          WHERE a."teacherId" = $1
+            AND (
+              a."courseId" IS NULL
+              OR ${campExpr}
+              OR EXISTS (
+                SELECT 1
+                FROM "Attendance" s
+                WHERE s."courseId" = a."courseId"
+                  AND s."date" = a."date"
+                  AND s."studentId" IS NOT NULL
+                  AND (LOWER(BTRIM(COALESCE(s.status, ''))) = 'present' OR BTRIM(COALESCE(s.status, '')) = 'נוכח')
+              )
+            )
+        )
+        UNION ALL
+        (
+          SELECT
+            a.*,
+            c.name as "courseName",
+            c.duration as "courseDuration",
+            to_char(c."startTime"::time, 'HH24:MI') as "courseStartTime",
+            to_char(c."endTime"::time, 'HH24:MI') as "courseEndTime",
+            c.location as "courseLocation"
+          FROM "Attendance" a
+          LEFT JOIN "Course" c ON a."courseId" = c.id
+          WHERE a."studentId" IS NOT NULL
+            AND $2::text IS NOT NULL
+            AND a."createdByUserId" = $2
+            AND NOT ${campExpr}
+            AND ${presentExpr}
+            AND NOT EXISTS (
+              SELECT 1
+              FROM "Attendance" t
+              WHERE t."teacherId" = $1
+                AND t."studentId" IS NULL
+                AND t."courseId" IS NOT DISTINCT FROM a."courseId"
+                AND t."date" = a."date"
+                AND COALESCE(t."campMeetingCellId", '') = ''
+            )
+        )
+        ORDER BY "date" DESC, "createdAt" DESC
+        `,
+        [teacherId, teacherUserId || null],
+      )
       return rows.map((r: any) => ({ ...r, createdByUserName: null }))
     }
     if (courseId && studentId && date) {
@@ -373,11 +465,6 @@ export const GET = withTenantAuth(async (req, _session) => {
     await ensureAttendanceCampColumns(db)
     if (teacherId) {
       await ensureAttendanceHourKindColumn(db)
-      try {
-        await reconcileRegularTeacherAttendanceForTeacher(db, teacherId)
-      } catch (reconcileErr) {
-        console.warn("[attendance] reconcile regular teacher rows skipped:", reconcileErr)
-      }
     }
     let result = (await runQuery(db, true)) as Record<string, unknown>[]
     if (teacherId && Array.isArray(result) && result.length === 0) {
@@ -392,13 +479,6 @@ export const GET = withTenantAuth(async (req, _session) => {
     if (err?.code === "42703" && String(err?.message || "").includes("createdByUserId")) {
       try {
         if (teacherId) await ensureAttendanceHourKindColumn(db)
-        if (teacherId) {
-          try {
-            await reconcileRegularTeacherAttendanceForTeacher(db, teacherId)
-          } catch (reconcileErr) {
-            console.warn("[attendance] reconcile regular teacher rows skipped (fallback):", reconcileErr)
-          }
-        }
         let result = (await runQuery(db, false)) as Record<string, unknown>[]
         if (teacherId && Array.isArray(result) && result.length === 0) {
           await backfillCampTeacherRowsIfMissing(db, teacherId)
