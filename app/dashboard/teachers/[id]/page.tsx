@@ -91,6 +91,9 @@ type GafanProgramForTeacher = {
   }>
 }
 
+const DEFAULT_GAFAN_TEACHING_HOURLY_RATE = 50
+const DEFAULT_GAFAN_TRAVEL_HOURLY_RATE = 30
+
 function fmtDate(d?: string) {
   if (!d) return "-"
   const dt = new Date(d)
@@ -468,10 +471,20 @@ export default function TeacherViewPage() {
         const startTime = String(r?.startTime || "").slice(0, 5)
         const endTime = String(r?.endTime || "").slice(0, 5)
         const hours = Number(r?.totalHours || 0)
-        const effectiveRateTeacherId = rowTeacherId && rateMap[rowTeacherId] ? rowTeacherId : teacherIdStr
-        const teacherRateRow = rateMap[effectiveRateTeacherId] || { teachingHourlyRate: 0, travelHourlyRate: 0 }
-        const teachingRate = Number(teacherRateRow.teachingHourlyRate || 0)
-        const travelRate = Number(teacherRateRow.travelHourlyRate ?? teacherRateRow.officeHourlyRate ?? 0)
+        const teacherRateRow =
+          (rowTeacherId && Object.prototype.hasOwnProperty.call(rateMap, rowTeacherId) ? rateMap[rowTeacherId] : undefined) ??
+          (Object.prototype.hasOwnProperty.call(rateMap, teacherIdStr) ? rateMap[teacherIdStr] : undefined) ??
+          // Fallback for legacy/inconsistent records: use the first assigned teacher rate.
+          (() => {
+            const assignedRate = teacherIds.map((tid) => rateMap[tid]).find(Boolean)
+            if (assignedRate) return assignedRate
+            const onlyRate = Object.values(rateMap)[0]
+            return onlyRate
+          })()
+        const teachingRate = Number(teacherRateRow?.teachingHourlyRate ?? DEFAULT_GAFAN_TEACHING_HOURLY_RATE)
+        const travelRate = Number(
+          teacherRateRow?.travelHourlyRate ?? teacherRateRow?.officeHourlyRate ?? DEFAULT_GAFAN_TRAVEL_HOURLY_RATE,
+        )
         out.push({
           id: `school-gafan-${program.id}-${date}-${startTime}-${endTime}-${out.length}`,
           date,
@@ -1209,14 +1222,16 @@ export default function TeacherViewPage() {
                 size="sm"
                 className="gap-1 bg-purple-600 hover:bg-purple-700 text-white"
                 onClick={() => {
+                  const printRows = attendanceTableTab === "gafan" ? gafanAttendanceRows : regularAttendanceRows
+                  const printTypeLabel = attendanceTableTab === "gafan" ? "גפ\"ן" : "רגיל"
                   const w = window.open("", "_blank")
                   if (!w) return
                   const logoHtml = centerLogo ? `<img src="${centerLogo}" style="max-height:60px;max-width:160px;object-fit:contain" />` : ""
-                  w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>נוכחות מורה - ${teacher?.name || ""}</title>
+                  w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>נוכחות מורה (${printTypeLabel}) - ${teacher?.name || ""}</title>
 <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;padding:32px 40px;color:#1f2937;max-width:900px;margin:0 auto}.header{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:20px;padding-bottom:12px;border-bottom:2px solid #3b82f6}.header h1{font-size:22px;color:#1e40af;margin-top:6px}.header h2{font-size:15px;color:#4b5563;font-weight:400;margin-top:2px}table{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px}th{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:8px 10px;text-align:center;font-weight:600}td{border:1px solid #d1d5db;padding:8px 10px;text-align:center;vertical-align:middle}tr:nth-child(even) td{background:#f9fafb}.status-present{color:#166534;font-weight:600}.status-absent{color:#991b1b;font-weight:600}@media print{body{padding:20px 28px;max-width:100%}@page{margin:20mm 15mm}}</style></head><body>`)
-                  w.document.write(`<div class="header">${logoHtml}<h1>${centerName || "מרכז"}</h1><h2 style="font-size:17px;color:#1f2937;font-weight:600;margin-top:4px">${teacher?.name || "מורה"}</h2><h2>דוח נוכחות - ${activeAttendanceMonthSummary.label}</h2></div>`)
+                  w.document.write(`<div class="header">${logoHtml}<h1>${centerName || "מרכז"}</h1><h2 style="font-size:17px;color:#1f2937;font-weight:600;margin-top:4px">${teacher?.name || "מורה"}</h2><h2>דוח נוכחות ${printTypeLabel} - ${activeAttendanceMonthSummary.label}</h2></div>`)
                   w.document.write(`<table><thead><tr><th>#</th><th>תאריך</th><th>בית ספר</th><th>קורס/תוכנית</th><th>משעה</th><th>עד שעה</th><th>סה"כ שעות</th><th>סטטוס</th><th>הערה</th></tr></thead><tbody>`)
-                  filteredAttendanceByMonth.forEach((a: any, idx: number) => {
+                  printRows.forEach((a: any, idx: number) => {
                     const statusLabel = getStatusLabel(a.status)
                     const isPresent = statusLabel === "נוכח"
                     const startDisplay = courseTimeToDisplayValue(a.courseStartTime) || "—"

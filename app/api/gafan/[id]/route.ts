@@ -11,6 +11,8 @@ import { withTenantAuth } from "@/lib/tenant-api-auth"
 import { requireTenant, ensureSessionMatchesTenant } from "@/lib/tenant/resolve-tenant"
 
 type Ctx = { params: Promise<{ id: string }> }
+const DEFAULT_GAFAN_TEACHING_HOURLY_RATE = 50
+const DEFAULT_GAFAN_TRAVEL_HOURLY_RATE = 30
 
 function pickSchoolId(body: Record<string, unknown>, existing: Record<string, unknown> | undefined): string | null {
   if (!Object.prototype.hasOwnProperty.call(body, "schoolId") && !Object.prototype.hasOwnProperty.call(body, "school_id")) {
@@ -278,7 +280,10 @@ export const PATCH = withTenantAuth(async (req, session, { params }: Ctx) => {
       if (!nextTeacherRates[tid]) {
         nextTeacherRates = {
           ...nextTeacherRates,
-          [tid]: { teachingHourlyRate: 0, officeHourlyRate: 0 },
+          [tid]: {
+            teachingHourlyRate: DEFAULT_GAFAN_TEACHING_HOURLY_RATE,
+            travelHourlyRate: DEFAULT_GAFAN_TRAVEL_HOURLY_RATE,
+          },
         }
       }
     }

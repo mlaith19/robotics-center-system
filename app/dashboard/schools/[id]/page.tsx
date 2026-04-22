@@ -97,6 +97,8 @@ function parseGafanTeacherIds(row: GafanRow): string[] {
 }
 
 type GafanTeacherRate = { teachingHourlyRate: number; travelHourlyRate: number }
+const DEFAULT_GAFAN_TEACHING_HOURLY_RATE = 50
+const DEFAULT_GAFAN_TRAVEL_HOURLY_RATE = 30
 
 function parseGafanTeacherRates(row: GafanRow): Record<string, GafanTeacherRate> {
   const raw = row.teacherRates
@@ -293,8 +295,8 @@ export default function SchoolViewPage() {
   const [gafanLinkSaving, setGafanLinkSaving] = useState(false)
   const [gafanTeacherProgram, setGafanTeacherProgram] = useState<GafanRow | null>(null)
   const [gafanTeacherPickId, setGafanTeacherPickId] = useState("")
-  const [gafanTeacherTeachingRate, setGafanTeacherTeachingRate] = useState("0")
-  const [gafanTeacherOfficeRate, setGafanTeacherOfficeRate] = useState("0")
+  const [gafanTeacherTeachingRate, setGafanTeacherTeachingRate] = useState(String(DEFAULT_GAFAN_TEACHING_HOURLY_RATE))
+  const [gafanTeacherOfficeRate, setGafanTeacherOfficeRate] = useState(String(DEFAULT_GAFAN_TRAVEL_HOURLY_RATE))
   const [gafanTeacherEditIds, setGafanTeacherEditIds] = useState<string[]>([])
   const [gafanTeacherEditRates, setGafanTeacherEditRates] = useState<Record<string, GafanTeacherRate>>({})
   const [gafanTeacherSaving, setGafanTeacherSaving] = useState(false)
@@ -486,8 +488,8 @@ export default function SchoolViewPage() {
     const nextRates = {
       ...currentRates,
       [gafanTeacherPickId]: {
-        teachingHourlyRate: Math.max(0, Number(gafanTeacherTeachingRate || 0)),
-        travelHourlyRate: Math.max(0, Number(gafanTeacherOfficeRate || 0)),
+        teachingHourlyRate: Math.max(0, Number(gafanTeacherTeachingRate || DEFAULT_GAFAN_TEACHING_HOURLY_RATE)),
+        travelHourlyRate: Math.max(0, Number(gafanTeacherOfficeRate || DEFAULT_GAFAN_TRAVEL_HOURLY_RATE)),
       },
     }
     setGafanTeacherSaving(true)
@@ -506,8 +508,8 @@ export default function SchoolViewPage() {
       if (res.ok) {
         setGafanTeacherProgram(null)
         setGafanTeacherPickId("")
-        setGafanTeacherTeachingRate("0")
-        setGafanTeacherOfficeRate("0")
+        setGafanTeacherTeachingRate(String(DEFAULT_GAFAN_TEACHING_HOURLY_RATE))
+        setGafanTeacherOfficeRate(String(DEFAULT_GAFAN_TRAVEL_HOURLY_RATE))
         await reloadTabData()
       }
     } finally {
@@ -522,8 +524,8 @@ export default function SchoolViewPage() {
     nextIds.forEach((tid) => {
       const rr = gafanTeacherEditRates[tid]
       nextRates[tid] = {
-        teachingHourlyRate: Math.max(0, Number(rr?.teachingHourlyRate || 0)),
-        travelHourlyRate: Math.max(0, Number(rr?.travelHourlyRate || 0)),
+        teachingHourlyRate: Math.max(0, Number(rr?.teachingHourlyRate ?? DEFAULT_GAFAN_TEACHING_HOURLY_RATE)),
+        travelHourlyRate: Math.max(0, Number(rr?.travelHourlyRate ?? DEFAULT_GAFAN_TRAVEL_HOURLY_RATE)),
       }
     })
     setGafanTeacherSaving(true)
@@ -542,8 +544,8 @@ export default function SchoolViewPage() {
       if (res.ok) {
         setGafanTeacherProgram(null)
         setGafanTeacherPickId("")
-        setGafanTeacherTeachingRate("0")
-        setGafanTeacherOfficeRate("0")
+        setGafanTeacherTeachingRate(String(DEFAULT_GAFAN_TEACHING_HOURLY_RATE))
+        setGafanTeacherOfficeRate(String(DEFAULT_GAFAN_TRAVEL_HOURLY_RATE))
         setGafanTeacherEditIds([])
         setGafanTeacherEditRates({})
         await reloadTabData()
@@ -1257,8 +1259,8 @@ export default function SchoolViewPage() {
                                         className="gap-1"
                                         onClick={() => {
                                           setGafanTeacherPickId("")
-                                          setGafanTeacherTeachingRate("0")
-                                          setGafanTeacherOfficeRate("0")
+                                          setGafanTeacherTeachingRate(String(DEFAULT_GAFAN_TEACHING_HOURLY_RATE))
+                                          setGafanTeacherOfficeRate(String(DEFAULT_GAFAN_TRAVEL_HOURLY_RATE))
                                         const assigned = parseGafanTeacherIds(g)
                                         const rateMap = parseGafanTeacherRates(g)
                                         setGafanTeacherEditIds(assigned)
@@ -1277,8 +1279,8 @@ export default function SchoolViewPage() {
                                         const assigned = parseGafanTeacherIds(g)
                                         const rateMap = parseGafanTeacherRates(g)
                                         setGafanTeacherPickId("")
-                                        setGafanTeacherTeachingRate("0")
-                                        setGafanTeacherOfficeRate("0")
+                                        setGafanTeacherTeachingRate(String(DEFAULT_GAFAN_TEACHING_HOURLY_RATE))
+                                        setGafanTeacherOfficeRate(String(DEFAULT_GAFAN_TRAVEL_HOURLY_RATE))
                                         setGafanTeacherEditIds(assigned)
                                         setGafanTeacherEditRates(rateMap)
                                         setGafanTeacherProgram(g)
@@ -1402,8 +1404,8 @@ export default function SchoolViewPage() {
                       if (!open) {
                         setGafanTeacherProgram(null)
                         setGafanTeacherPickId("")
-                        setGafanTeacherTeachingRate("0")
-                        setGafanTeacherOfficeRate("0")
+                        setGafanTeacherTeachingRate(String(DEFAULT_GAFAN_TEACHING_HOURLY_RATE))
+                        setGafanTeacherOfficeRate(String(DEFAULT_GAFAN_TRAVEL_HOURLY_RATE))
                         setGafanTeacherEditIds([])
                         setGafanTeacherEditRates({})
                       }
@@ -1424,7 +1426,10 @@ export default function SchoolViewPage() {
                           ) : (
                             <div className="space-y-2">
                               {gafanTeacherEditIds.map((tid, idx) => {
-                                const rr = gafanTeacherEditRates[tid] ?? { teachingHourlyRate: 0, travelHourlyRate: 0 }
+                                const rr = gafanTeacherEditRates[tid] ?? {
+                                  teachingHourlyRate: DEFAULT_GAFAN_TEACHING_HOURLY_RATE,
+                                  travelHourlyRate: DEFAULT_GAFAN_TRAVEL_HOURLY_RATE,
+                                }
                                 return (
                                   <div key={`${tid}-${idx}`} className="rounded-md border p-2">
                                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -1493,7 +1498,10 @@ export default function SchoolViewPage() {
                                               ...prev,
                                               [tid]: {
                                                 teachingHourlyRate: Math.max(0, Number(e.target.value || 0)),
-                                                travelHourlyRate: Math.max(0, Number(prev[tid]?.travelHourlyRate || 0)),
+                                                travelHourlyRate: Math.max(
+                                                  0,
+                                                  Number(prev[tid]?.travelHourlyRate ?? DEFAULT_GAFAN_TRAVEL_HOURLY_RATE),
+                                                ),
                                               },
                                             }))
                                           }
@@ -1510,7 +1518,10 @@ export default function SchoolViewPage() {
                                             setGafanTeacherEditRates((prev) => ({
                                               ...prev,
                                               [tid]: {
-                                                teachingHourlyRate: Math.max(0, Number(prev[tid]?.teachingHourlyRate || 0)),
+                                                teachingHourlyRate: Math.max(
+                                                  0,
+                                                  Number(prev[tid]?.teachingHourlyRate ?? DEFAULT_GAFAN_TEACHING_HOURLY_RATE),
+                                                ),
                                                 travelHourlyRate: Math.max(0, Number(e.target.value || 0)),
                                               },
                                             }))
@@ -1579,7 +1590,7 @@ export default function SchoolViewPage() {
                               step="0.01"
                               value={gafanTeacherTeachingRate}
                               onChange={(e) => setGafanTeacherTeachingRate(e.target.value)}
-                              placeholder="0"
+                              placeholder={String(DEFAULT_GAFAN_TEACHING_HOURLY_RATE)}
                             />
                           </div>
                           <div className="space-y-1">
@@ -1590,7 +1601,7 @@ export default function SchoolViewPage() {
                               step="0.01"
                               value={gafanTeacherOfficeRate}
                               onChange={(e) => setGafanTeacherOfficeRate(e.target.value)}
-                              placeholder="0"
+                              placeholder={String(DEFAULT_GAFAN_TRAVEL_HOURLY_RATE)}
                             />
                           </div>
                         </div>
