@@ -615,6 +615,24 @@ export default function TeacherViewPage() {
 
   const hasGafanAttendanceRows = gafanAttendanceRows.length > 0
 
+  const regularAttendanceTotalHours = useMemo(() => {
+    return regularAttendanceRows.reduce((sum, a: any) => {
+      const status = String(a?.status || "").trim().toLowerCase()
+      const isPresent = status === "present" || status === "נוכח"
+      if (!isPresent) return sum
+      return sum + calcAttendanceHours(a)
+    }, 0)
+  }, [regularAttendanceRows])
+
+  const gafanAttendanceTotalHours = useMemo(() => {
+    return gafanAttendanceRows.reduce((sum, a: any) => {
+      const status = String(a?.status || "").trim().toLowerCase()
+      const isPresent = status === "present" || status === "נוכח"
+      if (!isPresent) return sum
+      return sum + calcAttendanceHours(a)
+    }, 0)
+  }, [gafanAttendanceRows])
+
   useEffect(() => {
     if (!hasGafanAttendanceRows && attendanceTableTab === "gafan") {
       setAttendanceTableTab("regular")
@@ -1326,7 +1344,7 @@ export default function TeacherViewPage() {
                       variant={attendanceTableTab === "regular" ? "default" : "ghost"}
                       onClick={() => setAttendanceTableTab("regular")}
                     >
-                      רגיל ({regularAttendanceRows.length})
+                      רגיל ({Math.round(regularAttendanceTotalHours * 100) / 100} ש׳)
                     </Button>
                     <Button
                       type="button"
@@ -1334,7 +1352,7 @@ export default function TeacherViewPage() {
                       variant={attendanceTableTab === "gafan" ? "default" : "ghost"}
                       onClick={() => setAttendanceTableTab("gafan")}
                     >
-                      גפ&quot;ן ({gafanAttendanceRows.length})
+                      גפ&quot;ן ({Math.round(gafanAttendanceTotalHours * 100) / 100} ש׳)
                     </Button>
                   </div>
                 ) : null}
