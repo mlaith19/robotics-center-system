@@ -254,12 +254,15 @@ export async function resyncCampTeacherAttendanceForCourseDate(
         let chosenCellId = cellIds[0]
         if (uid && typeof uid === "string") {
           const marked = await db`
-            SELECT a."campMeetingCellId" as "campMeetingCellId"
+              SELECT a."campMeetingCellId" as "campMeetingCellId"
             FROM "Attendance" a
             WHERE a."courseId" = ${courseId} AND a."date" = ${dateYmd}
               AND a."campMeetingCellId" = ANY(${db.array(cellIds)})
               AND a."studentId" IS NOT NULL
-              AND a."createdByUserId" = ${uid}
+                AND (
+                  a."createdByUserId" = ${uid}
+                  OR a."teacherId" = ${tid}
+                )
             ORDER BY a."createdAt" ASC, a.id ASC
             LIMIT 1
           `

@@ -502,11 +502,11 @@ export default function TeacherViewPage() {
         const belongsById = rowTeacherId && rowTeacherId === teacherIdStr
         const belongsByName = teacherNameNormalized && rowTeacherName && rowTeacherName === teacherNameNormalized
         // Legacy rows may miss teacherId.
-        // - If exactly one teacher is assigned: attribute safely to that teacher.
-        // - If multiple teachers are assigned: fallback only to the primary teacher.
+        // We only auto-attribute when there is exactly one assigned teacher.
+        // For multi-teacher programs we avoid guessing to prevent stealing hours
+        // from substitute teachers.
         const belongsBySingleAssignedFallback = !rowTeacherId && assignedById && teacherIds.length === 1
-        const belongsByPrimaryFallback = !rowTeacherId && assignedById && teacherIds.length > 1 && teacherIds[0] === teacherIdStr
-        const belongs = Boolean(belongsById || belongsByName || belongsBySingleAssignedFallback || belongsByPrimaryFallback)
+        const belongs = Boolean(belongsById || belongsByName || belongsBySingleAssignedFallback)
         if (!belongs) continue
         const date = String(r?.date || "").trim().slice(0, 10)
         if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue

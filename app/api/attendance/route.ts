@@ -396,6 +396,7 @@ export const POST = withTenantAuth(async (req, session) => {
       groupLabelForCamp = (enr[0] as { campGroupLabel?: string | null } | undefined)?.campGroupLabel ?? null
     }
 
+    let actorTeacherIdForCampStudent: string | null = null
     if (studentId && courseId && isCampCourse) {
       if (!isAdmin) {
         const myTeacherId = await getTeacherIdForUserId(db, session.id)
@@ -435,6 +436,7 @@ export const POST = withTenantAuth(async (req, session) => {
             { status: 403 },
           )
         }
+        actorTeacherIdForCampStudent = myTeacherId
       } else if (campMeetingCellId && meetingForCamp) {
         if (!findCampMeetingCell(meetingForCamp, campMeetingCellId)) {
           return Response.json({ error: "תא שיעור לא נמצא במפגש זה" }, { status: 400 })
@@ -499,9 +501,18 @@ export const POST = withTenantAuth(async (req, session) => {
 
     if (existing.length > 0) {
       const rowUserId = studentId ? studentRowActorUserId : createdByUserId
+      const teacherIdToStore =
+        studentId && courseId && isCampCourse
+          ? actorTeacherIdForCampStudent
+          : (teacherId || null)
       const result = await db`
         UPDATE "Attendance"
-        SET status = ${status}, notes = ${noteValue}, hours = ${hours || null}, "hourKind" = ${hourKindStored}, "createdByUserId" = ${rowUserId}
+        SET status = ${status},
+            notes = ${noteValue},
+            hours = ${hours || null},
+            "hourKind" = ${hourKindStored},
+            "createdByUserId" = ${rowUserId},
+            "teacherId" = ${teacherIdToStore}
         WHERE id = ${existing[0].id}
         RETURNING *
       `
@@ -519,6 +530,10 @@ export const POST = withTenantAuth(async (req, session) => {
 
     const insertCreatorUserId = studentId ? session.id : createdByUserId
     let saved: Record<string, unknown>
+    const teacherIdToInsert =
+      studentId && courseId && isCampCourse
+        ? actorTeacherIdForCampStudent
+        : (teacherId || null)
     try {
       const result = await db`
         INSERT INTO "Attendance" (
@@ -527,7 +542,7 @@ export const POST = withTenantAuth(async (req, session) => {
           "createdByUserId", "createdAt"
         )
         VALUES (
-          ${id}, ${studentId || null}, ${teacherId || null}, ${courseId || null}, ${date}, ${status}, ${noteValue},
+          ${id}, ${studentId || null}, ${teacherIdToInsert}, ${courseId || null}, ${date}, ${status}, ${noteValue},
           ${hours || null}, ${hourKindStored},
           ${campMeetingCellId}, null, null, null,
           ${insertCreatorUserId}, ${now}
@@ -544,7 +559,9 @@ export const POST = withTenantAuth(async (req, session) => {
         updated = (await db`
           UPDATE "Attendance"
           SET status = ${status}, notes = ${noteValue}, hours = ${hours || null},
-              "hourKind" = ${hourKindStored}, "createdByUserId" = ${insertCreatorUserId}
+              "hourKind" = ${hourKindStored},
+              "createdByUserId" = ${insertCreatorUserId},
+              "teacherId" = ${teacherIdToInsert}
           WHERE "studentId" = ${studentId} AND "courseId" = ${courseId} AND "date" = ${date}
             AND COALESCE("campMeetingCellId", '') = ${campMeetingCellId || ''}
           RETURNING *
