@@ -27,6 +27,37 @@ function extractAttendanceDateYmd(raw: unknown): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(head) ? head : ""
 }
 
+async function backfillCampTeacherRowsIfMissing(
+  db: ReturnType<typeof postgres>,
+  teacherId: string,
+): Promise<void> {
+  const teacherRows = await db`SELECT "userId" FROM "Teacher" WHERE id = ${teacherId} LIMIT 1`
+  const teacherUserId = String((teacherRows[0] as { userId?: string | null } | undefined)?.userId || "").trim()
+  const candidates = await db`
+    SELECT DISTINCT
+      a."courseId" as "courseId",
+      LEFT(BTRIM(a."date"::text), 10) as "dateYmd",
+      c."courseType" as "courseType"
+    FROM "Attendance" a
+    INNER JOIN "Course" c ON c.id = a."courseId"
+    WHERE a."studentId" IS NOT NULL
+      AND a."courseId" IS NOT NULL
+      AND (
+        a."teacherId" = ${teacherId}
+        OR (${teacherUserId || null} IS NOT NULL AND a."createdByUserId" = ${teacherUserId || null})
+      )
+  `
+  const nowIso = new Date().toISOString()
+  for (const row of candidates as Array<{ courseId?: string; dateYmd?: string; courseType?: string | null }>) {
+    const courseId = String(row.courseId || "").trim()
+    const dateYmd = String(row.dateYmd || "").trim()
+    const courseType = String(row.courseType || "")
+    if (!courseId || !dateYmd || !/^\d{4}-\d{2}-\d{2}$/.test(dateYmd)) continue
+    if (!isCampCourseType(courseType)) continue
+    await resyncCampTeacherAttendanceForCourseDate(db, courseId, dateYmd, nowIso)
+  }
+}
+
 export const GET = withTenantAuth(async (req, _session) => {
   const [tenant, tenantErr] = await requireTenant(req)
   if (tenantErr) return tenantErr
@@ -71,8 +102,6 @@ export const GET = withTenantAuth(async (req, _session) => {
       return rows as Record<string, unknown>[]
     }
     if (teacherId) {
-      const teacherUserRows = await dbClient`SELECT "userId" FROM "Teacher" WHERE id = ${teacherId} LIMIT 1`
-      const teacherUserId = String((teacherUserRows[0] as { userId?: string | null } | undefined)?.userId || "").trim()
       if (withUserJoin) {
         return dbClient`
           SELECT a.*, c.name as "courseName", c.duration as "courseDuration",
@@ -83,24 +112,7 @@ export const GET = withTenantAuth(async (req, _session) => {
           FROM "Attendance" a
           LEFT JOIN "Course" c ON a."courseId" = c.id
           LEFT JOIN "User" u ON a."createdByUserId" = u.id
-          WHERE
-            -- Regular teacher attendance rows
-            a."teacherId" = ${teacherId}
-            OR (
-              -- Fallback rows: this teacher marked student attendance, but a teacher row was not generated.
-              a."studentId" IS NOT NULL
-              AND ${teacherUserId || null} IS NOT NULL
-              AND a."createdByUserId" = ${teacherUserId || null}
-              AND NOT EXISTS (
-                SELECT 1
-                FROM "Attendance" ta
-                WHERE ta."teacherId" = ${teacherId}
-                  AND ta."studentId" IS NULL
-                  AND ta."courseId" IS NOT DISTINCT FROM a."courseId"
-                  AND ta."date" = a."date"
-                  AND COALESCE(ta."campMeetingCellId", '') = COALESCE(a."campMeetingCellId", '')
-              )
-            )
+          WHERE a."teacherId" = ${teacherId}
           ORDER BY a."date" DESC, a."createdAt" DESC
         `
       }
@@ -111,22 +123,7 @@ export const GET = withTenantAuth(async (req, _session) => {
           c.location as "courseLocation"
         FROM "Attendance" a
         LEFT JOIN "Course" c ON a."courseId" = c.id
-        WHERE
-          a."teacherId" = ${teacherId}
-          OR (
-            a."studentId" IS NOT NULL
-            AND ${teacherUserId || null} IS NOT NULL
-            AND a."createdByUserId" = ${teacherUserId || null}
-            AND NOT EXISTS (
-              SELECT 1
-              FROM "Attendance" ta
-              WHERE ta."teacherId" = ${teacherId}
-                AND ta."studentId" IS NULL
-                AND ta."courseId" IS NOT DISTINCT FROM a."courseId"
-                AND ta."date" = a."date"
-                AND COALESCE(ta."campMeetingCellId", '') = COALESCE(a."campMeetingCellId", '')
-            )
-          )
+        WHERE a."teacherId" = ${teacherId}
         ORDER BY a."date" DESC, a."createdAt" DESC
       `
       return rows.map((r: any) => ({ ...r, createdByUserName: null }))
@@ -320,6 +317,10 @@ export const GET = withTenantAuth(async (req, _session) => {
       await ensureAttendanceHourKindColumn(db)
     }
     let result = (await runQuery(db, true)) as Record<string, unknown>[]
+    if (teacherId && Array.isArray(result) && result.length === 0) {
+      await backfillCampTeacherRowsIfMissing(db, teacherId)
+      result = (await runQuery(db, true)) as Record<string, unknown>[]
+    }
     if (teacherId && Array.isArray(result)) {
       result = await enrichTeacherAttendanceRowsWithRates(db, teacherId, result)
     }
@@ -329,6 +330,10 @@ export const GET = withTenantAuth(async (req, _session) => {
       try {
         if (teacherId) await ensureAttendanceHourKindColumn(db)
         let result = (await runQuery(db, false)) as Record<string, unknown>[]
+        if (teacherId && Array.isArray(result) && result.length === 0) {
+          await backfillCampTeacherRowsIfMissing(db, teacherId)
+          result = (await runQuery(db, false)) as Record<string, unknown>[]
+        }
         if (teacherId && Array.isArray(result)) {
           result = await enrichTeacherAttendanceRowsWithRates(db, teacherId, result)
         }
