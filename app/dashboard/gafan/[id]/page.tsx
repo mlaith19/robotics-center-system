@@ -10,6 +10,23 @@ import useSWR from "swr"
 import { useEffect } from "react"
 import { fetcher as apiFetcher } from "@/lib/swr-fetcher"
 
+function parseHourRowsForTotal(raw: unknown): number {
+  let input: unknown = raw
+  if (typeof input === "string") {
+    try {
+      input = JSON.parse(input)
+    } catch {
+      input = []
+    }
+  }
+  if (!Array.isArray(input)) return 0
+  return input.reduce((sum, row) => {
+    const r = (row ?? {}) as Record<string, unknown>
+    const hours = Number(r.totalHours ?? 0)
+    return sum + (Number.isFinite(hours) && hours > 0 ? hours : 0)
+  }, 0)
+}
+
 export default function GafanProgramViewPage() {
   const params = useParams()
   const router = useRouter()
@@ -55,6 +72,31 @@ export default function GafanProgramViewPage() {
       </div>
     )
   }
+
+  const programLinks = Array.isArray(program.links) ? program.links : []
+  const schoolsRows = programLinks.map((link: any, idx: number) => {
+    const totalHours = parseHourRowsForTotal(link?.hourRows)
+    const paid = 0
+    const debt = 0
+    const balance = 0
+    return {
+      id: String(link?.linkId || `${idx}`),
+      schoolName: String(link?.schoolName || "—"),
+      totalHours: Math.round(totalHours * 100) / 100,
+      paid,
+      debt,
+      balance,
+    }
+  })
+  const schoolsSummary = schoolsRows.reduce(
+    (acc, row) => ({
+      totalHours: acc.totalHours + Number(row.totalHours || 0),
+      paid: acc.paid + Number(row.paid || 0),
+      debt: acc.debt + Number(row.debt || 0),
+      balance: acc.balance + Number(row.balance || 0),
+    }),
+    { totalHours: 0, paid: 0, debt: 0, balance: 0 },
+  )
 
   return (
     <div dir="rtl" className="min-h-screen">
@@ -115,6 +157,12 @@ export default function GafanProgramViewPage() {
                     className="rounded-none px-3 py-3 text-xs data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent sm:px-6 sm:py-4 sm:text-sm"
                   >
                     פעילות
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="schools"
+                    className="rounded-none px-3 py-3 text-xs data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent sm:px-6 sm:py-4 sm:text-sm"
+                  >
+                    בתי ספר
                   </TabsTrigger>
                 </TabsList>
               </div>
@@ -291,6 +339,81 @@ export default function GafanProgramViewPage() {
                   <h3 className="text-lg font-semibold mb-2">פעילות התוכנית</h3>
                   <p className="text-muted-foreground">סטטיסטיקות ומעקב אחר פעילות התוכנית</p>
                 </div>
+              </TabsContent>
+
+              <TabsContent value="schools" className="space-y-4 p-3 sm:p-6">
+                <Card>
+                  <CardHeader className="border-b">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10">
+                        <Building2 className="h-5 w-5 text-blue-600" />
+                      </div>
+                      <h3 className="text-lg font-semibold">בתי ספר משויכים לתוכנית</h3>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4 p-4 sm:p-6">
+                    {schoolsRows.length === 0 ? (
+                      <div className="rounded-lg border bg-muted/20 p-6 text-center text-muted-foreground">
+                        אין בתי ספר משויכים לתוכנית זו
+                      </div>
+                    ) : (
+                      <>
+                        <div className="overflow-x-auto rounded-lg border">
+                          <table className="w-full min-w-[720px] text-sm">
+                            <thead className="bg-muted/40">
+                              <tr>
+                                <th className="border px-3 py-2 text-right font-medium">בית ספר</th>
+                                <th className="border px-3 py-2 text-center font-medium">כמות שעות</th>
+                                <th className="border px-3 py-2 text-center font-medium">שולם</th>
+                                <th className="border px-3 py-2 text-center font-medium">חייבים</th>
+                                <th className="border px-3 py-2 text-center font-medium">יתרה</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {schoolsRows.map((row) => (
+                                <tr key={row.id} className="hover:bg-muted/20">
+                                  <td className="border px-3 py-2">{row.schoolName}</td>
+                                  <td className="border px-3 py-2 text-center tabular-nums">
+                                    {row.totalHours.toLocaleString("he-IL")}
+                                  </td>
+                                  <td className="border px-3 py-2 text-center tabular-nums">
+                                    ₪{row.paid.toLocaleString("he-IL")}
+                                  </td>
+                                  <td className="border px-3 py-2 text-center tabular-nums">
+                                    ₪{row.debt.toLocaleString("he-IL")}
+                                  </td>
+                                  <td className="border px-3 py-2 text-center tabular-nums">
+                                    ₪{row.balance.toLocaleString("he-IL")}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot>
+                              <tr className="bg-muted/30 font-semibold">
+                                <td className="border px-3 py-2">סה״כ</td>
+                                <td className="border px-3 py-2 text-center tabular-nums">
+                                  {Math.round(schoolsSummary.totalHours * 100) / 100}
+                                </td>
+                                <td className="border px-3 py-2 text-center tabular-nums">
+                                  ₪{Math.round(schoolsSummary.paid * 100) / 100}
+                                </td>
+                                <td className="border px-3 py-2 text-center tabular-nums">
+                                  ₪{Math.round(schoolsSummary.debt * 100) / 100}
+                                </td>
+                                <td className="border px-3 py-2 text-center tabular-nums">
+                                  ₪{Math.round(schoolsSummary.balance * 100) / 100}
+                                </td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          חישוב שדות כספיים (שולם/חייבים/יתרה) יוצמד לנוסחה שתוגדר בהמשך.
+                        </p>
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
               </TabsContent>
             </Tabs>
           </CardContent>
