@@ -74,20 +74,22 @@ export default function GafanProgramViewPage() {
   }
 
   const programLinks = Array.isArray(program.links) ? program.links : []
-  const schoolsRows = programLinks.map((link: any, idx: number) => {
-    const totalHours = parseHourRowsForTotal(link?.hourRows)
-    const paid = 0
-    const debt = 0
-    const balance = 0
-    return {
-      id: String(link?.linkId || `${idx}`),
-      schoolName: String(link?.schoolName || "—"),
-      totalHours: Math.round(totalHours * 100) / 100,
-      paid,
-      debt,
-      balance,
-    }
-  })
+  const schoolsRows = programLinks
+    .map((link: any, idx: number) => {
+      const totalHours = parseHourRowsForTotal(link?.hourRows)
+      const paid = 0
+      const debt = 0
+      const balance = 0
+      return {
+        id: String(link?.linkId || `${idx}`),
+        schoolName: String(link?.schoolName || "—"),
+        totalHours: Math.round(totalHours * 100) / 100,
+        paid,
+        debt,
+        balance,
+      }
+    })
+    .sort((a, b) => Number(b.totalHours || 0) - Number(a.totalHours || 0))
   const schoolsSummary = schoolsRows.reduce(
     (acc, row) => ({
       totalHours: acc.totalHours + Number(row.totalHours || 0),

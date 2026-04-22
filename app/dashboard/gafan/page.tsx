@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import Link from "next/link"
@@ -34,7 +34,18 @@ interface GafanProgram {
 
 export default function GafanProgramsPage() {
   const { data: rawPrograms, error, isLoading } = useSWR<GafanProgram[]>("/api/gafan", arrayFetcher)
-  const programs = Array.isArray(rawPrograms) ? rawPrograms : []
+  const programs = useMemo(() => {
+    const list = Array.isArray(rawPrograms) ? rawPrograms : []
+    const byId = new Map<string, GafanProgram>()
+    for (const p of list) {
+      const pid = String(p?.id || "").trim()
+      if (!pid) continue
+      if (!byId.has(pid)) {
+        byId.set(pid, p)
+      }
+    }
+    return Array.from(byId.values())
+  }, [rawPrograms])
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
   const [canDelete, setCanDelete] = useState(false)
   useEffect(() => {
