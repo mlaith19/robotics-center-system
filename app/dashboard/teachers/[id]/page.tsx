@@ -755,25 +755,26 @@ export default function TeacherViewPage() {
     return Math.max(0, owedToTeacher - expensesSum)
   }, [owedToTeacher, expensesSum])
   // Calculate hours based on course start/end time for each "present" attendance
+  // across regular courses + school Gafan rows.
   const totalHours = useMemo(() => {
-    return attendance.reduce((sum, a: any) => {
+    return combinedAttendance.reduce((sum, a: any) => {
       const status = a.status?.toLowerCase()
       const isPresent = status === "נוכח" || status === "present"
       if (!isPresent) return sum
       
       return sum + calcAttendanceHours(a)
     }, 0)
-  }, [attendance])
+  }, [combinedAttendance])
   
   // Count present attendance (support both Hebrew and English status)
   const presentCount = useMemo(() => {
-    return attendance.filter((a) => {
+    return combinedAttendance.filter((a) => {
       const status = a.status?.toLowerCase()
       return status === "נוכח" || status === "present"
     }).length
-  }, [attendance])
+  }, [combinedAttendance])
   
-  const totalCount = useMemo(() => attendance.length, [attendance])
+  const totalCount = useMemo(() => combinedAttendance.length, [combinedAttendance])
   const attendancePct = useMemo(() => (totalCount ? Math.round((presentCount / totalCount) * 100) : 0), [
     presentCount,
     totalCount,
