@@ -240,6 +240,7 @@ export default function TeacherViewPage() {
   
   // Period filter for payments tab (default: current month)
   const [paymentsPeriod, setPaymentsPeriod] = useState<"month" | "3months" | "6months" | "year">("month")
+  const [selectedPaymentsMonth, setSelectedPaymentsMonth] = useState<string>("all")
 
   // Payment dialog state
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false)
@@ -728,24 +729,60 @@ export default function TeacherViewPage() {
     
     return { startDate, endDate: now }
   }
+
+  const paymentsMonthOptions = useMemo(() => {
+    const monthMap = new Map<string, string>()
+    for (const a of attendance) {
+      const ymd = String(a?.date || "").trim().slice(0, 10)
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) continue
+      const monthKey = ymd.slice(0, 7)
+      if (!monthMap.has(monthKey)) {
+        const dt = new Date(`${ymd}T12:00:00`)
+        const label = Number.isNaN(dt.getTime())
+          ? monthKey
+          : new Intl.DateTimeFormat("he-IL", { month: "long", year: "numeric" }).format(dt)
+        monthMap.set(monthKey, label)
+      }
+    }
+    return Array.from(monthMap.entries())
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([key, label]) => ({ key, label }))
+  }, [attendance])
+
+  useEffect(() => {
+    if (paymentsMonthOptions.length === 0) {
+      setSelectedPaymentsMonth("all")
+      return
+    }
+    if (selectedPaymentsMonth === "all") return
+    if (!paymentsMonthOptions.some((m) => m.key === selectedPaymentsMonth)) {
+      setSelectedPaymentsMonth("all")
+    }
+  }, [paymentsMonthOptions, selectedPaymentsMonth])
   
   // Filter expenses by period
   const filteredExpenses = useMemo(() => {
     const { startDate } = getDateRange(paymentsPeriod)
     return teacherExpenses.filter((e: any) => {
       const expenseDate = new Date(e.date || e.createdAt)
-      return expenseDate >= startDate
+      if (!(expenseDate >= startDate)) return false
+      if (selectedPaymentsMonth === "all") return true
+      const ymd = Number.isNaN(expenseDate.getTime()) ? "" : expenseDate.toISOString().slice(0, 10)
+      return ymd.slice(0, 7) === selectedPaymentsMonth
     })
-  }, [teacherExpenses, paymentsPeriod])
+  }, [teacherExpenses, paymentsPeriod, selectedPaymentsMonth])
   
   // Filter attendance by period for payments calculation
   const filteredAttendanceForPayments = useMemo(() => {
     const { startDate } = getDateRange(paymentsPeriod)
     return attendance.filter((a: any) => {
       const attendanceDate = new Date(a.date)
-      return attendanceDate >= startDate
+      if (!(attendanceDate >= startDate)) return false
+      if (selectedPaymentsMonth === "all") return true
+      const ymd = String(a?.date || "").trim().slice(0, 10)
+      return ymd.slice(0, 7) === selectedPaymentsMonth
     })
-  }, [attendance, paymentsPeriod])
+  }, [attendance, paymentsPeriod, selectedPaymentsMonth])
   
   // Calculate total expenses (הוצאות) - filtered by period
   const expensesSum = useMemo(
@@ -1137,6 +1174,22 @@ export default function TeacherViewPage() {
               >
                 שנה
               </Button>
+              <div className="flex items-center gap-2 ms-2">
+                <span className="text-sm text-muted-foreground">חודש נוכחות:</span>
+                <Select value={selectedPaymentsMonth} onValueChange={setSelectedPaymentsMonth}>
+                  <SelectTrigger className="w-full sm:w-56">
+                    <SelectValue placeholder="כל החודשים" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">כל החודשים</SelectItem>
+                    {paymentsMonthOptions.map((m) => (
+                      <SelectItem key={m.key} value={m.key}>
+                        {m.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
