@@ -400,26 +400,40 @@ export default function TeacherViewPage() {
       .catch(() => setSchoolGafanPrograms([]))
   }, [])
 
+  const fetchTeacherAttendance = useCallback(() => {
+    if (!id || id === "create" || loading || !teacher) return
+    fetch(`/api/attendance?teacherId=${id}`, { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setTeacherAttendance(Array.isArray(data) ? data : []))
+      .catch(() => {})
+  }, [id, loading, teacher])
+
   // Fetch expenses and attendance separately (after main data loads)
   useEffect(() => {
     if (!id || id === "create" || loading || !teacher) return
-    
-    // Fetch expenses
-    fetch(`/api/expenses?teacherId=${id}`, { cache: "no-store" })
-      .then(res => res.ok ? res.json() : [])
-      .then(data => setTeacherExpenses(Array.isArray(data) ? data : []))
-      .catch(() => {})
-    
-    // Fetch attendance with delay
-    setTimeout(() => {
-      fetch(`/api/attendance?teacherId=${id}`, { cache: "no-store" })
-        .then(res => res.ok ? res.json() : [])
-        .then(data => setTeacherAttendance(Array.isArray(data) ? data : []))
-        .catch(() => {})
-    }, 500)
 
+    fetch(`/api/expenses?teacherId=${id}`, { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setTeacherExpenses(Array.isArray(data) ? data : []))
+      .catch(() => {})
+
+    const t = window.setTimeout(() => fetchTeacherAttendance(), 500)
     refreshSchoolGafanPrograms()
-  }, [id, loading, teacher, refreshSchoolGafanPrograms])
+    return () => window.clearTimeout(t)
+  }, [id, loading, teacher, refreshSchoolGafanPrograms, fetchTeacherAttendance])
+
+  // רענון כשחוזרים ללשונית/חלון (למשל אחרי מחיקת נוכחות מורה בדף קורס)
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") fetchTeacherAttendance()
+    }
+    document.addEventListener("visibilitychange", refresh)
+    window.addEventListener("focus", refresh)
+    return () => {
+      document.removeEventListener("visibilitychange", refresh)
+      window.removeEventListener("focus", refresh)
+    }
+  }, [fetchTeacherAttendance])
 
   // Auto-refresh school Gafan assignments/rates so attendance prices stay up-to-date.
   useEffect(() => {

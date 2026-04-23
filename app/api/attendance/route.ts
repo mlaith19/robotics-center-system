@@ -187,15 +187,78 @@ export const GET = withTenantAuth(async (req, _session) => {
       if (withUserJoin) {
         return dbClient.unsafe(
           `
+          SELECT * FROM (
+            (
+              SELECT DISTINCT ON (COALESCE(a."courseId", ''), (a."date"::date), COALESCE(a."campMeetingCellId", ''))
+                a.*, c.name as "courseName", c.duration as "courseDuration",
+                to_char(c."startTime"::time, 'HH24:MI') as "courseStartTime",
+                to_char(c."endTime"::time, 'HH24:MI') as "courseEndTime",
+                c.location as "courseLocation",
+                u.name as "createdByUserName"
+              FROM "Attendance" a
+              LEFT JOIN "Course" c ON a."courseId" = c.id
+              LEFT JOIN "User" u ON a."createdByUserId" = u.id
+              WHERE a."teacherId" = $1
+                AND (
+                  a."courseId" IS NULL
+                  OR ${campExpr}
+                  OR EXISTS (
+                    SELECT 1
+                    FROM "Attendance" s
+                    WHERE s."courseId" = a."courseId"
+                      AND (s."date"::date) = (a."date"::date)
+                      AND s."studentId" IS NOT NULL
+                      AND (LOWER(BTRIM(COALESCE(s.status, ''))) = 'present' OR BTRIM(COALESCE(s.status, '')) = 'נוכח')
+                  )
+                )
+              ORDER BY COALESCE(a."courseId", ''), (a."date"::date), COALESCE(a."campMeetingCellId", ''), a."createdAt" DESC
+            )
+            UNION ALL
+            (
+              SELECT DISTINCT ON (COALESCE(a."courseId", ''), (a."date"::date), COALESCE(a."campMeetingCellId", ''))
+                a.*,
+                c.name as "courseName",
+                c.duration as "courseDuration",
+                to_char(c."startTime"::time, 'HH24:MI') as "courseStartTime",
+                to_char(c."endTime"::time, 'HH24:MI') as "courseEndTime",
+                c.location as "courseLocation",
+                u.name as "createdByUserName"
+              FROM "Attendance" a
+              LEFT JOIN "Course" c ON a."courseId" = c.id
+              LEFT JOIN "User" u ON a."createdByUserId" = u.id
+              WHERE a."studentId" IS NOT NULL
+                AND $2::text IS NOT NULL
+                AND a."createdByUserId" = $2
+                AND NOT ${campExpr}
+                AND ${presentExpr}
+                AND NOT EXISTS (
+                  SELECT 1
+                  FROM "Attendance" t
+                  WHERE t."teacherId" = $1
+                    AND t."studentId" IS NULL
+                    AND t."courseId" IS NOT DISTINCT FROM a."courseId"
+                    AND (t."date"::date) = (a."date"::date)
+                    AND COALESCE(t."campMeetingCellId", '') = ''
+                )
+              ORDER BY COALESCE(a."courseId", ''), (a."date"::date), COALESCE(a."campMeetingCellId", ''), a."createdAt" DESC
+            )
+          ) merged
+          ORDER BY merged."date" DESC, merged."createdAt" DESC
+          `,
+          [teacherId, teacherUserId || null],
+        )
+      }
+      const rows = await dbClient.unsafe(
+        `
+        SELECT * FROM (
           (
-            SELECT a.*, c.name as "courseName", c.duration as "courseDuration",
+            SELECT DISTINCT ON (COALESCE(a."courseId", ''), (a."date"::date), COALESCE(a."campMeetingCellId", ''))
+              a.*, c.name as "courseName", c.duration as "courseDuration",
               to_char(c."startTime"::time, 'HH24:MI') as "courseStartTime",
               to_char(c."endTime"::time, 'HH24:MI') as "courseEndTime",
-              c.location as "courseLocation",
-              u.name as "createdByUserName"
+              c.location as "courseLocation"
             FROM "Attendance" a
             LEFT JOIN "Course" c ON a."courseId" = c.id
-            LEFT JOIN "User" u ON a."createdByUserId" = u.id
             WHERE a."teacherId" = $1
               AND (
                 a."courseId" IS NULL
@@ -209,20 +272,19 @@ export const GET = withTenantAuth(async (req, _session) => {
                     AND (LOWER(BTRIM(COALESCE(s.status, ''))) = 'present' OR BTRIM(COALESCE(s.status, '')) = 'נוכח')
                 )
               )
+            ORDER BY COALESCE(a."courseId", ''), (a."date"::date), COALESCE(a."campMeetingCellId", ''), a."createdAt" DESC
           )
           UNION ALL
           (
-            SELECT
+            SELECT DISTINCT ON (COALESCE(a."courseId", ''), (a."date"::date), COALESCE(a."campMeetingCellId", ''))
               a.*,
               c.name as "courseName",
               c.duration as "courseDuration",
               to_char(c."startTime"::time, 'HH24:MI') as "courseStartTime",
               to_char(c."endTime"::time, 'HH24:MI') as "courseEndTime",
-              c.location as "courseLocation",
-              u.name as "createdByUserName"
+              c.location as "courseLocation"
             FROM "Attendance" a
             LEFT JOIN "Course" c ON a."courseId" = c.id
-            LEFT JOIN "User" u ON a."createdByUserId" = u.id
             WHERE a."studentId" IS NOT NULL
               AND $2::text IS NOT NULL
               AND a."createdByUserId" = $2
@@ -237,62 +299,10 @@ export const GET = withTenantAuth(async (req, _session) => {
                   AND (t."date"::date) = (a."date"::date)
                   AND COALESCE(t."campMeetingCellId", '') = ''
               )
+            ORDER BY COALESCE(a."courseId", ''), (a."date"::date), COALESCE(a."campMeetingCellId", ''), a."createdAt" DESC
           )
-          ORDER BY "date" DESC, "createdAt" DESC
-          `,
-          [teacherId, teacherUserId || null],
-        )
-      }
-      const rows = await dbClient.unsafe(
-        `
-        (
-          SELECT a.*, c.name as "courseName", c.duration as "courseDuration",
-            to_char(c."startTime"::time, 'HH24:MI') as "courseStartTime",
-            to_char(c."endTime"::time, 'HH24:MI') as "courseEndTime",
-            c.location as "courseLocation"
-          FROM "Attendance" a
-          LEFT JOIN "Course" c ON a."courseId" = c.id
-          WHERE a."teacherId" = $1
-            AND (
-              a."courseId" IS NULL
-              OR ${campExpr}
-              OR EXISTS (
-                SELECT 1
-                FROM "Attendance" s
-                WHERE s."courseId" = a."courseId"
-                  AND (s."date"::date) = (a."date"::date)
-                  AND s."studentId" IS NOT NULL
-                  AND (LOWER(BTRIM(COALESCE(s.status, ''))) = 'present' OR BTRIM(COALESCE(s.status, '')) = 'נוכח')
-              )
-            )
-        )
-        UNION ALL
-        (
-          SELECT
-            a.*,
-            c.name as "courseName",
-            c.duration as "courseDuration",
-            to_char(c."startTime"::time, 'HH24:MI') as "courseStartTime",
-            to_char(c."endTime"::time, 'HH24:MI') as "courseEndTime",
-            c.location as "courseLocation"
-          FROM "Attendance" a
-          LEFT JOIN "Course" c ON a."courseId" = c.id
-          WHERE a."studentId" IS NOT NULL
-            AND $2::text IS NOT NULL
-            AND a."createdByUserId" = $2
-            AND NOT ${campExpr}
-            AND ${presentExpr}
-            AND NOT EXISTS (
-              SELECT 1
-              FROM "Attendance" t
-              WHERE t."teacherId" = $1
-                AND t."studentId" IS NULL
-                AND t."courseId" IS NOT DISTINCT FROM a."courseId"
-                AND (t."date"::date) = (a."date"::date)
-                AND COALESCE(t."campMeetingCellId", '') = ''
-            )
-        )
-        ORDER BY "date" DESC, "createdAt" DESC
+        ) merged
+        ORDER BY merged."date" DESC, merged."createdAt" DESC
         `,
         [teacherId, teacherUserId || null],
       )
