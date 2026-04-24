@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
 import { PERMISSION_CATEGORIES, ROLE_PRESETS, getRoleById, type RoleType } from "@/lib/permissions"
 
 type UserPayload = {
@@ -41,6 +42,13 @@ export default function UserPermissionsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [user, setUser] = useState<UserPayload | null>(null)
+  const [formData, setFormData] = useState({
+    name: "",
+    username: "",
+    email: "",
+    phone: "",
+    password: "",
+  })
   const [selectedRole, setSelectedRole] = useState<RoleType>("other")
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState<string>("")
@@ -56,6 +64,13 @@ export default function UserPermissionsPage() {
         const data = (await res.json()) as UserPayload
         if (cancelled) return
         setUser(data)
+        setFormData({
+          name: String(data.name || ""),
+          username: String(data.username || ""),
+          email: String(data.email || ""),
+          phone: String(data.phone || ""),
+          password: "",
+        })
         const role = ((data.role as RoleType) || "other") as RoleType
         setSelectedRole(role)
         setSelectedPermissions(Array.isArray(data.permissions) ? data.permissions : [])
@@ -110,15 +125,31 @@ export default function UserPermissionsPage() {
 
   async function savePermissions() {
     if (!user) return
+    if (!formData.name.trim() || !formData.username.trim()) {
+      alert("יש למלא שם ושם משתמש")
+      return
+    }
+    if (formData.password.trim().length > 0 && formData.password.trim().length < 4) {
+      alert("סיסמה חדשה חייבת להיות לפחות 4 תווים")
+      return
+    }
     try {
       setSaving(true)
+      const payload: Record<string, unknown> = {
+        name: formData.name.trim(),
+        username: formData.username.trim(),
+        email: formData.email.trim() || null,
+        phone: formData.phone.trim() || null,
+        role: selectedRole,
+        permissions: selectedPermissions,
+      }
+      if (formData.password.trim().length >= 4) {
+        payload.password = formData.password.trim()
+      }
       const res = await fetch(`/api/users/${user.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          role: selectedRole,
-          permissions: selectedPermissions,
-        }),
+        body: JSON.stringify(payload),
       })
       if (!res.ok) throw new Error("save_failed")
       alert("ההרשאות נשמרו בהצלחה")
@@ -162,13 +193,55 @@ export default function UserPermissionsPage() {
       <Card className="border-indigo-200 bg-indigo-50/40">
         <CardHeader>
           <CardTitle className="text-lg">פרטי משתמש</CardTitle>
-          <CardDescription>הפרטים מוצגים בראש הדף כמו שביקשת</CardDescription>
+          <CardDescription>פרטי המשתמש מסודרים עם אפשרות עריכה כולל סיסמה</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div><Label>שם</Label><div className="font-medium">{user.name || "—"}</div></div>
-          <div><Label>שם משתמש</Label><div className="font-medium" dir="ltr">{user.username || "—"}</div></div>
-          <div><Label>אימייל</Label><div className="font-medium">{user.email || "—"}</div></div>
-          <div><Label>טלפון</Label><div className="font-medium" dir="ltr">{user.phone || "—"}</div></div>
+        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="space-y-1.5">
+            <Label>שם</Label>
+            <Input
+              value={formData.name}
+              onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
+              placeholder="שם מלא"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>שם משתמש</Label>
+            <Input
+              dir="ltr"
+              value={formData.username}
+              onChange={(e) => setFormData((p) => ({ ...p, username: e.target.value }))}
+              placeholder="username"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>אימייל</Label>
+            <Input
+              dir="ltr"
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData((p) => ({ ...p, email: e.target.value }))}
+              placeholder="name@example.com"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>טלפון</Label>
+            <Input
+              dir="ltr"
+              value={formData.phone}
+              onChange={(e) => setFormData((p) => ({ ...p, phone: e.target.value }))}
+              placeholder="0500000000"
+            />
+          </div>
+          <div className="space-y-1.5 sm:col-span-2 lg:col-span-2">
+            <Label>סיסמה חדשה</Label>
+            <Input
+              dir="ltr"
+              type="password"
+              value={formData.password}
+              onChange={(e) => setFormData((p) => ({ ...p, password: e.target.value }))}
+              placeholder="השאר ריק אם לא רוצים לשנות"
+            />
+          </div>
         </CardContent>
       </Card>
 
