@@ -1494,7 +1494,10 @@ export default function SchoolViewPage() {
       monthKey: string
       monthLabel: string
       hours: number
-      hourlyRate: number
+      teacherHourlyRate: number
+      teacherTravelAmount: number
+      teacherCostAmount: number
+      programHourlyRate: number
       plannedAmount: number
       paidAmount: number
       balance: number
@@ -1508,6 +1511,7 @@ export default function SchoolViewPage() {
         workshopRows
           .map((w) => Number(w.price || 0))
           .find((n) => Number.isFinite(n) && n > 0) || 0
+      const teacherRates = parseGafanTeacherRates(program)
       const assignedTeacherIds = parseGafanTeacherIds(program)
       const rows = parseGafanHourRows(program).filter((r) => !r.pendingAssignment)
       for (const row of rows) {
@@ -1520,6 +1524,9 @@ export default function SchoolViewPage() {
         if (!teacherId && assignedTeacherIds.length === 1) teacherId = assignedTeacherIds[0] || ""
         const teacherName = String(row.teacherName || "").trim() || (teacherId ? (teacherNameById.get(teacherId) || teacherId) : "ללא מורה")
         const rate = Number(programHourlyRate || 0)
+        const teacherRate = teacherRates[teacherId]
+        const teacherHourlyRate = Number(teacherRate?.teachingHourlyRate || 0)
+        const teacherTravelAmount = Number(teacherRate?.travelHourlyRate || 0)
         const key = `${teacherId || teacherName}|${program.id}|${monthKey}`
         const item = bucket.get(key) || {
           key,
@@ -1530,7 +1537,10 @@ export default function SchoolViewPage() {
           monthKey,
           monthLabel,
           hours: 0,
-          hourlyRate: rate,
+          teacherHourlyRate,
+          teacherTravelAmount,
+          teacherCostAmount: 0,
+          programHourlyRate: rate,
           plannedAmount: 0,
           paidAmount: 0,
           balance: 0,
@@ -1538,8 +1548,11 @@ export default function SchoolViewPage() {
         }
         const hrs = Number(row.totalHours || 0)
         item.hours += hrs
-        item.hourlyRate = rate
-        item.plannedAmount = item.hours * item.hourlyRate
+        item.teacherHourlyRate = teacherHourlyRate
+        item.teacherTravelAmount = teacherTravelAmount
+        item.teacherCostAmount = item.hours * item.teacherHourlyRate + item.teacherTravelAmount
+        item.programHourlyRate = rate
+        item.plannedAmount = item.hours * item.programHourlyRate
         bucket.set(key, item)
       }
     }
@@ -1564,11 +1577,13 @@ export default function SchoolViewPage() {
     }
     const out = Array.from(bucket.values()).map((r) => {
       const hours = Math.round(r.hours * 100) / 100
+      const teacherCostAmount = Math.round(r.teacherCostAmount * 100) / 100
       const plannedAmount = Math.round(r.plannedAmount * 100) / 100
       const paidAmount = Math.round(r.paidAmount * 100) / 100
       return {
         ...r,
         hours,
+        teacherCostAmount,
         plannedAmount,
         paidAmount,
         balance: Math.round((plannedAmount - paidAmount) * 100) / 100,
@@ -2913,8 +2928,8 @@ export default function SchoolViewPage() {
                             <TableHead className="text-right">מע"מ זכות</TableHead>
                             <TableHead className="text-right">חובה</TableHead>
                             <TableHead className="text-right">מע"מ חובה</TableHead>
-                            <TableHead className="text-right">יתרת מע"מ</TableHead>
                             <TableHead className="text-right">יתרה</TableHead>
+                            <TableHead className="text-right">יתרת מע"מ</TableHead>
                             <TableHead className="text-right">פעולות</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -2935,15 +2950,15 @@ export default function SchoolViewPage() {
                                 <TableCell className="text-muted-foreground">—</TableCell>
                                 <TableCell
                                   rowSpan={Math.max(1, r.myChecks.length) + 1}
-                                  className={r.vatBalance >= 0 ? "font-semibold text-rose-700" : "font-semibold text-emerald-700"}
-                                >
-                                  ₪{r.vatBalance.toLocaleString()}
-                                </TableCell>
-                                <TableCell
-                                  rowSpan={Math.max(1, r.myChecks.length) + 1}
                                   className={r.balance >= 0 ? "font-semibold text-rose-700" : "font-semibold text-emerald-700"}
                                 >
                                   ₪{r.balance.toLocaleString()}
+                                </TableCell>
+                                <TableCell
+                                  rowSpan={Math.max(1, r.myChecks.length) + 1}
+                                  className={r.vatBalance >= 0 ? "font-semibold text-rose-700" : "font-semibold text-emerald-700"}
+                                >
+                                  ₪{r.vatBalance.toLocaleString()}
                                 </TableCell>
                                 <TableCell>
                                   <div className="flex gap-2">
@@ -3155,7 +3170,7 @@ export default function SchoolViewPage() {
                               <TableHead className="text-right">מורה</TableHead>
                               <TableHead className="text-right">תוכנית</TableHead>
                               <TableHead className="text-right">כמות שעות</TableHead>
-                              <TableHead className="text-right">עלות לשעה</TableHead>
+                              <TableHead className="text-right">עלות שעה (מורה)</TableHead>
                               <TableHead className="text-right">סה"כ לתשלום</TableHead>
                               <TableHead className="text-right">שולם</TableHead>
                               <TableHead className="text-right">יתרה</TableHead>
@@ -3169,7 +3184,7 @@ export default function SchoolViewPage() {
                                 <TableCell className="font-medium">{r.teacherName}</TableCell>
                                 <TableCell>{r.programName}</TableCell>
                                 <TableCell>{r.hours.toLocaleString()}</TableCell>
-                                <TableCell>₪{r.hourlyRate.toLocaleString()}</TableCell>
+                                <TableCell>₪{r.teacherCostAmount.toLocaleString()}</TableCell>
                                 <TableCell>₪{r.plannedAmount.toLocaleString()}</TableCell>
                                 <TableCell className="text-green-700">₪{r.paidAmount.toLocaleString()}</TableCell>
                                 <TableCell className={r.balance >= 0 ? "font-semibold text-rose-700" : "font-semibold text-emerald-700"}>
