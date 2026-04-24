@@ -1312,6 +1312,35 @@ export default function SchoolViewPage() {
     }
   }
 
+  const editPayoutRow = (rowKey: string) => {
+    const row = teacherProgramMonthlyRows.find((r) => r.key === rowKey)
+    if (!row) return
+    setSchoolPayoutTargetKey(row.key)
+    setSchoolPayoutMethod("transfer")
+    setSchoolPayoutDate(new Date().toISOString().slice(0, 10))
+    setSchoolPayoutAmount(String(Math.max(0, Number(row.balance || 0))))
+    setSchoolPayoutNotes(`עדכון תשלום עבור ${row.teacherName} | ${row.programName} | ${row.monthLabel}`)
+  }
+
+  const deletePayoutRowPayments = async (rowKey: string) => {
+    const row = teacherProgramMonthlyRows.find((r) => r.key === rowKey)
+    if (!row || row.payoutPaymentIds.length === 0) return
+    if (!window.confirm(`למחוק ${row.payoutPaymentIds.length} תשלומים משויכים לשורה זו?`)) return
+    try {
+      await Promise.all(
+        row.payoutPaymentIds.map((pid) =>
+          fetch(`/api/payments/${encodeURIComponent(pid)}`, {
+            method: "DELETE",
+            credentials: "include",
+          }),
+        ),
+      )
+      await reloadTabData()
+    } catch {
+      alert("שגיאה במחיקת תשלומים מהשורה")
+    }
+  }
+
   useEffect(() => {
     if (attendanceByTeacher.length === 0) {
       setSelectedAttendanceTeacher("")
@@ -1362,6 +1391,7 @@ export default function SchoolViewPage() {
       plannedAmount: number
       paidAmount: number
       balance: number
+      payoutPaymentIds: string[]
     }
     const bucket = new Map<string, Row>()
     for (const program of gafanPrograms) {
@@ -1397,6 +1427,7 @@ export default function SchoolViewPage() {
           plannedAmount: 0,
           paidAmount: 0,
           balance: 0,
+          payoutPaymentIds: [],
         }
         const hrs = Number(row.totalHours || 0)
         item.hours += hrs
@@ -1407,13 +1438,22 @@ export default function SchoolViewPage() {
     }
     const payoutRows = schoolPayments
       .filter((p) => !p.studentId)
-      .map((p) => ({ amount: Number(p.amount || 0), meta: parseSchoolPayoutDescription(p.description || "") }))
-      .filter((x) => x.meta && String(x.meta.schoolId) === String(school?.id || "")) as Array<{ amount: number; meta: NonNullable<ReturnType<typeof parseSchoolPayoutDescription>> }>
+      .map((p) => ({
+        paymentId: String(p.id || ""),
+        amount: Number(p.amount || 0),
+        meta: parseSchoolPayoutDescription(p.description || ""),
+      }))
+      .filter((x) => x.meta && String(x.meta.schoolId) === String(school?.id || "")) as Array<{
+        paymentId: string
+        amount: number
+        meta: NonNullable<ReturnType<typeof parseSchoolPayoutDescription>>
+      }>
     for (const pay of payoutRows) {
       const k = `${pay.meta.teacherId || pay.meta.teacherName}|${pay.meta.programId}|${pay.meta.monthKey}`
       const item = bucket.get(k)
       if (!item) continue
       item.paidAmount += pay.amount
+      if (pay.paymentId) item.payoutPaymentIds.push(pay.paymentId)
     }
     const out = Array.from(bucket.values()).map((r) => {
       const hours = Math.round(r.hours * 100) / 100
@@ -2731,6 +2771,7 @@ export default function SchoolViewPage() {
                             <TableHead className="text-right">צד שלי</TableHead>
                             <TableHead className="text-right">מצב</TableHead>
                             <TableHead className="text-right">יתרה</TableHead>
+                            <TableHead className="text-right">פעולות שורה</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -2809,6 +2850,31 @@ export default function SchoolViewPage() {
                               </TableCell>
                               <TableCell className={r.balance >= 0 ? "font-semibold text-rose-700" : "font-semibold text-emerald-700"}>
                                 ₪{r.balance.toLocaleString()}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      setCheckOutTargetRowId(r.rowId)
+                                    }}
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      if (!window.confirm("למחוק את כל השיקים בצד שלך עבור שורה זו?")) return
+                                      void Promise.all(r.myChecks.map((c) => deleteSchoolCheckPayment(c.paymentId)))
+                                    }}
+                                  >
+                                    <Trash2 className="h-4 w-4 text-red-600" />
+                                  </Button>
+                                </div>
                               </TableCell>
                             </TableRow>
                           ))}
@@ -2903,6 +2969,7 @@ export default function SchoolViewPage() {
                               <TableHead className="text-right">סה"כ לתשלום</TableHead>
                               <TableHead className="text-right">שולם</TableHead>
                               <TableHead className="text-right">יתרה</TableHead>
+                              <TableHead className="text-right">פעולות</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -2917,6 +2984,29 @@ export default function SchoolViewPage() {
                                 <TableCell className="text-green-700">₪{r.paidAmount.toLocaleString()}</TableCell>
                                 <TableCell className={r.balance >= 0 ? "font-semibold text-rose-700" : "font-semibold text-emerald-700"}>
                                   ₪{r.balance.toLocaleString()}
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex gap-2">
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      title="עריכת תשלום לשורה"
+                                      onClick={() => editPayoutRow(r.key)}
+                                    >
+                                      <Pencil className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      title="מחיקת תשלומים משורה זו"
+                                      onClick={() => void deletePayoutRowPayments(r.key)}
+                                      disabled={r.payoutPaymentIds.length === 0}
+                                    >
+                                      <Trash2 className="h-4 w-4 text-red-600" />
+                                    </Button>
+                                  </div>
                                 </TableCell>
                               </TableRow>
                             ))}
