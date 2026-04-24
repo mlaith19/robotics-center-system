@@ -10,14 +10,29 @@ function canReadPayments(session: { role?: string; roleKey?: string; permissions
     hasPermission(perms, "cashier.view") ||
     hasPermission(perms, "students.financial") ||
     hasPermission(perms, "students.tab.payments") ||
-    hasPermission(perms, "myProfile.tab.payments")
+    hasPermission(perms, "myProfile.tab.payments") ||
+    hasPermission(perms, "schools.tab.payments") ||
+    hasPermission(perms, "schools.tab.payments.view") ||
+    hasPermission(perms, "schools.tab.payments.edit") ||
+    hasPermission(perms, "schools.tab.payments.delete") ||
+    hasPermission(perms, "schools.tab.debtors") ||
+    hasPermission(perms, "schools.tab.debtors.view") ||
+    hasPermission(perms, "schools.tab.debtors.edit") ||
+    hasPermission(perms, "schools.tab.debtors.delete")
   )
 }
 
 function canWritePayments(session: { role?: string; roleKey?: string; permissions?: string[] }) {
   if (hasFullAccessRole(session.roleKey) || hasFullAccessRole(session.role)) return true
   const perms = Array.isArray(session.permissions) ? session.permissions : []
-  return hasPermission(perms, "cashier.income") || hasPermission(perms, "students.financial")
+  return (
+    hasPermission(perms, "cashier.income") ||
+    hasPermission(perms, "students.financial") ||
+    hasPermission(perms, "schools.tab.payments.edit") ||
+    hasPermission(perms, "schools.tab.payments.delete") ||
+    hasPermission(perms, "schools.tab.debtors.edit") ||
+    hasPermission(perms, "schools.tab.debtors.delete")
+  )
 }
 
 type Ctx = { params: Promise<{ id: string }> }
@@ -80,8 +95,17 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
 })
 
 export const DELETE = withTenantAuth(async (req, session, { params }: Ctx) => {
-  const permErr = requirePerm(session, "cashier.delete")
-  if (permErr) return permErr
+  const isPrivileged = hasFullAccessRole(session.roleKey) || hasFullAccessRole(session.role)
+  const perms = Array.isArray(session.permissions) ? session.permissions : []
+  const canDelete =
+    isPrivileged ||
+    hasPermission(perms, "cashier.delete") ||
+    hasPermission(perms, "schools.tab.payments.delete") ||
+    hasPermission(perms, "schools.tab.debtors.delete")
+  if (!canDelete) {
+    const permErr = requirePerm(session, "cashier.delete")
+    if (permErr) return permErr
+  }
 
   const [tenant, tenantErr] = await requireTenant(req)
   if (tenantErr) return tenantErr

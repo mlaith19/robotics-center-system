@@ -124,8 +124,14 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       { id: "schools.tab.attendance", name: "טאב נוכחות (בית ספר)", description: "הצגת טאב נוכחות בדף פרטי בית ספר" },
       { id: "schools.tab.ngafan", name: "טאב נ.גפ\"ן (בית ספר)", description: "הצגת טאב נ.גפ\"ן בדף פרטי בית ספר (טבלאות שעות לפי תוכנית)" },
       { id: "schools.tab.attendance.transfer", name: "העברת שעות בין תוכניות (בית ספר)", description: "בטאב נוכחות בית ספר: העברת שורת שעות מתוכנית גפ\"ן אחת לאחרת" },
-      { id: "schools.tab.debtors", name: "טאב שיקים (בית ספר)", description: "הצגת טאב שיקים בדף פרטי בית ספר" },
-      { id: "schools.tab.payments", name: "טאב תשלומים (בית ספר)", description: "הצגת טאב תשלומים בדף פרטי בית ספר" },
+      { id: "schools.tab.debtors", name: "טאב שיקים (בית ספר) — צפייה", description: "הצגת טאב שיקים בדף פרטי בית ספר" },
+      { id: "schools.tab.debtors.view", name: "שיקים (בית ספר) — צפייה", description: "צפייה בתוכן טאב שיקים בדף פרטי בית ספר" },
+      { id: "schools.tab.debtors.edit", name: "שיקים (בית ספר) — עריכה", description: "הוספה ועריכת שיקים בטאב שיקים בדף פרטי בית ספר" },
+      { id: "schools.tab.debtors.delete", name: "שיקים (בית ספר) — מחיקה", description: "מחיקת שיקים בטאב שיקים בדף פרטי בית ספר" },
+      { id: "schools.tab.payments", name: "טאב תשלומים (בית ספר) — צפייה", description: "הצגת טאב תשלומים בדף פרטי בית ספר" },
+      { id: "schools.tab.payments.view", name: "תשלומים (בית ספר) — צפייה", description: "צפייה בתוכן טאב תשלומים בדף פרטי בית ספר" },
+      { id: "schools.tab.payments.edit", name: "תשלומים (בית ספר) — עריכה", description: "הוספה ועריכת תשלומים בטאב תשלומים בדף פרטי בית ספר" },
+      { id: "schools.tab.payments.delete", name: "תשלומים (בית ספר) — מחיקה", description: "מחיקת תשלומים בטאב תשלומים בדף פרטי בית ספר" },
     ],
   },
   {
@@ -279,7 +285,13 @@ export function getAllSchoolTabPermissionIds(): string[] {
     "schools.tab.attendance",
     "schools.tab.attendance.transfer",
     "schools.tab.debtors",
+    "schools.tab.debtors.view",
+    "schools.tab.debtors.edit",
+    "schools.tab.debtors.delete",
     "schools.tab.payments",
+    "schools.tab.payments.view",
+    "schools.tab.payments.edit",
+    "schools.tab.payments.delete",
   ]
 }
 

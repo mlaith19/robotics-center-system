@@ -471,6 +471,8 @@ export default function SchoolViewPage() {
   const [checkOutPayee, setCheckOutPayee] = useState("")
   const [checkOutAmount, setCheckOutAmount] = useState("")
   const [checkOutSaving, setCheckOutSaving] = useState(false)
+  const [isCheckModalOpen, setIsCheckModalOpen] = useState(false)
+  const [checkModalType, setCheckModalType] = useState<"credit" | "debit">("credit")
   const currentUser = useCurrentUser()
   const { data: currentUserTypeData } = useUserType(currentUser?.id, currentUser?.roleKey ?? currentUser?.role)
   const currentTeacherId = currentUserTypeData?.teacherId ? String(currentUserTypeData.teacherId) : ""
@@ -499,8 +501,25 @@ export default function SchoolViewPage() {
   const canViewNgafanTab =
     !isTeacherRole && (isFullAccess || hasPermission(userPerms, "schools.tab.ngafan"))
   const canViewAttendanceTab = isFullAccess || hasPermission(userPerms, "schools.tab.attendance")
-  const canViewDebtorsTab = isFullAccess || hasPermission(userPerms, "schools.tab.debtors")
-  const canViewPaymentsTab = isFullAccess || hasPermission(userPerms, "schools.tab.payments")
+  const canViewDebtorsTab =
+    isFullAccess ||
+    hasPermission(userPerms, "schools.tab.debtors") ||
+    hasPermission(userPerms, "schools.tab.debtors.view") ||
+    hasPermission(userPerms, "schools.tab.debtors.edit") ||
+    hasPermission(userPerms, "schools.tab.debtors.delete")
+  const canEditDebtorsTab =
+    isFullAccess || hasPermission(userPerms, "schools.tab.debtors.edit") || hasPermission(userPerms, "schools.tab.debtors.delete")
+  const canDeleteDebtorsTab = isFullAccess || hasPermission(userPerms, "schools.tab.debtors.delete")
+
+  const canViewPaymentsTab =
+    isFullAccess ||
+    hasPermission(userPerms, "schools.tab.payments") ||
+    hasPermission(userPerms, "schools.tab.payments.view") ||
+    hasPermission(userPerms, "schools.tab.payments.edit") ||
+    hasPermission(userPerms, "schools.tab.payments.delete")
+  const canEditPaymentsTab =
+    isFullAccess || hasPermission(userPerms, "schools.tab.payments.edit") || hasPermission(userPerms, "schools.tab.payments.delete")
+  const canDeletePaymentsTab = isFullAccess || hasPermission(userPerms, "schools.tab.payments.delete")
   const canEditSchool = isFullAccess || hasPermission(userPerms, "schools.edit")
   const defaultTab = canViewGeneralTab
     ? "general"
@@ -1101,6 +1120,7 @@ export default function SchoolViewPage() {
   }
 
   const createSchoolPayout = async () => {
+    if (!canEditPaymentsTab) return
     if (!school?.id || !schoolPayoutTargetKey || !schoolPayoutDate) return
     const target = teacherProgramMonthlyRows.find((r) => r.key === schoolPayoutTargetKey)
     if (!target) return
@@ -1145,15 +1165,16 @@ export default function SchoolViewPage() {
   }
 
   const createSchoolCheckIn = async () => {
-    if (!school?.id || !checkInDueDate) return
+    if (!canEditDebtorsTab) return false
+    if (!school?.id || !checkInDueDate) return false
     const amount = parseAmountValue(checkInAmount)
     if (!Number.isFinite(amount) || amount <= 0) {
       alert("יש להזין סכום שיק תקין")
-      return
+      return false
     }
     if (!checkInNumber.trim()) {
       alert("יש להזין מספר שיק מצד בית הספר")
-      return
+      return false
     }
     const rowId = crypto.randomUUID()
     const description = buildSchoolCheckInDescription({
@@ -1183,27 +1204,30 @@ export default function SchoolViewPage() {
       setCheckInProgramName("")
       setCheckInAmount("")
       await reloadTabData()
+      return true
     } catch {
       alert("שגיאה בשמירת שיק בית ספר")
+      return false
     } finally {
       setCheckInSaving(false)
     }
   }
 
   const createSchoolCheckOut = async () => {
-    if (!school?.id || !checkOutTargetRowId) return
+    if (!canEditDebtorsTab) return false
+    if (!school?.id || !checkOutTargetRowId) return false
     const amount = parseAmountValue(checkOutAmount)
     if (!Number.isFinite(amount) || amount <= 0) {
       alert("יש להזין סכום שיק בצד שלך")
-      return
+      return false
     }
     if (!checkOutNumber.trim()) {
       alert("יש להזין מספר שיק בצד שלך")
-      return
+      return false
     }
     if (!checkOutPayee.trim()) {
       alert("יש להזין למי מיועד השיק")
-      return
+      return false
     }
     const description = buildSchoolCheckOutDescription({
       schoolId: school.id,
@@ -1232,14 +1256,24 @@ export default function SchoolViewPage() {
       setCheckOutPayee("")
       setCheckOutAmount("")
       await reloadTabData()
+      return true
     } catch {
       alert("שגיאה בשמירת שיק בצד שלך")
+      return false
     } finally {
       setCheckOutSaving(false)
     }
   }
 
+  const submitCheckFromModal = async () => {
+    const ok = checkModalType === "credit"
+      ? await createSchoolCheckIn()
+      : await createSchoolCheckOut()
+    if (ok) setIsCheckModalOpen(false)
+  }
+
   const updateSchoolCheckIn = async (paymentId: string, meta: NonNullable<ReturnType<typeof parseSchoolCheckInDescription>>) => {
+    if (!canEditDebtorsTab) return
     if (!school?.id || !paymentId) return
     const dueDate = window.prompt("תאריך פרעון (YYYY-MM-DD)", meta.dueDate || "")?.trim()
     if (!dueDate) return
@@ -1285,6 +1319,7 @@ export default function SchoolViewPage() {
     paymentDate: string,
     meta: NonNullable<ReturnType<typeof parseSchoolCheckOutDescription>>,
   ) => {
+    if (!canEditDebtorsTab) return
     if (!school?.id || !paymentId) return
     const checkNumber = window.prompt("מספר שיק (צד שלי)", meta.checkNumber || "")?.trim()
     if (!checkNumber) return
@@ -1325,6 +1360,7 @@ export default function SchoolViewPage() {
   }
 
   const deleteSchoolCheckPayment = async (paymentId: string) => {
+    if (!canDeleteDebtorsTab) return
     if (!paymentId) return
     if (!window.confirm("למחוק את השיק?")) return
     try {
@@ -1344,6 +1380,7 @@ export default function SchoolViewPage() {
     paymentDate: string,
     meta: NonNullable<ReturnType<typeof parseSchoolCheckOutDescription>>,
   ) => {
+    if (!canEditDebtorsTab) return
     if (!school?.id || !paymentId) return
     const description = buildSchoolCheckOutDescription({
       schoolId: school.id,
@@ -1373,6 +1410,7 @@ export default function SchoolViewPage() {
   }
 
   const editPayoutRow = (rowKey: string) => {
+    if (!canEditPaymentsTab) return
     const row = teacherProgramMonthlyRows.find((r) => r.key === rowKey)
     if (!row) return
     setSchoolPayoutTargetKey(row.key)
@@ -1383,6 +1421,7 @@ export default function SchoolViewPage() {
   }
 
   const deletePayoutRowPayments = async (rowKey: string) => {
+    if (!canDeletePaymentsTab) return
     const row = teacherProgramMonthlyRows.find((r) => r.key === rowKey)
     if (!row || row.payoutPaymentIds.length === 0) return
     if (!window.confirm(`למחוק ${row.payoutPaymentIds.length} תשלומים משויכים לשורה זו?`)) return
@@ -2785,60 +2824,76 @@ export default function SchoolViewPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="space-y-3 rounded-md border bg-muted/30 p-3">
-                    <div className="space-y-2 rounded-md border bg-white p-3">
-                      <h4 className="font-semibold text-rose-700">הוספת שיק זכות</h4>
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <div><Label>תאריך פרעון</Label><Input type="date" value={checkInDueDate} onChange={(e) => setCheckInDueDate(e.target.value)} /></div>
-                        <div><Label>מספר שיק</Label><Input value={checkInNumber} onChange={(e) => setCheckInNumber(e.target.value)} placeholder="מס שיק" /></div>
-                        <div><Label>תוכנית</Label><Input value={checkInProgramName} onChange={(e) => setCheckInProgramName(e.target.value)} placeholder="שם תוכנית" /></div>
+                  <div className="rounded-md border bg-muted/30 p-3">
+                    <Button type="button" onClick={() => setIsCheckModalOpen(true)} disabled={!canEditDebtorsTab}>
+                      הוספת שיק
+                    </Button>
+                  </div>
+
+                  <Dialog open={isCheckModalOpen} onOpenChange={setIsCheckModalOpen}>
+                    <DialogContent className="max-w-2xl">
+                      <DialogHeader>
+                        <DialogTitle>הוספת שיק</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-3">
                         <div>
-                          <Label>סכום</Label>
-                          <Input
-                            dir="ltr"
-                            value={checkInAmount}
-                            onChange={(e) => setCheckInAmount(formatAmountInput(e.target.value))}
-                            placeholder="1,000"
-                          />
-                        </div>
-                      </div>
-                      <Button type="button" onClick={() => void createSchoolCheckIn()} disabled={checkInSaving} className="w-full">
-                        {checkInSaving ? "שומר..." : "הוסף שיק בית ספר"}
-                      </Button>
-                    </div>
-                    <div className="space-y-2 rounded-md border bg-white p-3">
-                      <h4 className="font-semibold text-blue-700">הוספת שיק חובה</h4>
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <div className="sm:col-span-2">
-                          <Label>שורת זכות</Label>
-                          <Select value={checkOutTargetRowId} onValueChange={setCheckOutTargetRowId}>
-                            <SelectTrigger><SelectValue placeholder="בחר שורה" /></SelectTrigger>
+                          <Label>סוג שיק</Label>
+                          <Select value={checkModalType} onValueChange={(v) => setCheckModalType(v as "credit" | "debit")}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
                             <SelectContent>
-                              {schoolChecksRows.rows.map((r) => (
-                                <SelectItem key={r.rowId} value={r.rowId}>
-                                  #{r.serial} | {r.checkNumber} | {r.programName} | ₪{r.schoolAmount.toLocaleString()}
-                                </SelectItem>
-                              ))}
+                              <SelectItem value="credit">זכות</SelectItem>
+                              <SelectItem value="debit">חובה</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
-                        <div><Label>מספר שיק</Label><Input value={checkOutNumber} onChange={(e) => setCheckOutNumber(e.target.value)} placeholder="מס שיק שלי" /></div>
-                        <div><Label>למי מיועד</Label><Input value={checkOutPayee} onChange={(e) => setCheckOutPayee(e.target.value)} placeholder="שם יעד השיק" /></div>
-                        <div>
-                          <Label>סכום</Label>
-                          <Input
-                            dir="ltr"
-                            value={checkOutAmount}
-                            onChange={(e) => setCheckOutAmount(formatAmountInput(e.target.value))}
-                            placeholder="1,000"
-                          />
+
+                        {checkModalType === "credit" ? (
+                          <div className="grid gap-2 md:grid-cols-2">
+                            <div><Label>תאריך פרעון</Label><Input type="date" value={checkInDueDate} onChange={(e) => setCheckInDueDate(e.target.value)} /></div>
+                            <div><Label>מספר שיק</Label><Input value={checkInNumber} onChange={(e) => setCheckInNumber(e.target.value)} placeholder="מס שיק" /></div>
+                            <div className="md:col-span-2"><Label>תוכנית</Label><Input value={checkInProgramName} onChange={(e) => setCheckInProgramName(e.target.value)} placeholder="שם תוכנית" /></div>
+                            <div><Label>סכום</Label><Input dir="ltr" value={checkInAmount} onChange={(e) => setCheckInAmount(formatAmountInput(e.target.value))} placeholder="1,000" /></div>
+                          </div>
+                        ) : (
+                          <div className="grid gap-2 md:grid-cols-2">
+                            <div className="md:col-span-2">
+                              <Label>שורת זכות</Label>
+                              <Select value={checkOutTargetRowId} onValueChange={setCheckOutTargetRowId}>
+                                <SelectTrigger><SelectValue placeholder="בחר שורה" /></SelectTrigger>
+                                <SelectContent>
+                                  {schoolChecksRows.rows.map((r) => (
+                                    <SelectItem key={r.rowId} value={r.rowId}>
+                                      #{r.serial} | {r.checkNumber} | {r.programName} | ₪{r.schoolAmount.toLocaleString()}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div><Label>מספר שיק</Label><Input value={checkOutNumber} onChange={(e) => setCheckOutNumber(e.target.value)} placeholder="מס שיק שלי" /></div>
+                            <div><Label>למי מיועד</Label><Input value={checkOutPayee} onChange={(e) => setCheckOutPayee(e.target.value)} placeholder="שם יעד השיק" /></div>
+                            <div><Label>סכום</Label><Input dir="ltr" value={checkOutAmount} onChange={(e) => setCheckOutAmount(formatAmountInput(e.target.value))} placeholder="1,000" /></div>
+                          </div>
+                        )}
+
+                        <div className="flex justify-end gap-2 pt-2">
+                          <Button type="button" variant="outline" onClick={() => setIsCheckModalOpen(false)}>
+                            ביטול
+                          </Button>
+                          <Button
+                            type="button"
+                            onClick={() => void submitCheckFromModal()}
+                            disabled={!canEditDebtorsTab || (checkModalType === "credit" ? checkInSaving : checkOutSaving)}
+                          >
+                            {checkModalType === "credit"
+                              ? (checkInSaving ? "שומר..." : "שמור זכות")
+                              : (checkOutSaving ? "שומר..." : "שמור חובה")}
+                          </Button>
                         </div>
                       </div>
-                      <Button type="button" onClick={() => void createSchoolCheckOut()} disabled={!checkOutTargetRowId || checkOutSaving} className="w-full">
-                        {checkOutSaving ? "שומר..." : "הוסף שיק בצד שלי"}
-                      </Button>
-                    </div>
-                  </div>
+                    </DialogContent>
+                  </Dialog>
 
                   {schoolChecksRows.rows.length === 0 ? (
                     <p className="py-8 text-center text-muted-foreground">אין שיקים להצגה</p>
@@ -2887,10 +2942,10 @@ export default function SchoolViewPage() {
                                 </TableCell>
                                 <TableCell>
                                   <div className="flex gap-2">
-                                    <Button type="button" variant="outline" size="sm" onClick={() => void updateSchoolCheckIn(r.paymentId, r.meta)}>
+                                    <Button type="button" variant="outline" size="sm" onClick={() => void updateSchoolCheckIn(r.paymentId, r.meta)} disabled={!canEditDebtorsTab}>
                                       <Pencil className="h-4 w-4" />
                                     </Button>
-                                    <Button type="button" variant="outline" size="sm" onClick={() => void deleteSchoolCheckPayment(r.paymentId)}>
+                                    <Button type="button" variant="outline" size="sm" onClick={() => void deleteSchoolCheckPayment(r.paymentId)} disabled={!canDeleteDebtorsTab}>
                                       <Trash2 className="h-4 w-4 text-red-600" />
                                     </Button>
                                   </div>
@@ -2935,6 +2990,7 @@ export default function SchoolViewPage() {
                                           variant="outline"
                                           size="sm"
                                           title={c.noVat ? "בטל אפס מע\"מ" : "אפס מע\"מ לשיק הזה"}
+                                          disabled={!canEditDebtorsTab}
                                           onClick={() =>
                                             void toggleSchoolCheckOutVatZero(
                                               c.paymentId,
@@ -2956,6 +3012,7 @@ export default function SchoolViewPage() {
                                           type="button"
                                           variant="outline"
                                           size="sm"
+                                          disabled={!canEditDebtorsTab}
                                           onClick={() =>
                                             void updateSchoolCheckOut(
                                               c.paymentId,
@@ -2972,7 +3029,7 @@ export default function SchoolViewPage() {
                                         >
                                           <Pencil className="h-4 w-4" />
                                         </Button>
-                                        <Button type="button" variant="outline" size="sm" onClick={() => void deleteSchoolCheckPayment(c.paymentId)}>
+                                        <Button type="button" variant="outline" size="sm" onClick={() => void deleteSchoolCheckPayment(c.paymentId)} disabled={!canDeleteDebtorsTab}>
                                           <Trash2 className="h-4 w-4 text-red-600" />
                                         </Button>
                                       </div>
@@ -3057,7 +3114,7 @@ export default function SchoolViewPage() {
                         <Input value={schoolPayoutNotes} onChange={(e) => setSchoolPayoutNotes(e.target.value)} placeholder="מספר שיק / בנק / הערה" />
                       </div>
                       <div className="flex items-end lg:col-span-2">
-                        <Button type="button" disabled={!schoolPayoutTargetKey || schoolPayoutSaving} onClick={() => void createSchoolPayout()} className="w-full">
+                        <Button type="button" disabled={!canEditPaymentsTab || !schoolPayoutTargetKey || schoolPayoutSaving} onClick={() => void createSchoolPayout()} className="w-full">
                           {schoolPayoutSaving ? "שומר..." : "הוסף תשלום"}
                         </Button>
                       </div>
@@ -3101,6 +3158,7 @@ export default function SchoolViewPage() {
                                       variant="outline"
                                       size="sm"
                                       title="עריכת תשלום לשורה"
+                                      disabled={!canEditPaymentsTab}
                                       onClick={() => editPayoutRow(r.key)}
                                     >
                                       <Pencil className="h-4 w-4" />
@@ -3110,8 +3168,8 @@ export default function SchoolViewPage() {
                                       variant="outline"
                                       size="sm"
                                       title="מחיקת תשלומים משורה זו"
+                                      disabled={!canDeletePaymentsTab || r.payoutPaymentIds.length === 0}
                                       onClick={() => void deletePayoutRowPayments(r.key)}
-                                      disabled={r.payoutPaymentIds.length === 0}
                                     >
                                       <Trash2 className="h-4 w-4 text-red-600" />
                                     </Button>

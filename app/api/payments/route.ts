@@ -11,14 +11,29 @@ function canReadPayments(session: { role?: string; roleKey?: string; permissions
     hasPermission(perms, "cashier.view") ||
     hasPermission(perms, "students.financial") ||
     hasPermission(perms, "students.tab.payments") ||
-    hasPermission(perms, "myProfile.tab.payments")
+    hasPermission(perms, "myProfile.tab.payments") ||
+    hasPermission(perms, "schools.tab.payments") ||
+    hasPermission(perms, "schools.tab.payments.view") ||
+    hasPermission(perms, "schools.tab.payments.edit") ||
+    hasPermission(perms, "schools.tab.payments.delete") ||
+    hasPermission(perms, "schools.tab.debtors") ||
+    hasPermission(perms, "schools.tab.debtors.view") ||
+    hasPermission(perms, "schools.tab.debtors.edit") ||
+    hasPermission(perms, "schools.tab.debtors.delete")
   )
 }
 
 function canWritePayments(session: { role?: string; roleKey?: string; permissions?: string[] }) {
   if (hasFullAccessRole(session.roleKey) || hasFullAccessRole(session.role)) return true
   const perms = Array.isArray(session.permissions) ? session.permissions : []
-  return hasPermission(perms, "cashier.income") || hasPermission(perms, "students.financial")
+  return (
+    hasPermission(perms, "cashier.income") ||
+    hasPermission(perms, "students.financial") ||
+    hasPermission(perms, "schools.tab.payments.edit") ||
+    hasPermission(perms, "schools.tab.payments.delete") ||
+    hasPermission(perms, "schools.tab.debtors.edit") ||
+    hasPermission(perms, "schools.tab.debtors.delete")
+  )
 }
 
 async function ensurePaymentCourseIdColumn(db: any) {
