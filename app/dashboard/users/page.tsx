@@ -431,7 +431,7 @@ export default function UsersPage() {
       setPasswordInput("")
 
       if (pendingAction) {
-        if (pendingAction.type === "edit") openEdit(pendingAction.user)
+        if (pendingAction.type === "edit") router.push(`/dashboard/users/${pendingAction.user.id}/permissions`)
         if (pendingAction.type === "toggle") toggleUser(pendingAction.user).catch(console.error)
         if (pendingAction.type === "delete") deleteUser(pendingAction.user).catch(console.error)
       }
@@ -700,6 +700,14 @@ export default function UsersPage() {
                             }
                           >
                             <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            title="ניהול הרשאות בדף מלא"
+                            onClick={() => router.push(`/dashboard/users/${u.id}/permissions`)}
+                          >
+                            <Lock className="h-4 w-4 text-indigo-600" />
                           </Button>
 
                           <Button
