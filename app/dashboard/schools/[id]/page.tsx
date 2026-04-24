@@ -1213,6 +1213,105 @@ export default function SchoolViewPage() {
     }
   }
 
+  const updateSchoolCheckIn = async (paymentId: string, meta: NonNullable<ReturnType<typeof parseSchoolCheckInDescription>>) => {
+    if (!school?.id || !paymentId) return
+    const dueDate = window.prompt("תאריך פרעון (YYYY-MM-DD)", meta.dueDate || "")?.trim()
+    if (!dueDate) return
+    const checkNumber = window.prompt("מספר שיק (בית ספר)", meta.checkNumber || "")?.trim()
+    if (!checkNumber) return
+    const programName = window.prompt("שם תוכנית", meta.programName || "")?.trim() || "ללא תוכנית"
+    const amountRaw = window.prompt("סכום", String(meta.amount || 0))?.trim()
+    if (!amountRaw) return
+    const amount = Number(amountRaw)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      alert("סכום לא תקין")
+      return
+    }
+    const description = buildSchoolCheckInDescription({
+      schoolId: school.id,
+      rowId: meta.rowId,
+      dueDate,
+      checkNumber,
+      programName,
+      amount,
+    })
+    try {
+      const res = await fetch(`/api/payments/${encodeURIComponent(paymentId)}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount,
+          paymentDate: dueDate,
+          paymentType: "check",
+          description,
+        }),
+      })
+      if (!res.ok) throw new Error("failed")
+      await reloadTabData()
+    } catch {
+      alert("שגיאה בעדכון שיק בית ספר")
+    }
+  }
+
+  const updateSchoolCheckOut = async (
+    paymentId: string,
+    paymentDate: string,
+    meta: NonNullable<ReturnType<typeof parseSchoolCheckOutDescription>>,
+  ) => {
+    if (!school?.id || !paymentId) return
+    const checkNumber = window.prompt("מספר שיק (צד שלי)", meta.checkNumber || "")?.trim()
+    if (!checkNumber) return
+    const payee = window.prompt("למי מיועד השיק", meta.payee || "")?.trim()
+    if (!payee) return
+    const amountRaw = window.prompt("סכום", String(meta.amount || 0))?.trim()
+    if (!amountRaw) return
+    const amount = Number(amountRaw)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      alert("סכום לא תקין")
+      return
+    }
+    const description = buildSchoolCheckOutDescription({
+      schoolId: school.id,
+      rowId: meta.rowId,
+      checkNumber,
+      payee,
+      amount,
+    })
+    try {
+      const res = await fetch(`/api/payments/${encodeURIComponent(paymentId)}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount,
+          paymentDate: paymentDate ? String(paymentDate).slice(0, 10) : new Date().toISOString().slice(0, 10),
+          paymentType: "check",
+          description,
+        }),
+      })
+      if (!res.ok) throw new Error("failed")
+      await reloadTabData()
+    } catch {
+      alert("שגיאה בעדכון שיק בצד שלי")
+    }
+  }
+
+  const deleteSchoolCheckPayment = async (paymentId: string) => {
+    if (!paymentId) return
+    if (!window.confirm("למחוק את השיק?")) return
+    try {
+      const res = await fetch(`/api/payments/${encodeURIComponent(paymentId)}`, {
+        method: "DELETE",
+        credentials: "include",
+      })
+      if (!res.ok) throw new Error("failed")
+      await reloadTabData()
+    } catch {
+      alert("שגיאה במחיקת שיק")
+    }
+  }
+
   useEffect(() => {
     if (attendanceByTeacher.length === 0) {
       setSelectedAttendanceTeacher("")
@@ -1267,7 +1366,11 @@ export default function SchoolViewPage() {
     const bucket = new Map<string, Row>()
     for (const program of gafanPrograms) {
       const programName = String(program.name || "—")
-      const rateMap = parseGafanTeacherRates(program)
+      const workshopRows = parseGafanWorkshopRows(program)
+      const programHourlyRate =
+        workshopRows
+          .map((w) => Number(w.price || 0))
+          .find((n) => Number.isFinite(n) && n > 0) || 0
       const assignedTeacherIds = parseGafanTeacherIds(program)
       const rows = parseGafanHourRows(program).filter((r) => !r.pendingAssignment)
       for (const row of rows) {
@@ -1279,9 +1382,7 @@ export default function SchoolViewPage() {
         let teacherId = teacherIdFromRow
         if (!teacherId && assignedTeacherIds.length === 1) teacherId = assignedTeacherIds[0] || ""
         const teacherName = String(row.teacherName || "").trim() || (teacherId ? (teacherNameById.get(teacherId) || teacherId) : "ללא מורה")
-        const rate = teacherId && rateMap[teacherId]
-          ? Number(rateMap[teacherId].teachingHourlyRate || 0) + Number(rateMap[teacherId].travelHourlyRate || 0)
-          : 0
+        const rate = Number(programHourlyRate || 0)
         const key = `${teacherId || teacherName}|${program.id}|${monthKey}`
         const item = bucket.get(key) || {
           key,
@@ -1375,15 +1476,20 @@ export default function SchoolViewPage() {
         const paid = myChecks.reduce((s, r) => s + Number(r.amount || 0), 0)
         const schoolAmount = Number(row.meta.amount || 0)
         const balance = Math.round((schoolAmount - paid) * 100) / 100
+        const status: "open" | "partial" | "closed" =
+          paid <= 0 ? "open" : balance > 0 ? "partial" : "closed"
         return {
           serial: idx + 1,
           rowId,
+          paymentId: row.paymentId,
+          meta: row.meta,
           dueDate: row.meta.dueDate || row.paymentDate?.slice(0, 10) || "",
           checkNumber: row.meta.checkNumber || "",
           programName: row.meta.programName || "—",
           schoolAmount,
           myChecks,
           balance,
+          status,
         }
       })
       .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)))
@@ -2623,6 +2729,7 @@ export default function SchoolViewPage() {
                             <TableHead className="text-right">מס׳ סידורי</TableHead>
                             <TableHead className="text-right">צד בית ספר</TableHead>
                             <TableHead className="text-right">צד שלי</TableHead>
+                            <TableHead className="text-right">מצב</TableHead>
                             <TableHead className="text-right">יתרה</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -2636,6 +2743,14 @@ export default function SchoolViewPage() {
                                   <div><b>מס׳ שיק:</b> {r.checkNumber || "—"}</div>
                                   <div><b>תוכנית:</b> {r.programName || "—"}</div>
                                   <div><b>סכום:</b> ₪{r.schoolAmount.toLocaleString()}</div>
+                                  <div className="mt-2 flex gap-2">
+                                    <Button type="button" variant="outline" size="sm" onClick={() => void updateSchoolCheckIn(r.paymentId, r.meta)}>
+                                      <Pencil className="h-4 w-4" />
+                                    </Button>
+                                    <Button type="button" variant="outline" size="sm" onClick={() => void deleteSchoolCheckPayment(r.paymentId)}>
+                                      <Trash2 className="h-4 w-4 text-red-600" />
+                                    </Button>
+                                  </div>
                                 </div>
                               </TableCell>
                               <TableCell>
@@ -2649,10 +2764,48 @@ export default function SchoolViewPage() {
                                         <div><b>מס׳ שיק:</b> {c.checkNumber || "—"}</div>
                                         <div><b>למי מיועד:</b> {c.payee || "—"}</div>
                                         <div><b>סכום:</b> ₪{Number(c.amount || 0).toLocaleString()}</div>
+                                        <div className="mt-2 flex gap-2">
+                                          <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() =>
+                                              void updateSchoolCheckOut(
+                                                c.paymentId,
+                                                c.paymentDate,
+                                                {
+                                                  schoolId: String(school?.id || ""),
+                                                  rowId: r.rowId,
+                                                  checkNumber: c.checkNumber,
+                                                  payee: c.payee,
+                                                  amount: Number(c.amount || 0),
+                                                },
+                                              )
+                                            }
+                                          >
+                                            <Pencil className="h-4 w-4" />
+                                          </Button>
+                                          <Button type="button" variant="outline" size="sm" onClick={() => void deleteSchoolCheckPayment(c.paymentId)}>
+                                            <Trash2 className="h-4 w-4 text-red-600" />
+                                          </Button>
+                                        </div>
                                       </div>
                                     ))}
                                   </div>
                                 )}
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  className={
+                                    r.status === "closed"
+                                      ? "bg-emerald-100 text-emerald-800"
+                                      : r.status === "partial"
+                                        ? "bg-amber-100 text-amber-800"
+                                        : "bg-rose-100 text-rose-800"
+                                  }
+                                >
+                                  {r.status === "closed" ? "נסגר" : r.status === "partial" ? "חלקי" : "פתוח"}
+                                </Badge>
                               </TableCell>
                               <TableCell className={r.balance >= 0 ? "font-semibold text-rose-700" : "font-semibold text-emerald-700"}>
                                 ₪{r.balance.toLocaleString()}
