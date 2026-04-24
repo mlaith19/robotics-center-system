@@ -265,6 +265,7 @@ function paymentTypeLabelHe(type: string | null | undefined) {
 const SCHOOL_PAYOUT_PREFIX = "[SCHOOL_PAYOUT:"
 const SCHOOL_CHECK_IN_PREFIX = "[SCHOOL_CHECK_IN:"
 const SCHOOL_CHECK_OUT_PREFIX = "[SCHOOL_CHECK_OUT:"
+const VAT_RATE = 0.18
 
 function buildSchoolPayoutDescription(input: {
   schoolId: string
@@ -368,6 +369,27 @@ function parseSchoolCheckOutDescription(raw: string | null | undefined) {
     payee: kv.payee || "",
     amount: Number(kv.amount || 0),
   }
+}
+
+function normalizeAmountInput(raw: string): string {
+  const clean = String(raw || "").replace(/[^\d.]/g, "")
+  const parts = clean.split(".")
+  if (parts.length <= 1) return parts[0] || ""
+  return `${parts[0]}.${parts.slice(1).join("")}`
+}
+
+function formatAmountInput(raw: string): string {
+  const normalized = normalizeAmountInput(raw)
+  if (!normalized) return ""
+  const [intPart, decPart] = normalized.split(".")
+  const withCommas = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+  if (decPart === undefined) return withCommas
+  return `${withCommas}.${decPart.slice(0, 2)}`
+}
+
+function parseAmountValue(raw: string): number {
+  const n = Number(String(raw || "").replace(/,/g, "").trim())
+  return Number.isFinite(n) ? n : 0
 }
 
 function calcHoursFromTimes(startTime: string, endTime: string): number {
@@ -1079,7 +1101,7 @@ export default function SchoolViewPage() {
     if (!school?.id || !schoolPayoutTargetKey || !schoolPayoutDate) return
     const target = teacherProgramMonthlyRows.find((r) => r.key === schoolPayoutTargetKey)
     if (!target) return
-    const amount = Number(schoolPayoutAmount || 0)
+    const amount = parseAmountValue(schoolPayoutAmount)
     if (!Number.isFinite(amount) || amount <= 0) {
       alert("יש להזין סכום תשלום תקין")
       return
@@ -1121,7 +1143,7 @@ export default function SchoolViewPage() {
 
   const createSchoolCheckIn = async () => {
     if (!school?.id || !checkInDueDate) return
-    const amount = Number(checkInAmount || 0)
+    const amount = parseAmountValue(checkInAmount)
     if (!Number.isFinite(amount) || amount <= 0) {
       alert("יש להזין סכום שיק תקין")
       return
@@ -1167,7 +1189,7 @@ export default function SchoolViewPage() {
 
   const createSchoolCheckOut = async () => {
     if (!school?.id || !checkOutTargetRowId) return
-    const amount = Number(checkOutAmount || 0)
+    const amount = parseAmountValue(checkOutAmount)
     if (!Number.isFinite(amount) || amount <= 0) {
       alert("יש להזין סכום שיק בצד שלך")
       return
@@ -1516,6 +1538,8 @@ export default function SchoolViewPage() {
         const paid = myChecks.reduce((s, r) => s + Number(r.amount || 0), 0)
         const schoolAmount = Number(row.meta.amount || 0)
         const balance = Math.round((schoolAmount - paid) * 100) / 100
+        const schoolVat = Math.round((schoolAmount * VAT_RATE) * 100) / 100
+        const myVat = Math.round((paid * VAT_RATE) * 100) / 100
         const status: "open" | "partial" | "closed" =
           paid <= 0 ? "open" : balance > 0 ? "partial" : "closed"
         return {
@@ -1527,6 +1551,9 @@ export default function SchoolViewPage() {
           checkNumber: row.meta.checkNumber || "",
           programName: row.meta.programName || "—",
           schoolAmount,
+          schoolVat,
+          myAmount: paid,
+          myVat,
           myChecks,
           balance,
           status,
@@ -2720,14 +2747,22 @@ export default function SchoolViewPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid gap-3 rounded-md border bg-muted/30 p-3 lg:grid-cols-2">
+                  <div className="space-y-3 rounded-md border bg-muted/30 p-3">
                     <div className="space-y-2 rounded-md border bg-white p-3">
                       <h4 className="font-semibold text-rose-700">הוספת שיק - צד בית הספר</h4>
                       <div className="grid gap-2 sm:grid-cols-2">
                         <div><Label>תאריך פרעון</Label><Input type="date" value={checkInDueDate} onChange={(e) => setCheckInDueDate(e.target.value)} /></div>
                         <div><Label>מספר שיק</Label><Input value={checkInNumber} onChange={(e) => setCheckInNumber(e.target.value)} placeholder="מס שיק" /></div>
                         <div><Label>תוכנית</Label><Input value={checkInProgramName} onChange={(e) => setCheckInProgramName(e.target.value)} placeholder="שם תוכנית" /></div>
-                        <div><Label>סכום</Label><Input type="number" min="0" step="0.01" value={checkInAmount} onChange={(e) => setCheckInAmount(e.target.value)} placeholder="0" /></div>
+                        <div>
+                          <Label>סכום</Label>
+                          <Input
+                            dir="ltr"
+                            value={checkInAmount}
+                            onChange={(e) => setCheckInAmount(formatAmountInput(e.target.value))}
+                            placeholder="1,000"
+                          />
+                        </div>
                       </div>
                       <Button type="button" onClick={() => void createSchoolCheckIn()} disabled={checkInSaving} className="w-full">
                         {checkInSaving ? "שומר..." : "הוסף שיק בית ספר"}
@@ -2751,7 +2786,15 @@ export default function SchoolViewPage() {
                         </div>
                         <div><Label>מספר שיק</Label><Input value={checkOutNumber} onChange={(e) => setCheckOutNumber(e.target.value)} placeholder="מס שיק שלי" /></div>
                         <div><Label>למי מיועד</Label><Input value={checkOutPayee} onChange={(e) => setCheckOutPayee(e.target.value)} placeholder="שם יעד השיק" /></div>
-                        <div><Label>סכום</Label><Input type="number" min="0" step="0.01" value={checkOutAmount} onChange={(e) => setCheckOutAmount(e.target.value)} placeholder="0" /></div>
+                        <div>
+                          <Label>סכום</Label>
+                          <Input
+                            dir="ltr"
+                            value={checkOutAmount}
+                            onChange={(e) => setCheckOutAmount(formatAmountInput(e.target.value))}
+                            placeholder="1,000"
+                          />
+                        </div>
                       </div>
                       <Button type="button" onClick={() => void createSchoolCheckOut()} disabled={!checkOutTargetRowId || checkOutSaving} className="w-full">
                         {checkOutSaving ? "שומר..." : "הוסף שיק בצד שלי"}
@@ -2769,6 +2812,10 @@ export default function SchoolViewPage() {
                             <TableHead className="text-right">מס׳ סידורי</TableHead>
                             <TableHead className="text-right">צד בית ספר</TableHead>
                             <TableHead className="text-right">צד שלי</TableHead>
+                            <TableHead className="text-right">זכות (בית ספר)</TableHead>
+                            <TableHead className="text-right">מע"מ זכות</TableHead>
+                            <TableHead className="text-right">חובה (צד שלי)</TableHead>
+                            <TableHead className="text-right">מע"מ חובה</TableHead>
                             <TableHead className="text-right">מצב</TableHead>
                             <TableHead className="text-right">יתרה</TableHead>
                             <TableHead className="text-right">פעולות שורה</TableHead>
@@ -2835,6 +2882,10 @@ export default function SchoolViewPage() {
                                   </div>
                                 )}
                               </TableCell>
+                              <TableCell className="font-medium text-emerald-700">₪{r.schoolAmount.toLocaleString()}</TableCell>
+                              <TableCell>₪{r.schoolVat.toLocaleString()}</TableCell>
+                              <TableCell className="font-medium text-blue-700">₪{r.myAmount.toLocaleString()}</TableCell>
+                              <TableCell>₪{r.myVat.toLocaleString()}</TableCell>
                               <TableCell>
                                 <Badge
                                   className={
@@ -2941,7 +2992,12 @@ export default function SchoolViewPage() {
                       </div>
                       <div className="space-y-1 lg:col-span-2">
                         <Label>סכום</Label>
-                        <Input type="number" min="0" step="0.01" value={schoolPayoutAmount} onChange={(e) => setSchoolPayoutAmount(e.target.value)} placeholder="0" />
+                        <Input
+                          dir="ltr"
+                          value={schoolPayoutAmount}
+                          onChange={(e) => setSchoolPayoutAmount(formatAmountInput(e.target.value))}
+                          placeholder="1,000"
+                        />
                       </div>
                       <div className="space-y-1 sm:col-span-2 lg:col-span-10">
                         <Label>פרטי תשלום</Label>
