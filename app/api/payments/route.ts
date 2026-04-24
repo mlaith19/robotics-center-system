@@ -57,11 +57,22 @@ export const GET = withTenantAuth(async (req, session) => {
         FROM "Payment" p
         LEFT JOIN "Student" s ON p."studentId" = s.id
         LEFT JOIN "User" u ON p."createdByUserId" = u.id
-        WHERE p."studentId" IN (
-          SELECT DISTINCT e."studentId"
-          FROM "Enrollment" e
-          INNER JOIN "Course" c ON c.id = e."courseId"
-          WHERE c."schoolId" = ${schoolPayId}
+        WHERE (
+          p."studentId" IN (
+            SELECT DISTINCT e."studentId"
+            FROM "Enrollment" e
+            INNER JOIN "Course" c ON c.id = e."courseId"
+            WHERE c."schoolId" = ${schoolPayId}
+          )
+          OR (
+            p."studentId" IS NULL
+            AND p.description IS NOT NULL
+            AND (
+              p.description LIKE ${`[SCHOOL_PAYOUT:${schoolPayId}]%`}
+              OR p.description LIKE ${`[SCHOOL_CHECK_IN:${schoolPayId}]%`}
+              OR p.description LIKE ${`[SCHOOL_CHECK_OUT:${schoolPayId}]%`}
+            )
+          )
         )
         ORDER BY p."paymentDate" DESC
       `

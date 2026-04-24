@@ -262,6 +262,114 @@ function paymentTypeLabelHe(type: string | null | undefined) {
   return "—"
 }
 
+const SCHOOL_PAYOUT_PREFIX = "[SCHOOL_PAYOUT:"
+const SCHOOL_CHECK_IN_PREFIX = "[SCHOOL_CHECK_IN:"
+const SCHOOL_CHECK_OUT_PREFIX = "[SCHOOL_CHECK_OUT:"
+
+function buildSchoolPayoutDescription(input: {
+  schoolId: string
+  teacherId: string
+  teacherName: string
+  programId: string
+  programName: string
+  monthKey: string
+  monthLabel: string
+  notes?: string
+}) {
+  const notesPart = input.notes ? `|notes=${encodeURIComponent(input.notes)}` : ""
+  return `${SCHOOL_PAYOUT_PREFIX}${input.schoolId}]|teacherId=${encodeURIComponent(input.teacherId)}|teacherName=${encodeURIComponent(input.teacherName)}|programId=${encodeURIComponent(input.programId)}|programName=${encodeURIComponent(input.programName)}|month=${encodeURIComponent(input.monthKey)}|monthLabel=${encodeURIComponent(input.monthLabel)}${notesPart}`
+}
+
+function parseSchoolPayoutDescription(raw: string | null | undefined) {
+  const text = String(raw || "")
+  if (!text.startsWith(SCHOOL_PAYOUT_PREFIX)) return null
+  const parts = text.split("|")
+  if (parts.length === 0) return null
+  const schoolId = parts[0].replace(SCHOOL_PAYOUT_PREFIX, "").replace("]", "").trim()
+  const kv: Record<string, string> = {}
+  for (const part of parts.slice(1)) {
+    const eq = part.indexOf("=")
+    if (eq <= 0) continue
+    const key = part.slice(0, eq)
+    const val = part.slice(eq + 1)
+    kv[key] = decodeURIComponent(val || "")
+  }
+  return {
+    schoolId,
+    teacherId: kv.teacherId || "",
+    teacherName: kv.teacherName || "",
+    programId: kv.programId || "",
+    programName: kv.programName || "",
+    monthKey: kv.month || "",
+    monthLabel: kv.monthLabel || "",
+    notes: kv.notes || "",
+  }
+}
+
+function buildSchoolCheckInDescription(input: {
+  schoolId: string
+  rowId: string
+  dueDate: string
+  checkNumber: string
+  programName: string
+  amount: number
+}) {
+  return `${SCHOOL_CHECK_IN_PREFIX}${input.schoolId}]|rowId=${encodeURIComponent(input.rowId)}|dueDate=${encodeURIComponent(input.dueDate)}|checkNo=${encodeURIComponent(input.checkNumber)}|program=${encodeURIComponent(input.programName)}|amount=${encodeURIComponent(String(input.amount))}`
+}
+
+function parseSchoolCheckInDescription(raw: string | null | undefined) {
+  const text = String(raw || "")
+  if (!text.startsWith(SCHOOL_CHECK_IN_PREFIX)) return null
+  const parts = text.split("|")
+  if (parts.length === 0) return null
+  const schoolId = parts[0].replace(SCHOOL_CHECK_IN_PREFIX, "").replace("]", "").trim()
+  const kv: Record<string, string> = {}
+  for (const part of parts.slice(1)) {
+    const eq = part.indexOf("=")
+    if (eq <= 0) continue
+    kv[part.slice(0, eq)] = decodeURIComponent(part.slice(eq + 1))
+  }
+  return {
+    schoolId,
+    rowId: kv.rowId || "",
+    dueDate: kv.dueDate || "",
+    checkNumber: kv.checkNo || "",
+    programName: kv.program || "",
+    amount: Number(kv.amount || 0),
+  }
+}
+
+function buildSchoolCheckOutDescription(input: {
+  schoolId: string
+  rowId: string
+  checkNumber: string
+  payee: string
+  amount: number
+}) {
+  return `${SCHOOL_CHECK_OUT_PREFIX}${input.schoolId}]|rowId=${encodeURIComponent(input.rowId)}|checkNo=${encodeURIComponent(input.checkNumber)}|payee=${encodeURIComponent(input.payee)}|amount=${encodeURIComponent(String(input.amount))}`
+}
+
+function parseSchoolCheckOutDescription(raw: string | null | undefined) {
+  const text = String(raw || "")
+  if (!text.startsWith(SCHOOL_CHECK_OUT_PREFIX)) return null
+  const parts = text.split("|")
+  if (parts.length === 0) return null
+  const schoolId = parts[0].replace(SCHOOL_CHECK_OUT_PREFIX, "").replace("]", "").trim()
+  const kv: Record<string, string> = {}
+  for (const part of parts.slice(1)) {
+    const eq = part.indexOf("=")
+    if (eq <= 0) continue
+    kv[part.slice(0, eq)] = decodeURIComponent(part.slice(eq + 1))
+  }
+  return {
+    schoolId,
+    rowId: kv.rowId || "",
+    checkNumber: kv.checkNo || "",
+    payee: kv.payee || "",
+    amount: Number(kv.amount || 0),
+  }
+}
+
 function calcHoursFromTimes(startTime: string, endTime: string): number {
   const s = String(startTime || "")
   const e = String(endTime || "")
@@ -322,6 +430,22 @@ export default function SchoolViewPage() {
   const [pendingAssignTargetByKey, setPendingAssignTargetByKey] = useState<Record<string, string>>({})
   const [hoursSaving, setHoursSaving] = useState(false)
   const [hourSaveError, setHourSaveError] = useState("")
+  const [schoolPayoutTargetKey, setSchoolPayoutTargetKey] = useState("")
+  const [schoolPayoutDate, setSchoolPayoutDate] = useState(new Date().toISOString().slice(0, 10))
+  const [schoolPayoutAmount, setSchoolPayoutAmount] = useState("")
+  const [schoolPayoutMethod, setSchoolPayoutMethod] = useState<"cash" | "transfer" | "check">("transfer")
+  const [schoolPayoutNotes, setSchoolPayoutNotes] = useState("")
+  const [schoolPayoutSaving, setSchoolPayoutSaving] = useState(false)
+  const [checkInDueDate, setCheckInDueDate] = useState(new Date().toISOString().slice(0, 10))
+  const [checkInNumber, setCheckInNumber] = useState("")
+  const [checkInProgramName, setCheckInProgramName] = useState("")
+  const [checkInAmount, setCheckInAmount] = useState("")
+  const [checkInSaving, setCheckInSaving] = useState(false)
+  const [checkOutTargetRowId, setCheckOutTargetRowId] = useState("")
+  const [checkOutNumber, setCheckOutNumber] = useState("")
+  const [checkOutPayee, setCheckOutPayee] = useState("")
+  const [checkOutAmount, setCheckOutAmount] = useState("")
+  const [checkOutSaving, setCheckOutSaving] = useState(false)
   const currentUser = useCurrentUser()
   const { data: currentUserTypeData } = useUserType(currentUser?.id, currentUser?.roleKey ?? currentUser?.role)
   const currentTeacherId = currentUserTypeData?.teacherId ? String(currentUserTypeData.teacherId) : ""
@@ -951,6 +1075,144 @@ export default function SchoolViewPage() {
     }
   }
 
+  const createSchoolPayout = async () => {
+    if (!school?.id || !schoolPayoutTargetKey || !schoolPayoutDate) return
+    const target = teacherProgramMonthlyRows.find((r) => r.key === schoolPayoutTargetKey)
+    if (!target) return
+    const amount = Number(schoolPayoutAmount || 0)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      alert("יש להזין סכום תשלום תקין")
+      return
+    }
+    const description = buildSchoolPayoutDescription({
+      schoolId: school.id,
+      teacherId: target.teacherId,
+      teacherName: target.teacherName,
+      programId: target.programId,
+      programName: target.programName,
+      monthKey: target.monthKey,
+      monthLabel: target.monthLabel,
+      notes: schoolPayoutNotes.trim() || undefined,
+    })
+    setSchoolPayoutSaving(true)
+    try {
+      const res = await fetch("/api/payments", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: null,
+          amount,
+          date: schoolPayoutDate,
+          paymentType: schoolPayoutMethod,
+          description,
+        }),
+      })
+      if (!res.ok) throw new Error("failed")
+      setSchoolPayoutAmount("")
+      setSchoolPayoutNotes("")
+      await reloadTabData()
+    } catch {
+      alert("שגיאה בשמירת תשלום לבית הספר")
+    } finally {
+      setSchoolPayoutSaving(false)
+    }
+  }
+
+  const createSchoolCheckIn = async () => {
+    if (!school?.id || !checkInDueDate) return
+    const amount = Number(checkInAmount || 0)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      alert("יש להזין סכום שיק תקין")
+      return
+    }
+    if (!checkInNumber.trim()) {
+      alert("יש להזין מספר שיק מצד בית הספר")
+      return
+    }
+    const rowId = crypto.randomUUID()
+    const description = buildSchoolCheckInDescription({
+      schoolId: school.id,
+      rowId,
+      dueDate: checkInDueDate,
+      checkNumber: checkInNumber.trim(),
+      programName: checkInProgramName.trim() || "ללא תוכנית",
+      amount,
+    })
+    setCheckInSaving(true)
+    try {
+      const res = await fetch("/api/payments", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: null,
+          amount,
+          date: checkInDueDate,
+          paymentType: "check",
+          description,
+        }),
+      })
+      if (!res.ok) throw new Error("failed")
+      setCheckInNumber("")
+      setCheckInProgramName("")
+      setCheckInAmount("")
+      await reloadTabData()
+    } catch {
+      alert("שגיאה בשמירת שיק בית ספר")
+    } finally {
+      setCheckInSaving(false)
+    }
+  }
+
+  const createSchoolCheckOut = async () => {
+    if (!school?.id || !checkOutTargetRowId) return
+    const amount = Number(checkOutAmount || 0)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      alert("יש להזין סכום שיק בצד שלך")
+      return
+    }
+    if (!checkOutNumber.trim()) {
+      alert("יש להזין מספר שיק בצד שלך")
+      return
+    }
+    if (!checkOutPayee.trim()) {
+      alert("יש להזין למי מיועד השיק")
+      return
+    }
+    const description = buildSchoolCheckOutDescription({
+      schoolId: school.id,
+      rowId: checkOutTargetRowId,
+      checkNumber: checkOutNumber.trim(),
+      payee: checkOutPayee.trim(),
+      amount,
+    })
+    setCheckOutSaving(true)
+    try {
+      const res = await fetch("/api/payments", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: null,
+          amount,
+          date: new Date().toISOString().slice(0, 10),
+          paymentType: "check",
+          description,
+        }),
+      })
+      if (!res.ok) throw new Error("failed")
+      setCheckOutNumber("")
+      setCheckOutPayee("")
+      setCheckOutAmount("")
+      await reloadTabData()
+    } catch {
+      alert("שגיאה בשמירת שיק בצד שלך")
+    } finally {
+      setCheckOutSaving(false)
+    }
+  }
+
   useEffect(() => {
     if (attendanceByTeacher.length === 0) {
       setSelectedAttendanceTeacher("")
@@ -986,6 +1248,149 @@ export default function SchoolViewPage() {
     (activeTeacherMonths.some((m) => m.monthKey === selectedAttendanceMonth)
       ? selectedAttendanceMonth
       : activeTeacherMonths[activeTeacherMonths.length - 1]?.monthKey) || ""
+
+  const teacherProgramMonthlyRows = useMemo(() => {
+    type Row = {
+      key: string
+      teacherId: string
+      teacherName: string
+      programId: string
+      programName: string
+      monthKey: string
+      monthLabel: string
+      hours: number
+      hourlyRate: number
+      plannedAmount: number
+      paidAmount: number
+      balance: number
+    }
+    const bucket = new Map<string, Row>()
+    for (const program of gafanPrograms) {
+      const programName = String(program.name || "—")
+      const rateMap = parseGafanTeacherRates(program)
+      const assignedTeacherIds = parseGafanTeacherIds(program)
+      const rows = parseGafanHourRows(program).filter((r) => !r.pendingAssignment)
+      for (const row of rows) {
+        const d = new Date(`${String(row.date || "").trim()}T12:00:00`)
+        if (Number.isNaN(d.getTime())) continue
+        const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+        const monthLabel = new Intl.DateTimeFormat("he-IL", { month: "numeric", year: "numeric" }).format(d)
+        const teacherIdFromRow = String(row.teacherId || "").trim()
+        let teacherId = teacherIdFromRow
+        if (!teacherId && assignedTeacherIds.length === 1) teacherId = assignedTeacherIds[0] || ""
+        const teacherName = String(row.teacherName || "").trim() || (teacherId ? (teacherNameById.get(teacherId) || teacherId) : "ללא מורה")
+        const rate = teacherId && rateMap[teacherId]
+          ? Number(rateMap[teacherId].teachingHourlyRate || 0) + Number(rateMap[teacherId].travelHourlyRate || 0)
+          : 0
+        const key = `${teacherId || teacherName}|${program.id}|${monthKey}`
+        const item = bucket.get(key) || {
+          key,
+          teacherId,
+          teacherName,
+          programId: program.id,
+          programName,
+          monthKey,
+          monthLabel,
+          hours: 0,
+          hourlyRate: rate,
+          plannedAmount: 0,
+          paidAmount: 0,
+          balance: 0,
+        }
+        const hrs = Number(row.totalHours || 0)
+        item.hours += hrs
+        item.hourlyRate = rate
+        item.plannedAmount = item.hours * item.hourlyRate
+        bucket.set(key, item)
+      }
+    }
+    const payoutRows = schoolPayments
+      .filter((p) => !p.studentId)
+      .map((p) => ({ amount: Number(p.amount || 0), meta: parseSchoolPayoutDescription(p.description || "") }))
+      .filter((x) => x.meta && String(x.meta.schoolId) === String(school?.id || "")) as Array<{ amount: number; meta: NonNullable<ReturnType<typeof parseSchoolPayoutDescription>> }>
+    for (const pay of payoutRows) {
+      const k = `${pay.meta.teacherId || pay.meta.teacherName}|${pay.meta.programId}|${pay.meta.monthKey}`
+      const item = bucket.get(k)
+      if (!item) continue
+      item.paidAmount += pay.amount
+    }
+    const out = Array.from(bucket.values()).map((r) => {
+      const hours = Math.round(r.hours * 100) / 100
+      const plannedAmount = Math.round(r.plannedAmount * 100) / 100
+      const paidAmount = Math.round(r.paidAmount * 100) / 100
+      return {
+        ...r,
+        hours,
+        plannedAmount,
+        paidAmount,
+        balance: Math.round((plannedAmount - paidAmount) * 100) / 100,
+      }
+    })
+    out.sort((a, b) => a.monthKey.localeCompare(b.monthKey) || a.teacherName.localeCompare(b.teacherName, "he", { sensitivity: "base" }) || a.programName.localeCompare(b.programName, "he", { sensitivity: "base" }))
+    return out
+  }, [gafanPrograms, schoolPayments, school?.id, teacherNameById])
+
+  const schoolPayoutTotals = useMemo(() => {
+    const planned = teacherProgramMonthlyRows.reduce((s, r) => s + r.plannedAmount, 0)
+    const paid = teacherProgramMonthlyRows.reduce((s, r) => s + r.paidAmount, 0)
+    const balance = planned - paid
+    return { planned, paid, balance }
+  }, [teacherProgramMonthlyRows])
+
+  const schoolChecksRows = useMemo(() => {
+    const inRows = schoolPayments
+      .filter((p) => !p.studentId)
+      .map((p) => ({ paymentId: String(p.id || ""), paymentDate: String(p.paymentDate || ""), meta: parseSchoolCheckInDescription(p.description || "") }))
+      .filter((x) => x.meta && String(x.meta.schoolId) === String(school?.id || "")) as Array<{
+        paymentId: string
+        paymentDate: string
+        meta: NonNullable<ReturnType<typeof parseSchoolCheckInDescription>>
+      }>
+    const outRows = schoolPayments
+      .filter((p) => !p.studentId)
+      .map((p) => ({ paymentId: String(p.id || ""), paymentDate: String(p.paymentDate || ""), meta: parseSchoolCheckOutDescription(p.description || "") }))
+      .filter((x) => x.meta && String(x.meta.schoolId) === String(school?.id || "")) as Array<{
+        paymentId: string
+        paymentDate: string
+        meta: NonNullable<ReturnType<typeof parseSchoolCheckOutDescription>>
+      }>
+    const outByRowId = new Map<string, Array<{ paymentId: string; paymentDate: string; checkNumber: string; payee: string; amount: number }>>()
+    for (const row of outRows) {
+      const key = String(row.meta.rowId || "")
+      if (!key) continue
+      const arr = outByRowId.get(key) || []
+      arr.push({
+        paymentId: row.paymentId,
+        paymentDate: row.paymentDate,
+        checkNumber: row.meta.checkNumber || "",
+        payee: row.meta.payee || "",
+        amount: Number(row.meta.amount || 0),
+      })
+      outByRowId.set(key, arr)
+    }
+    const rows = inRows
+      .map((row, idx) => {
+        const rowId = String(row.meta.rowId || row.paymentId)
+        const myChecks = outByRowId.get(rowId) || []
+        const paid = myChecks.reduce((s, r) => s + Number(r.amount || 0), 0)
+        const schoolAmount = Number(row.meta.amount || 0)
+        const balance = Math.round((schoolAmount - paid) * 100) / 100
+        return {
+          serial: idx + 1,
+          rowId,
+          dueDate: row.meta.dueDate || row.paymentDate?.slice(0, 10) || "",
+          checkNumber: row.meta.checkNumber || "",
+          programName: row.meta.programName || "—",
+          schoolAmount,
+          myChecks,
+          balance,
+        }
+      })
+      .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)))
+    const totalSchool = rows.reduce((s, r) => s + r.schoolAmount, 0)
+    const totalMine = rows.reduce((s, r) => s + r.myChecks.reduce((x, m) => x + Number(m.amount || 0), 0), 0)
+    return { rows, totalSchool, totalMine, totalBalance: Math.round((totalSchool - totalMine) * 100) / 100 }
+  }, [schoolPayments, school?.id])
 
   if (isNewPage) {
     return <NewSchoolPage />
@@ -1066,20 +1471,20 @@ export default function SchoolViewPage() {
                   נ.גפ&quot;ן
                 </TabsTrigger>
               )}
-              {canViewDebtorsTab && (
-                <TabsTrigger
-                  value="debtors"
-                  className="rounded-none px-3 py-2.5 text-xs data-[state=active]:bg-background sm:text-sm"
-                >
-                  חייבים
-                </TabsTrigger>
-              )}
               {canViewPaymentsTab && (
                 <TabsTrigger
                   value="payments"
                   className="rounded-none px-3 py-2.5 text-xs data-[state=active]:bg-background sm:text-sm"
                 >
                   תשלומים
+                </TabsTrigger>
+              )}
+              {canViewDebtorsTab && (
+                <TabsTrigger
+                  value="debtors"
+                  className="rounded-none px-3 py-2.5 text-xs data-[state=active]:bg-background sm:text-sm"
+                >
+                  שיקים
                 </TabsTrigger>
               )}
             </TabsList>
@@ -2157,37 +2562,99 @@ export default function SchoolViewPage() {
                       <div className="rounded-lg bg-rose-100 p-2">
                         <BarChart3 className="h-5 w-5 text-rose-600" />
                       </div>
-                      <CardTitle className="text-lg text-rose-800">חייבים לפי תלמיד</CardTitle>
+                      <CardTitle className="text-lg text-rose-800">שיקים - צד בית ספר מול צד שלי</CardTitle>
                     </div>
-                    <Badge className="bg-gradient-to-r from-rose-600 to-red-600 text-white">
-                      סה&quot;כ חוב: ₪{debtByStudent.totalDebt.toLocaleString()}
-                    </Badge>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge className="bg-blue-100 text-blue-800">סה"כ צד בית ספר: ₪{schoolChecksRows.totalSchool.toLocaleString()}</Badge>
+                      <Badge className="bg-green-100 text-green-800">סה"כ צד שלי: ₪{schoolChecksRows.totalMine.toLocaleString()}</Badge>
+                      <Badge className={schoolChecksRows.totalBalance >= 0 ? "bg-rose-100 text-rose-800" : "bg-emerald-100 text-emerald-800"}>
+                        יתרה כוללת: ₪{schoolChecksRows.totalBalance.toLocaleString()}
+                      </Badge>
+                    </div>
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <p className="mb-4 text-sm text-muted-foreground">
-                    סכומי חוב מחושבים לפי מחירי קורסים של בית הספר מול תשלומים שבוצעו (לפי תלמיד).
-                  </p>
-                  {debtByStudent.rows.length === 0 ? (
-                    <p className="py-8 text-center text-muted-foreground">אין חייבים להצגה</p>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-3 rounded-md border bg-muted/30 p-3 lg:grid-cols-2">
+                    <div className="space-y-2 rounded-md border bg-white p-3">
+                      <h4 className="font-semibold text-rose-700">הוספת שיק - צד בית הספר</h4>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <div><Label>תאריך פרעון</Label><Input type="date" value={checkInDueDate} onChange={(e) => setCheckInDueDate(e.target.value)} /></div>
+                        <div><Label>מספר שיק</Label><Input value={checkInNumber} onChange={(e) => setCheckInNumber(e.target.value)} placeholder="מס שיק" /></div>
+                        <div><Label>תוכנית</Label><Input value={checkInProgramName} onChange={(e) => setCheckInProgramName(e.target.value)} placeholder="שם תוכנית" /></div>
+                        <div><Label>סכום</Label><Input type="number" min="0" step="0.01" value={checkInAmount} onChange={(e) => setCheckInAmount(e.target.value)} placeholder="0" /></div>
+                      </div>
+                      <Button type="button" onClick={() => void createSchoolCheckIn()} disabled={checkInSaving} className="w-full">
+                        {checkInSaving ? "שומר..." : "הוסף שיק בית ספר"}
+                      </Button>
+                    </div>
+                    <div className="space-y-2 rounded-md border bg-white p-3">
+                      <h4 className="font-semibold text-blue-700">הוספת שיק - צד שלי</h4>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <div className="sm:col-span-2">
+                          <Label>שורה מצד בית הספר</Label>
+                          <Select value={checkOutTargetRowId} onValueChange={setCheckOutTargetRowId}>
+                            <SelectTrigger><SelectValue placeholder="בחר שורה" /></SelectTrigger>
+                            <SelectContent>
+                              {schoolChecksRows.rows.map((r) => (
+                                <SelectItem key={r.rowId} value={r.rowId}>
+                                  #{r.serial} | {r.checkNumber} | {r.programName} | ₪{r.schoolAmount.toLocaleString()}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div><Label>מספר שיק</Label><Input value={checkOutNumber} onChange={(e) => setCheckOutNumber(e.target.value)} placeholder="מס שיק שלי" /></div>
+                        <div><Label>למי מיועד</Label><Input value={checkOutPayee} onChange={(e) => setCheckOutPayee(e.target.value)} placeholder="שם יעד השיק" /></div>
+                        <div><Label>סכום</Label><Input type="number" min="0" step="0.01" value={checkOutAmount} onChange={(e) => setCheckOutAmount(e.target.value)} placeholder="0" /></div>
+                      </div>
+                      <Button type="button" onClick={() => void createSchoolCheckOut()} disabled={!checkOutTargetRowId || checkOutSaving} className="w-full">
+                        {checkOutSaving ? "שומר..." : "הוסף שיק בצד שלי"}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {schoolChecksRows.rows.length === 0 ? (
+                    <p className="py-8 text-center text-muted-foreground">אין שיקים להצגה</p>
                   ) : (
                     <div className="overflow-x-auto rounded-md border">
                       <Table>
                         <TableHeader>
                           <TableRow className="bg-muted/50">
-                            <TableHead className="text-right">תלמיד</TableHead>
-                            <TableHead className="text-right">סה&quot;כ לתשלום</TableHead>
-                            <TableHead className="text-right">שולם</TableHead>
+                            <TableHead className="text-right">מס׳ סידורי</TableHead>
+                            <TableHead className="text-right">צד בית ספר</TableHead>
+                            <TableHead className="text-right">צד שלי</TableHead>
                             <TableHead className="text-right">יתרה</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {debtByStudent.rows.map((r) => (
-                            <TableRow key={r.studentId}>
-                              <TableCell className="font-medium">{r.studentName}</TableCell>
-                              <TableCell>₪{r.totalDue.toLocaleString()}</TableCell>
-                              <TableCell className="text-green-700">₪{r.paid.toLocaleString()}</TableCell>
-                              <TableCell className="font-semibold text-rose-700">
+                          {schoolChecksRows.rows.map((r) => (
+                            <TableRow key={r.rowId}>
+                              <TableCell className="font-semibold">#{r.serial}</TableCell>
+                              <TableCell>
+                                <div className="text-sm">
+                                  <div><b>תאריך פרעון:</b> {r.dueDate ? new Date(`${r.dueDate}T12:00:00`).toLocaleDateString("he-IL") : "—"}</div>
+                                  <div><b>מס׳ שיק:</b> {r.checkNumber || "—"}</div>
+                                  <div><b>תוכנית:</b> {r.programName || "—"}</div>
+                                  <div><b>סכום:</b> ₪{r.schoolAmount.toLocaleString()}</div>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                {r.myChecks.length === 0 ? (
+                                  <span className="text-muted-foreground">אין שיקים בצד שלי</span>
+                                ) : (
+                                  <div className="space-y-2">
+                                    {r.myChecks.map((c, idx) => (
+                                      <div key={c.paymentId} className="rounded border bg-blue-50/40 p-2 text-sm">
+                                        <div className="font-semibold">שיק {idx + 1}</div>
+                                        <div><b>מס׳ שיק:</b> {c.checkNumber || "—"}</div>
+                                        <div><b>למי מיועד:</b> {c.payee || "—"}</div>
+                                        <div><b>סכום:</b> ₪{Number(c.amount || 0).toLocaleString()}</div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </TableCell>
+                              <TableCell className={r.balance >= 0 ? "font-semibold text-rose-700" : "font-semibold text-emerald-700"}>
                                 ₪{r.balance.toLocaleString()}
                               </TableCell>
                             </TableRow>
@@ -2201,47 +2668,110 @@ export default function SchoolViewPage() {
             )}
           </TabsContent>}
 
-          {canViewPaymentsTab && <TabsContent value="payments" className="p-3 sm:p-6">
+          {canViewPaymentsTab && <TabsContent value="payments" className="space-y-4 p-3 sm:p-6">
             {tabDataLoading ? (
               <div className="flex justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
-            ) : schoolPayments.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
-                <DollarSign className="mb-4 h-12 w-12 opacity-50" />
-                <p>אין תשלומים מתלמידים בקורסים של בית ספר זה</p>
-              </div>
             ) : (
-              <div className="overflow-x-auto rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      <TableHead className="text-right">תאריך</TableHead>
-                      <TableHead className="text-right">תלמיד</TableHead>
-                      <TableHead className="text-right">שיטה</TableHead>
-                      <TableHead className="text-right">סכום</TableHead>
-                      <TableHead className="text-right">הערה</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {schoolPayments.map((p) => (
-                      <TableRow key={p.id}>
-                        <TableCell>
-                          {p.paymentDate
-                            ? new Date(p.paymentDate).toLocaleDateString("he-IL")
-                            : "—"}
-                        </TableCell>
-                        <TableCell className="font-medium">{safe(p.studentName)}</TableCell>
-                        <TableCell>{paymentTypeLabelHe(p.paymentType)}</TableCell>
-                        <TableCell className="tabular-nums">₪{Number(p.amount || 0).toLocaleString()}</TableCell>
-                        <TableCell className="max-w-[220px] truncate text-muted-foreground">
-                          {safe(p.description)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+              <>
+                <Card>
+                  <CardHeader>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <CardTitle className="text-lg">תשלומי מורים לפי תוכנית וחודש</CardTitle>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge className="bg-blue-100 text-blue-800">סה"כ עלות: ₪{schoolPayoutTotals.planned.toLocaleString()}</Badge>
+                        <Badge className="bg-green-100 text-green-800">שולם: ₪{schoolPayoutTotals.paid.toLocaleString()}</Badge>
+                        <Badge className={schoolPayoutTotals.balance >= 0 ? "bg-rose-100 text-rose-800" : "bg-emerald-100 text-emerald-800"}>
+                          יתרה: ₪{schoolPayoutTotals.balance.toLocaleString()} {schoolPayoutTotals.balance >= 0 ? "(חוב)" : "(זכות)"}
+                        </Badge>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid gap-3 rounded-md border bg-muted/30 p-3 sm:grid-cols-2 lg:grid-cols-6">
+                      <div className="space-y-1">
+                        <Label>מורה/תוכנית/חודש</Label>
+                        <Select value={schoolPayoutTargetKey} onValueChange={setSchoolPayoutTargetKey}>
+                          <SelectTrigger><SelectValue placeholder="בחר יעד תשלום" /></SelectTrigger>
+                          <SelectContent>
+                            {teacherProgramMonthlyRows.map((r) => (
+                              <SelectItem key={r.key} value={r.key}>
+                                {r.teacherName} | {r.programName} | {r.monthLabel}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label>תאריך</Label>
+                        <Input type="date" value={schoolPayoutDate} onChange={(e) => setSchoolPayoutDate(e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label>שיטת תשלום</Label>
+                        <Select value={schoolPayoutMethod} onValueChange={(v: "cash" | "transfer" | "check") => setSchoolPayoutMethod(v)}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="cash">מזומן</SelectItem>
+                            <SelectItem value="transfer">העברה</SelectItem>
+                            <SelectItem value="check">שיק</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label>סכום</Label>
+                        <Input type="number" min="0" step="0.01" value={schoolPayoutAmount} onChange={(e) => setSchoolPayoutAmount(e.target.value)} placeholder="0" />
+                      </div>
+                      <div className="space-y-1 sm:col-span-2">
+                        <Label>פרטי תשלום</Label>
+                        <Input value={schoolPayoutNotes} onChange={(e) => setSchoolPayoutNotes(e.target.value)} placeholder="מספר שיק / בנק / הערה" />
+                      </div>
+                      <div className="flex items-end">
+                        <Button type="button" disabled={!schoolPayoutTargetKey || schoolPayoutSaving} onClick={() => void createSchoolPayout()} className="w-full">
+                          {schoolPayoutSaving ? "שומר..." : "הוסף תשלום"}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {teacherProgramMonthlyRows.length === 0 ? (
+                      <p className="py-8 text-center text-muted-foreground">אין שעות מורים לחישוב תשלומים</p>
+                    ) : (
+                      <div className="overflow-x-auto rounded-md border">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-muted/50">
+                              <TableHead className="text-right">חודש</TableHead>
+                              <TableHead className="text-right">מורה</TableHead>
+                              <TableHead className="text-right">תוכנית</TableHead>
+                              <TableHead className="text-right">כמות שעות</TableHead>
+                              <TableHead className="text-right">עלות לשעה</TableHead>
+                              <TableHead className="text-right">סה"כ לתשלום</TableHead>
+                              <TableHead className="text-right">שולם</TableHead>
+                              <TableHead className="text-right">יתרה</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {teacherProgramMonthlyRows.map((r) => (
+                              <TableRow key={r.key}>
+                                <TableCell>{r.monthLabel}</TableCell>
+                                <TableCell className="font-medium">{r.teacherName}</TableCell>
+                                <TableCell>{r.programName}</TableCell>
+                                <TableCell>{r.hours.toLocaleString()}</TableCell>
+                                <TableCell>₪{r.hourlyRate.toLocaleString()}</TableCell>
+                                <TableCell>₪{r.plannedAmount.toLocaleString()}</TableCell>
+                                <TableCell className="text-green-700">₪{r.paidAmount.toLocaleString()}</TableCell>
+                                <TableCell className={r.balance >= 0 ? "font-semibold text-rose-700" : "font-semibold text-emerald-700"}>
+                                  ₪{r.balance.toLocaleString()}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
             )}
           </TabsContent>}
         </Tabs>

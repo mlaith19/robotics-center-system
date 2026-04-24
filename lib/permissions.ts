@@ -124,7 +124,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       { id: "schools.tab.attendance", name: "טאב נוכחות (בית ספר)", description: "הצגת טאב נוכחות בדף פרטי בית ספר" },
       { id: "schools.tab.ngafan", name: "טאב נ.גפ\"ן (בית ספר)", description: "הצגת טאב נ.גפ\"ן בדף פרטי בית ספר (טבלאות שעות לפי תוכנית)" },
       { id: "schools.tab.attendance.transfer", name: "העברת שעות בין תוכניות (בית ספר)", description: "בטאב נוכחות בית ספר: העברת שורת שעות מתוכנית גפ\"ן אחת לאחרת" },
-      { id: "schools.tab.debtors", name: "טאב חייבים (בית ספר)", description: "הצגת טאב חייבים בדף פרטי בית ספר" },
+      { id: "schools.tab.debtors", name: "טאב שיקים (בית ספר)", description: "הצגת טאב שיקים בדף פרטי בית ספר" },
       { id: "schools.tab.payments", name: "טאב תשלומים (בית ספר)", description: "הצגת טאב תשלומים בדף פרטי בית ספר" },
     ],
   },
