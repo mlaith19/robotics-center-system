@@ -29,7 +29,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -510,6 +509,8 @@ export default function UsersPage() {
   }
 
   const [roleTab, setRoleTab] = useState("__all__")
+  const [permissionTab, setPermissionTab] = useState<"quick" | "modules" | "matrix">("quick")
+  const [permissionSearch, setPermissionSearch] = useState("")
 
   const roleTabDefs = useMemo(() => {
     const tabs = [
@@ -537,6 +538,19 @@ export default function UsersPage() {
     const removed = Array.from(initial).filter((p) => !selected.has(p)).sort()
     return { added, removed }
   }, [initialPermissions, selectedPermissions])
+  const permissionSearchNorm = permissionSearch.trim().toLowerCase()
+  const filteredPermissionCategories = useMemo(() => {
+    if (!permissionSearchNorm) return PERMISSION_CATEGORIES
+    return PERMISSION_CATEGORIES
+      .map((category) => ({
+        ...category,
+        permissions: category.permissions.filter((perm) => {
+          const hay = `${perm.name} ${perm.description} ${perm.id}`.toLowerCase()
+          return hay.includes(permissionSearchNorm)
+        }),
+      }))
+      .filter((category) => category.permissions.length > 0)
+  }, [permissionSearchNorm])
 
   if (noPermission) {
     return (
@@ -728,25 +742,42 @@ export default function UsersPage() {
           </CardContent>
         </Card>
 
-        <Dialog
-          open={isDialogOpen}
-          onOpenChange={(open) => {
-            setIsDialogOpen(open)
-            if (!open) resetForm()
-          }}
-        >
-          <DialogContent
-            className="!max-w-[min(1400px,calc(100vw-1rem))] max-h-[85dvh] overflow-y-auto p-4 sm:p-6"
-            dir="rtl"
-          >
-            <DialogHeader>
-              <DialogTitle>{editingUser ? "עריכת משתמש" : "משתמש חדש"}</DialogTitle>
-              <DialogDescription>
-                {editingUser ? "הגדר את פרטי המשתמש והרשאותיו במערכת" : "יצירת משתמש חדש (שם + אימייל חובה)"}
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-6">
+        {isDialogOpen ? (
+          <Card className="border-2 border-indigo-200 bg-gradient-to-b from-indigo-50/70 to-white">
+            <CardHeader className="space-y-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <CardTitle className="text-xl">{editingUser ? "עריכת משתמש והרשאות" : "משתמש חדש והרשאות"}</CardTitle>
+                  <CardDescription>
+                    {editingUser
+                      ? "מסך מלא לניהול פרטי המשתמש, תפקיד והרשאות בצורה מסודרת."
+                      : "יצירת משתמש חדש עם הרשאות ברורות לפי טאבים."}
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsDialogOpen(false)
+                    resetForm()
+                  }}
+                >
+                  סגירה
+                </Button>
+              </div>
+              <Tabs
+                dir="rtl"
+                value={permissionTab}
+                onValueChange={(v) => setPermissionTab(v as "quick" | "modules" | "matrix")}
+                className="w-full"
+              >
+                <TabsList className="h-auto w-full flex-wrap justify-start gap-1">
+                  <TabsTrigger value="quick" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">מהיר</TabsTrigger>
+                  <TabsTrigger value="modules" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">לפי מודולים</TabsTrigger>
+                  <TabsTrigger value="matrix" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">מטריצת הרשאות</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </CardHeader>
+            <CardContent className="space-y-6">
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 <div className="space-y-2">
                   <Label>שם מלא *</Label>
@@ -825,10 +856,27 @@ export default function UsersPage() {
               </div>
 
               <div className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <Label>חיפוש הרשאה</Label>
+                    <Input
+                      value={permissionSearch}
+                      onChange={(e) => setPermissionSearch(e.target.value)}
+                      placeholder="חיפוש לפי שם/תיאור/מזהה הרשאה..."
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Badge variant="outline" className="h-9 px-3 text-sm">
+                      {selectedPermissions.length} הרשאות נבחרו
+                    </Badge>
+                  </div>
+                </div>
+
+                {permissionTab === "quick" ? (
+                  <>
                 <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                   <Label className="text-lg font-semibold">הרשאות</Label>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline">{selectedPermissions.length} הרשאות נבחרו</Badge>
                     <Button
                       type="button"
                       variant="secondary"
@@ -928,7 +976,64 @@ export default function UsersPage() {
                     </div>
                   </CardContent>
                 </Card>
+                  </>
+                ) : null}
 
+                {permissionTab === "matrix" ? (
+                  <Card className="border-dashed border-violet-300 bg-violet-50/40">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base">מטריצת הרשאות לפי פעולה</CardTitle>
+                      <CardDescription>שורות = מודולים, עמודות = צפייה/עריכה/מחיקה</CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-2 sm:p-4">
+                      <div className="-mx-2 overflow-x-auto sm:mx-0">
+                        <Table className="min-w-[680px]">
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="text-right">מודול</TableHead>
+                              <TableHead className="text-center">צפייה</TableHead>
+                              <TableHead className="text-center">עריכה</TableHead>
+                              <TableHead className="text-center">מחיקה</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {QUICK_PERMISSION_ROWS.map((row) => (
+                              <TableRow key={`matrix-${row.id}`}>
+                                <TableCell className="font-medium">{row.label}</TableCell>
+                                <TableCell className="text-center">
+                                  {row.view?.length ? (
+                                    <Checkbox
+                                      checked={isQuickPermissionEnabled(row, "view")}
+                                      onCheckedChange={(checked) => setQuickPermission(row, "view", Boolean(checked))}
+                                    />
+                                  ) : <span className="text-muted-foreground">—</span>}
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  {row.edit?.length ? (
+                                    <Checkbox
+                                      checked={isQuickPermissionEnabled(row, "edit")}
+                                      onCheckedChange={(checked) => setQuickPermission(row, "edit", Boolean(checked))}
+                                    />
+                                  ) : <span className="text-muted-foreground">—</span>}
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  {row.delete?.length ? (
+                                    <Checkbox
+                                      checked={isQuickPermissionEnabled(row, "delete")}
+                                      onCheckedChange={(checked) => setQuickPermission(row, "delete", Boolean(checked))}
+                                    />
+                                  ) : <span className="text-muted-foreground">—</span>}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : null}
+
+                {permissionTab === "modules" ? (
                 <Card className="border-dashed border-amber-300 bg-amber-50/40">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base">סיכום שינויים לפני שמירה</CardTitle>
@@ -951,9 +1056,11 @@ export default function UsersPage() {
                     </div>
                   </CardContent>
                 </Card>
+                ) : null}
 
+                {permissionTab === "modules" ? (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {PERMISSION_CATEGORIES.map((category) => {
+                  {filteredPermissionCategories.map((category) => {
                     const Icon = categoryIcons[category.id] || BookOpen
                     const allSelected = category.permissions.every((p) => selectedPermissions.includes(p.id))
 
@@ -1037,18 +1144,36 @@ export default function UsersPage() {
                     )
                   })}
                 </div>
+                ) : null}
               </div>
 
-              <Button
-                className="w-full"
-                size="lg"
-                onClick={() => (editingUser ? updateUser(editingUser.id) : createUser())}
-              >
-                {editingUser ? "שמור שינויים" : "צור משתמש"}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+              <div className="sticky bottom-2 z-10 rounded-xl border bg-white/95 p-3 shadow-lg backdrop-blur">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="text-sm text-muted-foreground">
+                    לפני שמירה: נוספו {permissionDiff.added.length} | הוסרו {permissionDiff.removed.length}
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setIsDialogOpen(false)
+                        resetForm()
+                      }}
+                    >
+                      ביטול
+                    </Button>
+                    <Button
+                      size="lg"
+                      onClick={() => (editingUser ? updateUser(editingUser.id) : createUser())}
+                    >
+                      {editingUser ? "שמור שינויים" : "צור משתמש"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
 
         <AlertDialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
           <AlertDialogContent dir="rtl">
