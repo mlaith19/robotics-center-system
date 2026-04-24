@@ -568,7 +568,15 @@ export default function SchoolViewPage() {
         fetch(`/api/attendance?schoolId=${encodeURIComponent(sid)}&_ts=${ts}`, { cache: "no-store", credentials: "include" }),
         fetch(`/api/teachers?_ts=${ts}`, { cache: "no-store", credentials: "include" }),
       ])
-      setGafanPrograms(gRes.ok ? await gRes.json() : [])
+      const gRaw = gRes.ok ? await gRes.json() : []
+      const gArr = Array.isArray(gRaw) ? gRaw : []
+      const dedupedByLink = new Map<string, GafanRow>()
+      for (const row of gArr) {
+        const r = row as GafanRow
+        const key = String(r.linkId || `${r.id}|${String(r.schoolId || "")}`)
+        if (!dedupedByLink.has(key)) dedupedByLink.set(key, r)
+      }
+      setGafanPrograms(Array.from(dedupedByLink.values()))
       setSchoolEnrollments(eRes.ok ? await eRes.json() : [])
       setSchoolPayments(pRes.ok ? await pRes.json() : [])
       const att = aRes.ok ? await aRes.json() : []
@@ -620,7 +628,16 @@ export default function SchoolViewPage() {
       const res = await fetch(`/api/gafan`, { credentials: "include" })
       const all = res.ok ? await res.json() : []
       const rows = Array.isArray(all) ? all : []
-      setGafanUnlinkedOptions(rows)
+      const linkedProgramIds = new Set(gafanPrograms.map((g) => String(g.id)))
+      const uniquePrograms = new Map<string, GafanRow>()
+      for (const row of rows) {
+        const r = row as GafanRow
+        const pid = String(r.id || "")
+        if (!pid) continue
+        if (linkedProgramIds.has(pid)) continue
+        if (!uniquePrograms.has(pid)) uniquePrograms.set(pid, r)
+      }
+      setGafanUnlinkedOptions(Array.from(uniquePrograms.values()))
     } catch {
       setGafanUnlinkedOptions([])
     }
