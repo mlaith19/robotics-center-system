@@ -83,7 +83,7 @@ function compactSessionPermissions(session: SessionUser): string[] | undefined {
   // Full-access roles do not need explicit permission arrays in cookie.
   if (hasFullAccessRole(session.roleKey) || hasFullAccessRole(session.role)) return undefined
   // Keep cookie size bounded for legacy users with very large permission payloads.
-  return [...new Set(perms.filter((p): p is string => typeof p === "string" && p.trim().length > 0))].slice(0, 60)
+  return [...new Set(perms.filter((p): p is string => typeof p === "string" && p.trim().length > 0))].slice(0, 20)
 }
 
 export function sessionWithRefreshedActivity(session: SessionUser): SessionUser {

@@ -246,9 +246,9 @@ export async function POST(request: NextRequest) {
       // This keeps Set-Cookie header small and avoids upstream header-size failures.
       permissions = []
     }
-    if (permissions.length > 60) {
+    if (permissions.length > 20) {
       // Keep tenant-session cookie under proxy header limits for users with many granular permissions.
-      permissions = permissions.slice(0, 60)
+      permissions = permissions.slice(0, 20)
     }
 
     const resolvedRole = (user.role_name || user.user_role_text || (user as Record<string,unknown>).role || roleKey || "user") as string
