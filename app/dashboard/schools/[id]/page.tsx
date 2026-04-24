@@ -461,6 +461,7 @@ export default function SchoolViewPage() {
   const [schoolPayoutMethod, setSchoolPayoutMethod] = useState<"cash" | "transfer" | "check">("transfer")
   const [schoolPayoutNotes, setSchoolPayoutNotes] = useState("")
   const [schoolPayoutSaving, setSchoolPayoutSaving] = useState(false)
+  const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false)
   const [checkInDueDate, setCheckInDueDate] = useState(new Date().toISOString().slice(0, 10))
   const [checkInNumber, setCheckInNumber] = useState("")
   const [checkInProgramName, setCheckInProgramName] = useState("")
@@ -1120,14 +1121,14 @@ export default function SchoolViewPage() {
   }
 
   const createSchoolPayout = async () => {
-    if (!canEditPaymentsTab) return
-    if (!school?.id || !schoolPayoutTargetKey || !schoolPayoutDate) return
+    if (!canEditPaymentsTab) return false
+    if (!school?.id || !schoolPayoutTargetKey || !schoolPayoutDate) return false
     const target = teacherProgramMonthlyRows.find((r) => r.key === schoolPayoutTargetKey)
-    if (!target) return
+    if (!target) return false
     const amount = parseAmountValue(schoolPayoutAmount)
     if (!Number.isFinite(amount) || amount <= 0) {
       alert("יש להזין סכום תשלום תקין")
-      return
+      return false
     }
     const description = buildSchoolPayoutDescription({
       schoolId: school.id,
@@ -1157,11 +1158,18 @@ export default function SchoolViewPage() {
       setSchoolPayoutAmount("")
       setSchoolPayoutNotes("")
       await reloadTabData()
+      return true
     } catch {
       alert("שגיאה בשמירת תשלום לבית הספר")
+      return false
     } finally {
       setSchoolPayoutSaving(false)
     }
+  }
+
+  const submitPayoutFromModal = async () => {
+    const ok = await createSchoolPayout()
+    if (ok) setIsPayoutModalOpen(false)
   }
 
   const createSchoolCheckIn = async () => {
@@ -2813,6 +2821,9 @@ export default function SchoolViewPage() {
                         <BarChart3 className="h-5 w-5 text-rose-600" />
                       </div>
                       <CardTitle className="text-lg text-rose-800">שיקים - זכות / חובה</CardTitle>
+                      <Button type="button" size="sm" onClick={() => setIsCheckModalOpen(true)} disabled={!canEditDebtorsTab}>
+                        הוספת שיק
+                      </Button>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Badge className="bg-blue-100 text-blue-800">סה"כ זכות: ₪{schoolChecksRows.totalSchool.toLocaleString()}</Badge>
@@ -2824,12 +2835,6 @@ export default function SchoolViewPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="rounded-md border bg-muted/30 p-3">
-                    <Button type="button" onClick={() => setIsCheckModalOpen(true)} disabled={!canEditDebtorsTab}>
-                      הוספת שיק
-                    </Button>
-                  </div>
-
                   <Dialog open={isCheckModalOpen} onOpenChange={setIsCheckModalOpen}>
                     <DialogContent className="max-w-2xl">
                       <DialogHeader>
@@ -3058,7 +3063,12 @@ export default function SchoolViewPage() {
                 <Card>
                   <CardHeader>
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <CardTitle className="text-lg">תשלומי מורים לפי תוכנית וחודש</CardTitle>
+                      <div className="flex items-center gap-2">
+                        <CardTitle className="text-lg">תשלומי מורים לפי תוכנית וחודש</CardTitle>
+                        <Button type="button" size="sm" onClick={() => setIsPayoutModalOpen(true)} disabled={!canEditPaymentsTab}>
+                          הוספת תשלום
+                        </Button>
+                      </div>
                       <div className="flex flex-wrap gap-2">
                         <Badge className="bg-blue-100 text-blue-800">סה"כ עלות: ₪{schoolPayoutTotals.planned.toLocaleString()}</Badge>
                         <Badge className="bg-green-100 text-green-800">שולם: ₪{schoolPayoutTotals.paid.toLocaleString()}</Badge>
@@ -3069,56 +3079,70 @@ export default function SchoolViewPage() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="grid gap-2 rounded-md border bg-muted/30 p-3 sm:grid-cols-2 lg:grid-cols-12">
-                      <div className="space-y-1 sm:col-span-2 lg:col-span-4">
-                        <Label>מורה/תוכנית/חודש</Label>
-                        <Select value={schoolPayoutTargetKey} onValueChange={setSchoolPayoutTargetKey}>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="בחר יעד תשלום" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {teacherProgramMonthlyRows.map((r) => (
-                              <SelectItem key={r.key} value={r.key}>
-                                {r.teacherName} | {r.programName} | {r.monthLabel}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1 lg:col-span-2">
-                        <Label>תאריך</Label>
-                        <Input type="date" value={schoolPayoutDate} onChange={(e) => setSchoolPayoutDate(e.target.value)} />
-                      </div>
-                      <div className="space-y-1 lg:col-span-2">
-                        <Label>שיטת תשלום</Label>
-                        <Select value={schoolPayoutMethod} onValueChange={(v: "cash" | "transfer" | "check") => setSchoolPayoutMethod(v)}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="cash">מזומן</SelectItem>
-                            <SelectItem value="transfer">העברה</SelectItem>
-                            <SelectItem value="check">שיק</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1 lg:col-span-2">
-                        <Label>סכום</Label>
-                        <Input
-                          dir="ltr"
-                          value={schoolPayoutAmount}
-                          onChange={(e) => setSchoolPayoutAmount(formatAmountInput(e.target.value))}
-                          placeholder="1,000"
-                        />
-                      </div>
-                      <div className="space-y-1 sm:col-span-2 lg:col-span-10">
-                        <Label>פרטי תשלום</Label>
-                        <Input value={schoolPayoutNotes} onChange={(e) => setSchoolPayoutNotes(e.target.value)} placeholder="מספר שיק / בנק / הערה" />
-                      </div>
-                      <div className="flex items-end lg:col-span-2">
-                        <Button type="button" disabled={!canEditPaymentsTab || !schoolPayoutTargetKey || schoolPayoutSaving} onClick={() => void createSchoolPayout()} className="w-full">
-                          {schoolPayoutSaving ? "שומר..." : "הוסף תשלום"}
-                        </Button>
-                      </div>
-                    </div>
+                    <Dialog open={isPayoutModalOpen} onOpenChange={setIsPayoutModalOpen}>
+                      <DialogContent className="max-w-2xl">
+                        <DialogHeader>
+                          <DialogTitle>הוספת תשלום</DialogTitle>
+                        </DialogHeader>
+                        <div className="grid gap-2 md:grid-cols-2">
+                          <div className="md:col-span-2">
+                            <Label>מורה/תוכנית/חודש</Label>
+                            <Select value={schoolPayoutTargetKey} onValueChange={setSchoolPayoutTargetKey}>
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="בחר יעד תשלום" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {teacherProgramMonthlyRows.map((r) => (
+                                  <SelectItem key={r.key} value={r.key}>
+                                    {r.teacherName} | {r.programName} | {r.monthLabel}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label>תאריך</Label>
+                            <Input type="date" value={schoolPayoutDate} onChange={(e) => setSchoolPayoutDate(e.target.value)} />
+                          </div>
+                          <div>
+                            <Label>שיטת תשלום</Label>
+                            <Select value={schoolPayoutMethod} onValueChange={(v: "cash" | "transfer" | "check") => setSchoolPayoutMethod(v)}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="cash">מזומן</SelectItem>
+                                <SelectItem value="transfer">העברה</SelectItem>
+                                <SelectItem value="check">שיק</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label>סכום</Label>
+                            <Input
+                              dir="ltr"
+                              value={schoolPayoutAmount}
+                              onChange={(e) => setSchoolPayoutAmount(formatAmountInput(e.target.value))}
+                              placeholder="1,000"
+                            />
+                          </div>
+                          <div className="md:col-span-2">
+                            <Label>פרטי תשלום</Label>
+                            <Input value={schoolPayoutNotes} onChange={(e) => setSchoolPayoutNotes(e.target.value)} placeholder="מספר שיק / בנק / הערה" />
+                          </div>
+                          <div className="md:col-span-2 flex justify-end gap-2 pt-2">
+                            <Button type="button" variant="outline" onClick={() => setIsPayoutModalOpen(false)}>
+                              ביטול
+                            </Button>
+                            <Button
+                              type="button"
+                              disabled={!canEditPaymentsTab || !schoolPayoutTargetKey || schoolPayoutSaving}
+                              onClick={() => void submitPayoutFromModal()}
+                            >
+                              {schoolPayoutSaving ? "שומר..." : "שמור תשלום"}
+                            </Button>
+                          </div>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
 
                     {teacherProgramMonthlyRows.length === 0 ? (
                       <p className="py-8 text-center text-muted-foreground">אין שעות מורים לחישוב תשלומים</p>
