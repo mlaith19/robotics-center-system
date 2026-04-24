@@ -376,6 +376,23 @@ export default function UserPermissionsPage() {
           </Tabs>
         </CardContent>
       </Card>
+
+      <div className="sticky bottom-2 z-20 rounded-xl border bg-white/95 p-3 shadow-lg backdrop-blur">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <span className="text-sm text-muted-foreground">
+            משתמש: {formData.name || user.name || "—"} | תפקיד: {getRoleById(selectedRole)?.name || selectedRole}
+          </span>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => router.push("/dashboard/users")}>
+              ביטול
+            </Button>
+            <Button onClick={savePermissions} disabled={saving} className="gap-2">
+              <Save className="h-4 w-4" />
+              {saving ? "שומר..." : "שמור שינויים"}
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
