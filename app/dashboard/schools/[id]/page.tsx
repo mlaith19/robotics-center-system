@@ -34,6 +34,7 @@ import {
   Plus,
   UserPlus,
   Trash2,
+  CircleOff,
 } from "lucide-react"
 import {
   Dialog,
@@ -346,8 +347,9 @@ function buildSchoolCheckOutDescription(input: {
   checkNumber: string
   payee: string
   amount: number
+  noVat?: boolean
 }) {
-  return `${SCHOOL_CHECK_OUT_PREFIX}${input.schoolId}]|rowId=${encodeURIComponent(input.rowId)}|checkNo=${encodeURIComponent(input.checkNumber)}|payee=${encodeURIComponent(input.payee)}|amount=${encodeURIComponent(String(input.amount))}`
+  return `${SCHOOL_CHECK_OUT_PREFIX}${input.schoolId}]|rowId=${encodeURIComponent(input.rowId)}|checkNo=${encodeURIComponent(input.checkNumber)}|payee=${encodeURIComponent(input.payee)}|amount=${encodeURIComponent(String(input.amount))}|noVat=${input.noVat ? "1" : "0"}`
 }
 
 function parseSchoolCheckOutDescription(raw: string | null | undefined) {
@@ -368,6 +370,7 @@ function parseSchoolCheckOutDescription(raw: string | null | undefined) {
     checkNumber: kv.checkNo || "",
     payee: kv.payee || "",
     amount: Number(kv.amount || 0),
+    noVat: kv.noVat === "1",
   }
 }
 
@@ -1208,6 +1211,7 @@ export default function SchoolViewPage() {
       checkNumber: checkOutNumber.trim(),
       payee: checkOutPayee.trim(),
       amount,
+      noVat: false,
     })
     setCheckOutSaving(true)
     try {
@@ -1299,6 +1303,7 @@ export default function SchoolViewPage() {
       checkNumber,
       payee,
       amount,
+      noVat: Boolean(meta.noVat),
     })
     try {
       const res = await fetch(`/api/payments/${encodeURIComponent(paymentId)}`, {
@@ -1331,6 +1336,39 @@ export default function SchoolViewPage() {
       await reloadTabData()
     } catch {
       alert("שגיאה במחיקת שיק")
+    }
+  }
+
+  const toggleSchoolCheckOutVatZero = async (
+    paymentId: string,
+    paymentDate: string,
+    meta: NonNullable<ReturnType<typeof parseSchoolCheckOutDescription>>,
+  ) => {
+    if (!school?.id || !paymentId) return
+    const description = buildSchoolCheckOutDescription({
+      schoolId: school.id,
+      rowId: meta.rowId,
+      checkNumber: meta.checkNumber || "",
+      payee: meta.payee || "",
+      amount: Number(meta.amount || 0),
+      noVat: !Boolean(meta.noVat),
+    })
+    try {
+      const res = await fetch(`/api/payments/${encodeURIComponent(paymentId)}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: Number(meta.amount || 0),
+          paymentDate: paymentDate ? String(paymentDate).slice(0, 10) : new Date().toISOString().slice(0, 10),
+          paymentType: "check",
+          description,
+        }),
+      })
+      if (!res.ok) throw new Error("failed")
+      await reloadTabData()
+    } catch {
+      alert("שגיאה בעדכון מע\"מ לשיק")
     }
   }
 
@@ -1517,7 +1555,7 @@ export default function SchoolViewPage() {
         paymentDate: string
         meta: NonNullable<ReturnType<typeof parseSchoolCheckOutDescription>>
       }>
-    const outByRowId = new Map<string, Array<{ paymentId: string; paymentDate: string; checkNumber: string; payee: string; amount: number }>>()
+    const outByRowId = new Map<string, Array<{ paymentId: string; paymentDate: string; checkNumber: string; payee: string; amount: number; noVat: boolean }>>()
     for (const row of outRows) {
       const key = String(row.meta.rowId || "")
       if (!key) continue
@@ -1528,6 +1566,7 @@ export default function SchoolViewPage() {
         checkNumber: row.meta.checkNumber || "",
         payee: row.meta.payee || "",
         amount: Number(row.meta.amount || 0),
+        noVat: Boolean(row.meta.noVat),
       })
       outByRowId.set(key, arr)
     }
@@ -1539,9 +1578,8 @@ export default function SchoolViewPage() {
         const schoolAmount = Number(row.meta.amount || 0)
         const balance = Math.round((schoolAmount - paid) * 100) / 100
         const schoolVat = Math.round((schoolAmount * VAT_RATE) * 100) / 100
-        const myVat = Math.round((paid * VAT_RATE) * 100) / 100
-        const status: "open" | "partial" | "closed" =
-          paid <= 0 ? "open" : balance > 0 ? "partial" : "closed"
+        const myVat = Math.round((myChecks.reduce((s, m) => s + (m.noVat ? 0 : Number(m.amount || 0) * VAT_RATE), 0)) * 100) / 100
+        const vatBalance = Math.round((schoolVat - myVat) * 100) / 100
         return {
           serial: idx + 1,
           rowId,
@@ -1554,9 +1592,9 @@ export default function SchoolViewPage() {
           schoolVat,
           myAmount: paid,
           myVat,
+          vatBalance,
           myChecks,
           balance,
-          status,
         }
       })
       .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)))
@@ -2810,13 +2848,12 @@ export default function SchoolViewPage() {
                         <TableHeader>
                           <TableRow className="bg-muted/50">
                             <TableHead className="text-right">מס׳ סידורי</TableHead>
-                            <TableHead className="text-right">סוג</TableHead>
                             <TableHead className="text-right">פרטים</TableHead>
                             <TableHead className="text-right">זכות</TableHead>
                             <TableHead className="text-right">מע"מ זכות</TableHead>
                             <TableHead className="text-right">חובה</TableHead>
                             <TableHead className="text-right">מע"מ חובה</TableHead>
-                            <TableHead className="text-right">מצב</TableHead>
+                            <TableHead className="text-right">יתרת מע"מ</TableHead>
                             <TableHead className="text-right">יתרה</TableHead>
                             <TableHead className="text-right">פעולות</TableHead>
                           </TableRow>
@@ -2826,8 +2863,8 @@ export default function SchoolViewPage() {
                             <Fragment key={r.rowId}>
                               <TableRow className="bg-rose-50/40">
                                 <TableCell className="font-semibold">#{r.serial}</TableCell>
-                                <TableCell className="font-medium text-rose-700">זכות</TableCell>
                                 <TableCell className="text-sm">
+                                  <div className="mb-1 font-medium text-rose-700">זכות</div>
                                   <div><b>תאריך פרעון:</b> {r.dueDate ? new Date(`${r.dueDate}T12:00:00`).toLocaleDateString("he-IL") : "—"}</div>
                                   <div><b>מס׳ שיק:</b> {r.checkNumber || "—"}</div>
                                   <div><b>תוכנית:</b> {r.programName || "—"}</div>
@@ -2836,18 +2873,11 @@ export default function SchoolViewPage() {
                                 <TableCell>₪{r.schoolVat.toLocaleString()}</TableCell>
                                 <TableCell className="text-muted-foreground">—</TableCell>
                                 <TableCell className="text-muted-foreground">—</TableCell>
-                                <TableCell rowSpan={Math.max(1, r.myChecks.length) + 1}>
-                                  <Badge
-                                    className={
-                                      r.status === "closed"
-                                        ? "bg-emerald-100 text-emerald-800"
-                                        : r.status === "partial"
-                                          ? "bg-amber-100 text-amber-800"
-                                          : "bg-rose-100 text-rose-800"
-                                    }
-                                  >
-                                    {r.status === "closed" ? "נסגר" : r.status === "partial" ? "חלקי" : "פתוח"}
-                                  </Badge>
+                                <TableCell
+                                  rowSpan={Math.max(1, r.myChecks.length) + 1}
+                                  className={r.vatBalance >= 0 ? "font-semibold text-rose-700" : "font-semibold text-emerald-700"}
+                                >
+                                  ₪{r.vatBalance.toLocaleString()}
                                 </TableCell>
                                 <TableCell
                                   rowSpan={Math.max(1, r.myChecks.length) + 1}
@@ -2869,8 +2899,7 @@ export default function SchoolViewPage() {
                               {r.myChecks.length === 0 ? (
                                 <TableRow className="bg-blue-50/20">
                                   <TableCell className="font-semibold">#{r.serial}</TableCell>
-                                  <TableCell className="font-medium text-blue-700">חובה</TableCell>
-                                  <TableCell className="text-muted-foreground">אין שיקים</TableCell>
+                                  <TableCell className="text-muted-foreground"><span className="font-medium text-blue-700">חובה</span> - אין שיקים</TableCell>
                                   <TableCell className="text-muted-foreground">—</TableCell>
                                   <TableCell className="text-muted-foreground">—</TableCell>
                                   <TableCell className="font-medium text-blue-700">₪0</TableCell>
@@ -2890,17 +2919,39 @@ export default function SchoolViewPage() {
                                 r.myChecks.map((c) => (
                                   <TableRow key={c.paymentId} className="bg-blue-50/20">
                                     <TableCell className="font-semibold">#{r.serial}</TableCell>
-                                    <TableCell className="font-medium text-blue-700">חובה</TableCell>
                                     <TableCell className="text-sm">
+                                      <div className="mb-1 font-medium text-blue-700">חובה</div>
                                       <div><b>מס׳ שיק:</b> {c.checkNumber || "—"}</div>
                                       <div><b>למי מיועד:</b> {c.payee || "—"}</div>
                                     </TableCell>
                                     <TableCell className="text-muted-foreground">—</TableCell>
                                     <TableCell className="text-muted-foreground">—</TableCell>
                                     <TableCell className="font-medium text-blue-700">₪{Number(c.amount || 0).toLocaleString()}</TableCell>
-                                    <TableCell>₪{Math.round(Number(c.amount || 0) * VAT_RATE * 100) / 100}</TableCell>
+                                    <TableCell>₪{c.noVat ? 0 : Math.round(Number(c.amount || 0) * VAT_RATE * 100) / 100}</TableCell>
                                     <TableCell>
                                       <div className="flex gap-2">
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          title={c.noVat ? "בטל אפס מע\"מ" : "אפס מע\"מ לשיק הזה"}
+                                          onClick={() =>
+                                            void toggleSchoolCheckOutVatZero(
+                                              c.paymentId,
+                                              c.paymentDate,
+                                              {
+                                                schoolId: String(school?.id || ""),
+                                                rowId: r.rowId,
+                                                checkNumber: c.checkNumber,
+                                                payee: c.payee,
+                                                amount: Number(c.amount || 0),
+                                                noVat: Boolean(c.noVat),
+                                              },
+                                            )
+                                          }
+                                        >
+                                          <CircleOff className="h-4 w-4" />
+                                        </Button>
                                         <Button
                                           type="button"
                                           variant="outline"
