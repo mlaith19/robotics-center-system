@@ -230,56 +230,8 @@ export default function UsersPage() {
     setIsDialogOpen(true)
   }
 
-  async function openEdit(user: User & { username?: string }) {
-    setEditingUser(user)
-    setFormData({
-      name: user.name ?? "",
-      email: user.email ?? "",
-      phone: user.phone ?? "",
-      username: user.username ?? "",
-      password: "",
-    })
-    const role = (user.role as RoleType) || "other"
-    setSelectedRole(role)
-    const dbPerms = Array.isArray(user.permissions) ? user.permissions : []
-    if (dbPerms.length > 0) {
-      setSelectedPermissions(dbPerms)
-      setInitialPermissions(dbPerms)
-    } else {
-      const preset = getRoleById(role)
-      const rolePerms = preset ? [...preset.permissions] : []
-      setSelectedPermissions(rolePerms)
-      setInitialPermissions(rolePerms)
-    }
-    setIsDialogOpen(true)
-    if (user.id) {
-      try {
-        const res = await fetch(`/api/users/${user.id}`, { cache: "no-store" })
-        if (res.ok) {
-          const data = (await res.json()) as User & { permissions?: string[]; role?: string }
-          setFormData({
-            name: data.name ?? "",
-            email: data.email ?? "",
-            phone: data.phone ?? "",
-            username: data.username ?? "",
-            password: "",
-          })
-          const freshRole = (data.role as RoleType) || "other"
-          setSelectedRole(freshRole)
-          const freshPerms = Array.isArray(data.permissions) ? data.permissions : []
-          if (freshPerms.length > 0) {
-            setSelectedPermissions(freshPerms)
-            setInitialPermissions(freshPerms)
-          } else {
-            const preset = getRoleById(freshRole)
-            const rolePerms = preset ? [...preset.permissions] : []
-            setSelectedPermissions(rolePerms)
-            setInitialPermissions(rolePerms)
-          }
-          setEditingUser(data)
-        }
-      } catch (_) {}
-    }
+  function openEdit(user: User & { username?: string }) {
+    router.push(`/dashboard/users/${user.id}/permissions`)
   }
 
   async function createUser() {
@@ -750,7 +702,7 @@ export default function UsersPage() {
           </CardContent>
         </Card>
 
-        {isDialogOpen ? (
+        {isDialogOpen && !editingUser ? (
           <Card className="border-2 border-indigo-200 bg-gradient-to-b from-indigo-50/70 to-white">
             <CardHeader className="space-y-3">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
