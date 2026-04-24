@@ -2735,11 +2735,11 @@ export default function SchoolViewPage() {
                       <div className="rounded-lg bg-rose-100 p-2">
                         <BarChart3 className="h-5 w-5 text-rose-600" />
                       </div>
-                      <CardTitle className="text-lg text-rose-800">שיקים - צד בית ספר מול צד שלי</CardTitle>
+                      <CardTitle className="text-lg text-rose-800">שיקים - זכות / חובה</CardTitle>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <Badge className="bg-blue-100 text-blue-800">סה"כ צד בית ספר: ₪{schoolChecksRows.totalSchool.toLocaleString()}</Badge>
-                      <Badge className="bg-green-100 text-green-800">סה"כ צד שלי: ₪{schoolChecksRows.totalMine.toLocaleString()}</Badge>
+                      <Badge className="bg-blue-100 text-blue-800">סה"כ זכות: ₪{schoolChecksRows.totalSchool.toLocaleString()}</Badge>
+                      <Badge className="bg-green-100 text-green-800">סה"כ חובה: ₪{schoolChecksRows.totalMine.toLocaleString()}</Badge>
                       <Badge className={schoolChecksRows.totalBalance >= 0 ? "bg-rose-100 text-rose-800" : "bg-emerald-100 text-emerald-800"}>
                         יתרה כוללת: ₪{schoolChecksRows.totalBalance.toLocaleString()}
                       </Badge>
@@ -2749,7 +2749,7 @@ export default function SchoolViewPage() {
                 <CardContent className="space-y-4">
                   <div className="space-y-3 rounded-md border bg-muted/30 p-3">
                     <div className="space-y-2 rounded-md border bg-white p-3">
-                      <h4 className="font-semibold text-rose-700">הוספת שיק - צד בית הספר</h4>
+                      <h4 className="font-semibold text-rose-700">הוספת שיק זכות</h4>
                       <div className="grid gap-2 sm:grid-cols-2">
                         <div><Label>תאריך פרעון</Label><Input type="date" value={checkInDueDate} onChange={(e) => setCheckInDueDate(e.target.value)} /></div>
                         <div><Label>מספר שיק</Label><Input value={checkInNumber} onChange={(e) => setCheckInNumber(e.target.value)} placeholder="מס שיק" /></div>
@@ -2769,10 +2769,10 @@ export default function SchoolViewPage() {
                       </Button>
                     </div>
                     <div className="space-y-2 rounded-md border bg-white p-3">
-                      <h4 className="font-semibold text-blue-700">הוספת שיק - צד שלי</h4>
+                      <h4 className="font-semibold text-blue-700">הוספת שיק חובה</h4>
                       <div className="grid gap-2 sm:grid-cols-2">
                         <div className="sm:col-span-2">
-                          <Label>שורה מצד בית הספר</Label>
+                          <Label>שורת זכות</Label>
                           <Select value={checkOutTargetRowId} onValueChange={setCheckOutTargetRowId}>
                             <SelectTrigger><SelectValue placeholder="בחר שורה" /></SelectTrigger>
                             <SelectContent>
@@ -2810,28 +2810,53 @@ export default function SchoolViewPage() {
                         <TableHeader>
                           <TableRow className="bg-muted/50">
                             <TableHead className="text-right">מס׳ סידורי</TableHead>
-                            <TableHead className="text-right">צד בית ספר</TableHead>
-                            <TableHead className="text-right">צד שלי</TableHead>
-                            <TableHead className="text-right">זכות (בית ספר)</TableHead>
+                            <TableHead className="text-right">סוג</TableHead>
+                            <TableHead className="text-right">פרטים</TableHead>
+                            <TableHead className="text-right">זכות</TableHead>
                             <TableHead className="text-right">מע"מ זכות</TableHead>
-                            <TableHead className="text-right">חובה (צד שלי)</TableHead>
+                            <TableHead className="text-right">חובה</TableHead>
                             <TableHead className="text-right">מע"מ חובה</TableHead>
                             <TableHead className="text-right">מצב</TableHead>
                             <TableHead className="text-right">יתרה</TableHead>
-                            <TableHead className="text-right">פעולות שורה</TableHead>
+                            <TableHead className="text-right">פעולות</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {schoolChecksRows.rows.map((r) => (
-                            <TableRow key={r.rowId}>
-                              <TableCell className="font-semibold">#{r.serial}</TableCell>
-                              <TableCell>
-                                <div className="text-sm">
+                            <Fragment key={r.rowId}>
+                              <TableRow className="bg-rose-50/40">
+                                <TableCell className="font-semibold">#{r.serial}</TableCell>
+                                <TableCell className="font-medium text-rose-700">זכות</TableCell>
+                                <TableCell className="text-sm">
                                   <div><b>תאריך פרעון:</b> {r.dueDate ? new Date(`${r.dueDate}T12:00:00`).toLocaleDateString("he-IL") : "—"}</div>
                                   <div><b>מס׳ שיק:</b> {r.checkNumber || "—"}</div>
                                   <div><b>תוכנית:</b> {r.programName || "—"}</div>
-                                  <div><b>סכום:</b> ₪{r.schoolAmount.toLocaleString()}</div>
-                                  <div className="mt-2 flex gap-2">
+                                </TableCell>
+                                <TableCell className="font-medium text-emerald-700">₪{r.schoolAmount.toLocaleString()}</TableCell>
+                                <TableCell>₪{r.schoolVat.toLocaleString()}</TableCell>
+                                <TableCell className="text-muted-foreground">—</TableCell>
+                                <TableCell className="text-muted-foreground">—</TableCell>
+                                <TableCell rowSpan={Math.max(1, r.myChecks.length) + 1}>
+                                  <Badge
+                                    className={
+                                      r.status === "closed"
+                                        ? "bg-emerald-100 text-emerald-800"
+                                        : r.status === "partial"
+                                          ? "bg-amber-100 text-amber-800"
+                                          : "bg-rose-100 text-rose-800"
+                                    }
+                                  >
+                                    {r.status === "closed" ? "נסגר" : r.status === "partial" ? "חלקי" : "פתוח"}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell
+                                  rowSpan={Math.max(1, r.myChecks.length) + 1}
+                                  className={r.balance >= 0 ? "font-semibold text-rose-700" : "font-semibold text-emerald-700"}
+                                >
+                                  ₪{r.balance.toLocaleString()}
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex gap-2">
                                     <Button type="button" variant="outline" size="sm" onClick={() => void updateSchoolCheckIn(r.paymentId, r.meta)}>
                                       <Pencil className="h-4 w-4" />
                                     </Button>
@@ -2839,95 +2864,72 @@ export default function SchoolViewPage() {
                                       <Trash2 className="h-4 w-4 text-red-600" />
                                     </Button>
                                   </div>
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                {r.myChecks.length === 0 ? (
-                                  <span className="text-muted-foreground">אין שיקים בצד שלי</span>
-                                ) : (
-                                  <div className="space-y-2">
-                                    {r.myChecks.map((c, idx) => (
-                                      <div key={c.paymentId} className="rounded border bg-blue-50/40 p-2 text-sm">
-                                        <div className="font-semibold">שיק {idx + 1}</div>
-                                        <div><b>מס׳ שיק:</b> {c.checkNumber || "—"}</div>
-                                        <div><b>למי מיועד:</b> {c.payee || "—"}</div>
-                                        <div><b>סכום:</b> ₪{Number(c.amount || 0).toLocaleString()}</div>
-                                        <div className="mt-2 flex gap-2">
-                                          <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() =>
-                                              void updateSchoolCheckOut(
-                                                c.paymentId,
-                                                c.paymentDate,
-                                                {
-                                                  schoolId: String(school?.id || ""),
-                                                  rowId: r.rowId,
-                                                  checkNumber: c.checkNumber,
-                                                  payee: c.payee,
-                                                  amount: Number(c.amount || 0),
-                                                },
-                                              )
-                                            }
-                                          >
-                                            <Pencil className="h-4 w-4" />
-                                          </Button>
-                                          <Button type="button" variant="outline" size="sm" onClick={() => void deleteSchoolCheckPayment(c.paymentId)}>
-                                            <Trash2 className="h-4 w-4 text-red-600" />
-                                          </Button>
-                                        </div>
+                                </TableCell>
+                              </TableRow>
+                              {r.myChecks.length === 0 ? (
+                                <TableRow className="bg-blue-50/20">
+                                  <TableCell className="font-semibold">#{r.serial}</TableCell>
+                                  <TableCell className="font-medium text-blue-700">חובה</TableCell>
+                                  <TableCell className="text-muted-foreground">אין שיקים</TableCell>
+                                  <TableCell className="text-muted-foreground">—</TableCell>
+                                  <TableCell className="text-muted-foreground">—</TableCell>
+                                  <TableCell className="font-medium text-blue-700">₪0</TableCell>
+                                  <TableCell>₪0</TableCell>
+                                  <TableCell>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => setCheckOutTargetRowId(r.rowId)}
+                                    >
+                                      <Pencil className="h-4 w-4" />
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                              ) : (
+                                r.myChecks.map((c) => (
+                                  <TableRow key={c.paymentId} className="bg-blue-50/20">
+                                    <TableCell className="font-semibold">#{r.serial}</TableCell>
+                                    <TableCell className="font-medium text-blue-700">חובה</TableCell>
+                                    <TableCell className="text-sm">
+                                      <div><b>מס׳ שיק:</b> {c.checkNumber || "—"}</div>
+                                      <div><b>למי מיועד:</b> {c.payee || "—"}</div>
+                                    </TableCell>
+                                    <TableCell className="text-muted-foreground">—</TableCell>
+                                    <TableCell className="text-muted-foreground">—</TableCell>
+                                    <TableCell className="font-medium text-blue-700">₪{Number(c.amount || 0).toLocaleString()}</TableCell>
+                                    <TableCell>₪{Math.round(Number(c.amount || 0) * VAT_RATE * 100) / 100}</TableCell>
+                                    <TableCell>
+                                      <div className="flex gap-2">
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() =>
+                                            void updateSchoolCheckOut(
+                                              c.paymentId,
+                                              c.paymentDate,
+                                              {
+                                                schoolId: String(school?.id || ""),
+                                                rowId: r.rowId,
+                                                checkNumber: c.checkNumber,
+                                                payee: c.payee,
+                                                amount: Number(c.amount || 0),
+                                              },
+                                            )
+                                          }
+                                        >
+                                          <Pencil className="h-4 w-4" />
+                                        </Button>
+                                        <Button type="button" variant="outline" size="sm" onClick={() => void deleteSchoolCheckPayment(c.paymentId)}>
+                                          <Trash2 className="h-4 w-4 text-red-600" />
+                                        </Button>
                                       </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </TableCell>
-                              <TableCell className="font-medium text-emerald-700">₪{r.schoolAmount.toLocaleString()}</TableCell>
-                              <TableCell>₪{r.schoolVat.toLocaleString()}</TableCell>
-                              <TableCell className="font-medium text-blue-700">₪{r.myAmount.toLocaleString()}</TableCell>
-                              <TableCell>₪{r.myVat.toLocaleString()}</TableCell>
-                              <TableCell>
-                                <Badge
-                                  className={
-                                    r.status === "closed"
-                                      ? "bg-emerald-100 text-emerald-800"
-                                      : r.status === "partial"
-                                        ? "bg-amber-100 text-amber-800"
-                                        : "bg-rose-100 text-rose-800"
-                                  }
-                                >
-                                  {r.status === "closed" ? "נסגר" : r.status === "partial" ? "חלקי" : "פתוח"}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className={r.balance >= 0 ? "font-semibold text-rose-700" : "font-semibold text-emerald-700"}>
-                                ₪{r.balance.toLocaleString()}
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex gap-2">
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      setCheckOutTargetRowId(r.rowId)
-                                    }}
-                                  >
-                                    <Pencil className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      if (!window.confirm("למחוק את כל השיקים בצד שלך עבור שורה זו?")) return
-                                      void Promise.all(r.myChecks.map((c) => deleteSchoolCheckPayment(c.paymentId)))
-                                    }}
-                                  >
-                                    <Trash2 className="h-4 w-4 text-red-600" />
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            </TableRow>
+                                    </TableCell>
+                                  </TableRow>
+                                ))
+                              )}
+                            </Fragment>
                           ))}
                         </TableBody>
                       </Table>
