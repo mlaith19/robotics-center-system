@@ -32,6 +32,15 @@ async function ensurePaymentCourseIdColumn(db: any) {
   }
 }
 
+async function ensurePaymentStudentIdNullable(db: any) {
+  try {
+    await db`ALTER TABLE "Payment" ALTER COLUMN "studentId" DROP NOT NULL`
+  } catch (err) {
+    // Some tenants may already have nullable studentId or restricted privileges; keep best-effort.
+    console.warn("[payments] ensure studentId nullable skipped:", err)
+  }
+}
+
 export const GET = withTenantAuth(async (req, session) => {
   if (!canReadPayments(session)) {
     const permErr = requirePerm(session, "cashier.view")
@@ -279,6 +288,7 @@ export const POST = withTenantAuth(async (req, session) => {
 
   try {
     await ensurePaymentCourseIdColumn(db)
+    await ensurePaymentStudentIdNullable(db)
     const body = await req.json()
     const { studentId, amount, date, paymentMethod, paymentType, description, siblingPackageId, applySiblingDiscount, courseId } = body
     const createdByUserId = session.id

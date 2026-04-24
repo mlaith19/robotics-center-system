@@ -2842,11 +2842,13 @@ export default function SchoolViewPage() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="grid gap-3 rounded-md border bg-muted/30 p-3 sm:grid-cols-2 lg:grid-cols-6">
-                      <div className="space-y-1">
+                    <div className="grid gap-2 rounded-md border bg-muted/30 p-3 sm:grid-cols-2 lg:grid-cols-12">
+                      <div className="space-y-1 sm:col-span-2 lg:col-span-4">
                         <Label>מורה/תוכנית/חודש</Label>
                         <Select value={schoolPayoutTargetKey} onValueChange={setSchoolPayoutTargetKey}>
-                          <SelectTrigger><SelectValue placeholder="בחר יעד תשלום" /></SelectTrigger>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="בחר יעד תשלום" />
+                          </SelectTrigger>
                           <SelectContent>
                             {teacherProgramMonthlyRows.map((r) => (
                               <SelectItem key={r.key} value={r.key}>
@@ -2856,11 +2858,11 @@ export default function SchoolViewPage() {
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="space-y-1">
+                      <div className="space-y-1 lg:col-span-2">
                         <Label>תאריך</Label>
                         <Input type="date" value={schoolPayoutDate} onChange={(e) => setSchoolPayoutDate(e.target.value)} />
                       </div>
-                      <div className="space-y-1">
+                      <div className="space-y-1 lg:col-span-2">
                         <Label>שיטת תשלום</Label>
                         <Select value={schoolPayoutMethod} onValueChange={(v: "cash" | "transfer" | "check") => setSchoolPayoutMethod(v)}>
                           <SelectTrigger><SelectValue /></SelectTrigger>
@@ -2871,15 +2873,15 @@ export default function SchoolViewPage() {
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="space-y-1">
+                      <div className="space-y-1 lg:col-span-2">
                         <Label>סכום</Label>
                         <Input type="number" min="0" step="0.01" value={schoolPayoutAmount} onChange={(e) => setSchoolPayoutAmount(e.target.value)} placeholder="0" />
                       </div>
-                      <div className="space-y-1 sm:col-span-2">
+                      <div className="space-y-1 sm:col-span-2 lg:col-span-10">
                         <Label>פרטי תשלום</Label>
                         <Input value={schoolPayoutNotes} onChange={(e) => setSchoolPayoutNotes(e.target.value)} placeholder="מספר שיק / בנק / הערה" />
                       </div>
-                      <div className="flex items-end">
+                      <div className="flex items-end lg:col-span-2">
                         <Button type="button" disabled={!schoolPayoutTargetKey || schoolPayoutSaving} onClick={() => void createSchoolPayout()} className="w-full">
                           {schoolPayoutSaving ? "שומר..." : "הוסף תשלום"}
                         </Button>
