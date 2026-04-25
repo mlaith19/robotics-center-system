@@ -33,6 +33,74 @@ function calcHours(row: Record<string, unknown>): number {
   return 0
 }
 
+const DEFAULT_GAFAN_TEACHING_HOURLY_RATE = 50
+const DEFAULT_GAFAN_TRAVEL_HOURLY_RATE = 30
+
+function normalizePersonName(raw: unknown): string {
+  return String(raw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/["'`׳״]/g, "")
+    .replace(/\s+/g, " ")
+}
+
+function normalizeTeacherIdsList(raw: unknown): string[] {
+  let input: unknown = raw
+  if (typeof input === "string") {
+    const s = input.trim()
+    if (!s) return []
+    try {
+      input = JSON.parse(s)
+    } catch {
+      input = s.includes(",") ? s.split(",").map((x) => x.trim()) : [s]
+    }
+  }
+  if (!Array.isArray(input)) return []
+  return input.map((x) => String(x || "").trim()).filter(Boolean)
+}
+
+function normalizeTeacherRatesMap(
+  raw: unknown,
+): Record<string, { teachingHourlyRate: number; travelHourlyRate: number; officeHourlyRate?: number }> {
+  let input: unknown = raw
+  if (typeof input === "string") {
+    try {
+      input = JSON.parse(input)
+    } catch {
+      input = {}
+    }
+  }
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {}
+  const out: Record<string, { teachingHourlyRate: number; travelHourlyRate: number; officeHourlyRate?: number }> = {}
+  for (const [teacherId, value] of Object.entries(input as Record<string, unknown>)) {
+    const tid = String(teacherId || "").trim()
+    if (!tid) continue
+    const v = (value ?? {}) as Record<string, unknown>
+    const teaching = Number(v.teachingHourlyRate ?? 0)
+    const travel = Number(v.travelHourlyRate ?? v.officeHourlyRate ?? 0)
+    out[tid] = {
+      teachingHourlyRate: Number.isFinite(teaching) && teaching >= 0 ? teaching : 0,
+      travelHourlyRate: Number.isFinite(travel) && travel >= 0 ? travel : 0,
+    }
+  }
+  return out
+}
+
+function normalizeGafanHourRowsList(
+  raw: unknown,
+): Array<{ date?: string; teacherName?: string; teacherId?: string; totalHours?: number | string; pendingAssignment?: boolean }> {
+  let input: unknown = raw
+  if (typeof input === "string") {
+    try {
+      input = JSON.parse(input)
+    } catch {
+      input = []
+    }
+  }
+  if (!Array.isArray(input)) return []
+  return input as Array<{ date?: string; teacherName?: string; teacherId?: string; totalHours?: number | string; pendingAssignment?: boolean }>
+}
+
 export const GET = withTenantAuth(async (req, session) => {
   const forbidden = await requireReportAccess(req, session, "finance/teacher-debts")
   if (forbidden) return forbidden
@@ -129,6 +197,12 @@ export const GET = withTenantAuth(async (req, session) => {
     const teachersById = new Map<string, Record<string, unknown>>(
       teacherRows.map((t) => [String(t.id || ""), t]),
     )
+    const teacherIdByNormalizedName = new Map<string, string>()
+    for (const t of teacherRows) {
+      const tid = String(t.id || "")
+      const nm = normalizePersonName(t.name)
+      if (tid && nm) teacherIdByNormalizedName.set(nm, tid)
+    }
 
     const enrollmentRows = await db<{ courseId: string; cnt: number }[]>`
       SELECT "courseId" AS "courseId", COUNT(*)::int AS cnt
@@ -187,6 +261,53 @@ export const GET = withTenantAuth(async (req, session) => {
       }
       const prev = dueByTeacher.get(teacherId) ?? 0
       dueByTeacher.set(teacherId, prev + hours * Math.max(0, rate))
+    }
+
+    const gafanRows = await db<Record<string, unknown>[]>`
+      SELECT
+        COALESCE(l."teacherIds", '[]'::jsonb) AS "teacherIds",
+        COALESCE(l."teacherRates", '{}'::jsonb) AS "teacherRates",
+        COALESCE(l."hourRows", '[]'::jsonb) AS "hourRows"
+      FROM "GafanSchoolLink" l
+    `
+    for (const g of gafanRows) {
+      const teacherIds = normalizeTeacherIdsList(g.teacherIds)
+      const rateMap = normalizeTeacherRatesMap(g.teacherRates)
+      const hourRows = normalizeGafanHourRowsList(g.hourRows)
+      for (const hr of hourRows) {
+        if (hr?.pendingAssignment === true) continue
+        const ymd = String(hr?.date || "").trim().slice(0, 10)
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) continue
+        if (startDate && ymd < startDate) continue
+        if (endDate && ymd > endDate) continue
+
+        const rowTeacherId = String(hr?.teacherId || "").trim()
+        const rowTeacherName = normalizePersonName(hr?.teacherName)
+        let teacherId = rowTeacherId
+        if (!teacherId && rowTeacherName) teacherId = teacherIdByNormalizedName.get(rowTeacherName) || ""
+        if (!teacherId && teacherIds.length === 1) teacherId = teacherIds[0]
+        if (!teacherId) continue
+
+        const hours = Number(hr?.totalHours || 0)
+        if (!Number.isFinite(hours) || hours <= 0) continue
+
+        const teacherRateRow =
+          (rowTeacherId && Object.prototype.hasOwnProperty.call(rateMap, rowTeacherId) ? rateMap[rowTeacherId] : undefined) ??
+          (Object.prototype.hasOwnProperty.call(rateMap, teacherId) ? rateMap[teacherId] : undefined) ??
+          (() => {
+            const assignedRate = teacherIds.map((tid) => rateMap[tid]).find(Boolean)
+            if (assignedRate) return assignedRate
+            return Object.values(rateMap)[0]
+          })()
+
+        const teachingRate = Number(teacherRateRow?.teachingHourlyRate ?? DEFAULT_GAFAN_TEACHING_HOURLY_RATE)
+        const travelRate = Number(
+          teacherRateRow?.travelHourlyRate ?? teacherRateRow?.officeHourlyRate ?? DEFAULT_GAFAN_TRAVEL_HOURLY_RATE,
+        )
+        const appliedRate = Math.max(0, teachingRate + travelRate)
+        const prev = dueByTeacher.get(teacherId) ?? 0
+        dueByTeacher.set(teacherId, prev + hours * appliedRate)
+      }
     }
 
     const paidByTeacher = new Map<string, number>()
