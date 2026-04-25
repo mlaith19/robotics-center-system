@@ -107,6 +107,20 @@ export function ReportView({ title, apiPath, filters = [], optionsFetch = {}, co
     }
   }, [apiPath, startDate, endDate, page, filterValues, filters, t])
 
+  useEffect(() => {
+    loadOptions()
+  }, [loadOptions])
+
+  const colDefs: { key: string; label: string }[] =
+    columns?.length
+      ? columns
+      : data?.rows?.[0]
+        ? Object.keys(data.rows[0] as object).filter((k) => {
+            const v = (data.rows[0] as Record<string, unknown>)[k]
+            return typeof v !== "object" || v === null
+          }).map((k) => ({ key: k, label: k }))
+        : []
+
   const exportCsv = useCallback(() => {
     if (!data?.rows?.length) return
     const cols = columns || (data.rows[0] && Object.keys(data.rows[0] as object).filter((k) => typeof (data.rows[0] as Record<string, unknown>)[k] !== "object"))
@@ -219,20 +233,6 @@ export function ReportView({ title, apiPath, filters = [], optionsFetch = {}, co
     reportWindow.focus()
     setTimeout(() => reportWindow.print(), 250)
   }, [colDefs, data, endDate, startDate, title])
-
-  useEffect(() => {
-    loadOptions()
-  }, [loadOptions])
-
-  const colDefs: { key: string; label: string }[] =
-    columns?.length
-      ? columns
-      : data?.rows?.[0]
-        ? Object.keys(data.rows[0] as object).filter((k) => {
-            const v = (data.rows[0] as Record<string, unknown>)[k]
-            return typeof v !== "object" || v === null
-          }).map((k) => ({ key: k, label: k }))
-        : []
 
   return (
     <div className="container mx-auto max-w-7xl space-y-4 p-3 sm:space-y-6 sm:p-6" dir="rtl">
