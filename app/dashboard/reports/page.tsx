@@ -18,7 +18,8 @@ const reportCategories = [
     title: "כספים",
     items: [
       { href: "/dashboard/reports/finance/revenue", label: "הכנסות", icon: TrendingUp, description: "תשלומים והכנסות לפי תקופה" },
-      { href: "/dashboard/reports/finance/debts", label: "חובות", icon: Wallet, description: "תלמידים עם יתרת חוב" },
+      { href: "/dashboard/reports/finance/debts", label: "חובות תלמידים", icon: Wallet, description: "תלמידים עם יתרת חוב" },
+      { href: "/dashboard/reports/finance/teacher-debts", label: "חובות מורים", icon: Wallet, description: "מורים עם יתרת חוב לתשלום" },
     ],
   },
   {

@@ -14,6 +14,7 @@ export type ReportType =
   | "courses"
   | "finance/revenue"
   | "finance/debts"
+  | "finance/teacher-debts"
   | "schools/summary"
   | "gefen/utilization"
 
@@ -68,6 +69,7 @@ export async function requireReportAccess(
       break
     case "finance/revenue":
     case "finance/debts":
+    case "finance/teacher-debts":
       if (canAccessFinance(session)) return null
       break
     case "schools/summary":

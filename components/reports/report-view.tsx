@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Download, Loader2, FileText } from "lucide-react"
+import { Download, Loader2, FileText, Printer } from "lucide-react"
 
 export interface ReportViewFilter {
   key: string
@@ -45,6 +45,15 @@ function formatKpiValue(v: number | string, format?: string): string {
     return v.toLocaleString("he-IL")
   }
   return String(v)
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
 }
 
 export function ReportView({ title, apiPath, filters = [], optionsFetch = {}, columns, isTeacher }: ReportViewProps) {
@@ -120,6 +129,97 @@ export function ReportView({ title, apiPath, filters = [], optionsFetch = {}, co
     URL.revokeObjectURL(url)
   }, [data, title, columns])
 
+  const printReport = useCallback(() => {
+    if (!data) return
+    const printableColumns = colDefs
+    const printableRows = data.rows || []
+    const reportWindow = window.open("", "_blank")
+    if (!reportWindow) return
+
+    const kpisHtml =
+      data.kpis?.length > 0
+        ? data.kpis
+            .map(
+              (k) => `
+                <div class="kpi">
+                  <div class="kpi-label">${escapeHtml(k.label)}</div>
+                  <div class="kpi-value">${escapeHtml(formatKpiValue(k.value, k.format))}</div>
+                </div>
+              `,
+            )
+            .join("")
+        : ""
+
+    const headerCells = printableColumns.map((c) => `<th>${escapeHtml(c.label)}</th>`).join("")
+    const bodyRows =
+      printableRows.length > 0
+        ? printableRows
+            .map((row) => {
+              const cells = printableColumns
+                .map((c) => {
+                  const v = (row as Record<string, unknown>)[c.key]
+                  return `<td>${escapeHtml(v != null ? String(v) : "")}</td>`
+                })
+                .join("")
+              return `<tr>${cells}</tr>`
+            })
+            .join("")
+        : `<tr><td colspan="${Math.max(1, printableColumns.length)}">אין נתונים להצגה</td></tr>`
+
+    const periodLabel = `${startDate || "ללא"} - ${endDate || "ללא"}`
+    const now = new Date().toLocaleString("he-IL")
+
+    reportWindow.document.write(`<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+  <meta charset="utf-8" />
+  <title>${escapeHtml(title)} - הדפסה</title>
+  <style>
+    *{box-sizing:border-box}
+    body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;padding:28px;color:#1f2937;margin:0}
+    .wrap{max-width:1100px;margin:0 auto}
+    .header{border-bottom:2px solid #2563eb;padding-bottom:10px;margin-bottom:14px}
+    .title{font-size:24px;font-weight:700;color:#1e3a8a}
+    .meta{margin-top:6px;color:#4b5563;font-size:13px;display:flex;gap:14px;flex-wrap:wrap}
+    .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin:14px 0}
+    .kpi{border:1px solid #dbeafe;background:#eff6ff;border-radius:8px;padding:8px 10px}
+    .kpi-label{font-size:12px;color:#1e40af}
+    .kpi-value{font-size:20px;font-weight:700;color:#1d4ed8}
+    table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px}
+    th{background:#f3f4f6;border:1px solid #d1d5db;padding:8px;text-align:right}
+    td{border:1px solid #e5e7eb;padding:8px;text-align:right;vertical-align:top}
+    tr:nth-child(even) td{background:#fafafa}
+    .footer{margin-top:8px;color:#6b7280;font-size:12px}
+    @media print{
+      body{padding:12mm}
+      @page{size:auto;margin:10mm}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div class="title">${escapeHtml(title)}</div>
+      <div class="meta">
+        <span><strong>תקופה:</strong> ${escapeHtml(periodLabel)}</span>
+        <span><strong>הודפס:</strong> ${escapeHtml(now)}</span>
+        <span><strong>רשומות:</strong> ${escapeHtml(data.pagination?.total ?? 0)}</span>
+      </div>
+    </div>
+    ${kpisHtml ? `<div class="kpis">${kpisHtml}</div>` : ""}
+    <table>
+      <thead><tr>${headerCells}</tr></thead>
+      <tbody>${bodyRows}</tbody>
+    </table>
+    <div class="footer">הדוח הופק מהמערכת</div>
+  </div>
+</body>
+</html>`)
+    reportWindow.document.close()
+    reportWindow.focus()
+    setTimeout(() => reportWindow.print(), 250)
+  }, [colDefs, data, endDate, startDate, title])
+
   useEffect(() => {
     loadOptions()
   }, [loadOptions])
@@ -144,10 +244,16 @@ export function ReportView({ title, apiPath, filters = [], optionsFetch = {}, co
             {loading ? "טוען..." : "הצג דוח"}
           </Button>
           {data?.rows?.length ? (
-            <Button variant="outline" className="w-full gap-2 sm:w-auto" onClick={exportCsv}>
-              <Download className="h-4 w-4" />
-              ייצוא CSV
-            </Button>
+            <>
+              <Button variant="outline" className="w-full gap-2 sm:w-auto" onClick={printReport}>
+                <Printer className="h-4 w-4" />
+                הדפסה
+              </Button>
+              <Button variant="outline" className="w-full gap-2 sm:w-auto" onClick={exportCsv}>
+                <Download className="h-4 w-4" />
+                ייצוא CSV
+              </Button>
+            </>
           ) : null}
         </div>
       </div>
