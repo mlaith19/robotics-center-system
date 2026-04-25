@@ -40,6 +40,22 @@ export const GET = withTenantAuth(async (req, session) => {
     const attendanceWhereSql = attendanceDateWhere.length ? `AND ${attendanceDateWhere.join(" AND ")}` : ""
     const expenseWhereSql = expenseDateWhere.length ? `AND ${expenseDateWhere.join(" AND ")}` : ""
 
+    const appliedRateColumnCheck = await db<
+      { exists: boolean }[]
+    >`
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'Attendance'
+          AND column_name = 'appliedHourlyRate'
+      ) AS "exists"
+    `
+    const hasAppliedHourlyRate = Boolean(appliedRateColumnCheck[0]?.exists)
+    const rateSql = hasAppliedHourlyRate
+      ? `CASE WHEN a."appliedHourlyRate" IS NOT NULL THEN a."appliedHourlyRate"::numeric ELSE 0::numeric END`
+      : `0::numeric`
+
     const rows = await db.unsafe(
       `
       WITH teacher_due AS (
@@ -56,10 +72,7 @@ export const GET = withTenantAuth(async (req, session) => {
             )
             *
             (
-              CASE
-                WHEN a."appliedHourlyRate" IS NOT NULL THEN a."appliedHourlyRate"::numeric
-                ELSE 0::numeric
-              END
+              ${rateSql}
             )
           ) AS expected
         FROM "Attendance" a
