@@ -744,9 +744,13 @@ export default function TeacherViewPage() {
     return { startDate, endDate: now }
   }
 
+  const paymentAttendanceRows = useMemo(() => {
+    return combinedAttendance
+  }, [combinedAttendance])
+
   const paymentsMonthOptions = useMemo(() => {
     const monthMap = new Map<string, string>()
-    for (const a of attendance) {
+    for (const a of paymentAttendanceRows) {
       const ymd = String(a?.date || "").trim().slice(0, 10)
       if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) continue
       const monthKey = ymd.slice(0, 7)
@@ -761,7 +765,7 @@ export default function TeacherViewPage() {
     return Array.from(monthMap.entries())
       .sort((a, b) => b[0].localeCompare(a[0]))
       .map(([key, label]) => ({ key, label }))
-  }, [attendance])
+  }, [paymentAttendanceRows])
 
   useEffect(() => {
     if (paymentsMonthOptions.length === 0) {
@@ -789,14 +793,14 @@ export default function TeacherViewPage() {
   // Filter attendance by period for payments calculation
   const filteredAttendanceForPayments = useMemo(() => {
     const { startDate } = getDateRange(paymentsPeriod)
-    return attendance.filter((a: any) => {
+    return paymentAttendanceRows.filter((a: any) => {
       const attendanceDate = new Date(a.date)
       if (!(attendanceDate >= startDate)) return false
       if (selectedPaymentsMonth === "all") return true
       const ymd = String(a?.date || "").trim().slice(0, 10)
       return ymd.slice(0, 7) === selectedPaymentsMonth
     })
-  }, [attendance, paymentsPeriod, selectedPaymentsMonth])
+  }, [paymentAttendanceRows, paymentsPeriod, selectedPaymentsMonth])
   
   // Calculate total expenses (הוצאות) - filtered by period
   const expensesSum = useMemo(
