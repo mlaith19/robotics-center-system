@@ -1059,7 +1059,8 @@ export default function SchoolViewPage() {
         if (!rowBelongsToCurrentTeacher(row.teacherName)) return
         const resolvedTeacher = resolveProgramTeacherIdentity(program, row)
         const displayName = resolvedTeacher.teacherName
-        const teacherKey = resolvedTeacher.teacherId ? `id:${resolvedTeacher.teacherId}` : `name:${normalizePersonName(displayName)}`
+        const normalizedDisplayName = normalizePersonName(displayName)
+        const teacherKey = normalizedDisplayName || (resolvedTeacher.teacherId ? `id:${resolvedTeacher.teacherId}` : "unknown-teacher")
         const teacherPositionInProgram = resolvedTeacher.teacherId
           ? programTeacherIds.indexOf(resolvedTeacher.teacherId)
           : -1
