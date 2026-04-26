@@ -281,13 +281,15 @@ function buildSchoolPayoutDescription(input: {
   teacherId: string
   teacherName: string
   programId: string
+  programLinkId?: string
   programName: string
   monthKey: string
   monthLabel: string
   notes?: string
 }) {
   const notesPart = input.notes ? `|notes=${encodeURIComponent(input.notes)}` : ""
-  return `${SCHOOL_PAYOUT_PREFIX}${input.schoolId}]|teacherId=${encodeURIComponent(input.teacherId)}|teacherName=${encodeURIComponent(input.teacherName)}|programId=${encodeURIComponent(input.programId)}|programName=${encodeURIComponent(input.programName)}|month=${encodeURIComponent(input.monthKey)}|monthLabel=${encodeURIComponent(input.monthLabel)}${notesPart}`
+  const linkPart = input.programLinkId ? `|programLinkId=${encodeURIComponent(input.programLinkId)}` : ""
+  return `${SCHOOL_PAYOUT_PREFIX}${input.schoolId}]|teacherId=${encodeURIComponent(input.teacherId)}|teacherName=${encodeURIComponent(input.teacherName)}|programId=${encodeURIComponent(input.programId)}${linkPart}|programName=${encodeURIComponent(input.programName)}|month=${encodeURIComponent(input.monthKey)}|monthLabel=${encodeURIComponent(input.monthLabel)}${notesPart}`
 }
 
 function parseSchoolPayoutDescription(raw: string | null | undefined) {
@@ -309,6 +311,7 @@ function parseSchoolPayoutDescription(raw: string | null | undefined) {
     teacherId: kv.teacherId || "",
     teacherName: kv.teacherName || "",
     programId: kv.programId || "",
+    programLinkId: kv.programLinkId || "",
     programName: kv.programName || "",
     monthKey: kv.month || "",
     monthLabel: kv.monthLabel || "",
@@ -1274,6 +1277,7 @@ export default function SchoolViewPage() {
       teacherId: target.teacherId,
       teacherName: target.teacherName,
       programId: target.programId,
+      programLinkId: target.programLinkId,
       programName: target.programName,
       monthKey: target.monthKey,
       monthLabel: target.monthLabel,
@@ -1629,6 +1633,7 @@ export default function SchoolViewPage() {
       teacherId: string
       teacherName: string
       programId: string
+      programLinkId: string
       programName: string
       monthKey: string
       monthLabel: string
@@ -1644,7 +1649,9 @@ export default function SchoolViewPage() {
     }
     const bucket = new Map<string, Row>()
     for (const program of gafanPrograms) {
-      const programName = String(program.name || "—")
+      const programLinkId = String(program.linkId || "")
+      const programIndex = gafanPrograms.findIndex((g) => String(g.linkId || "") === programLinkId)
+      const programName = `${String(program.name || "—")}${programIndex >= 0 ? ` (#${programIndex + 1})` : ""}`
       const workshopRows = parseGafanWorkshopRows(program)
       const programHourlyRate =
         workshopRows
@@ -1666,12 +1673,14 @@ export default function SchoolViewPage() {
         const teacherRate = teacherRates[teacherId]
         const teacherHourlyRate = Number(teacherRate?.teachingHourlyRate || 0)
         const teacherTravelAmount = Number(teacherRate?.travelHourlyRate || 0)
-        const key = `${teacherId || teacherName}|${program.id}|${monthKey}`
+        const programKey = programLinkId || program.id
+        const key = `${teacherId || teacherName}|${programKey}|${monthKey}`
         const item = bucket.get(key) || {
           key,
           teacherId,
           teacherName,
           programId: program.id,
+          programLinkId,
           programName,
           monthKey,
           monthLabel,
@@ -1689,7 +1698,7 @@ export default function SchoolViewPage() {
         item.hours += hrs
         item.teacherHourlyRate = teacherHourlyRate
         item.teacherTravelAmount = teacherTravelAmount
-        item.teacherCostAmount = item.hours * item.teacherHourlyRate + item.teacherTravelAmount
+        item.teacherCostAmount = item.hours * (item.teacherHourlyRate + item.teacherTravelAmount)
         item.programHourlyRate = rate
         item.plannedAmount = item.hours * item.programHourlyRate
         bucket.set(key, item)
@@ -1708,8 +1717,10 @@ export default function SchoolViewPage() {
         meta: NonNullable<ReturnType<typeof parseSchoolPayoutDescription>>
       }>
     for (const pay of payoutRows) {
-      const k = `${pay.meta.teacherId || pay.meta.teacherName}|${pay.meta.programId}|${pay.meta.monthKey}`
-      const item = bucket.get(k)
+      const teacherKey = pay.meta.teacherId || pay.meta.teacherName
+      const byLinkKey = `${teacherKey}|${pay.meta.programLinkId || ""}|${pay.meta.monthKey}`
+      const byProgramKey = `${teacherKey}|${pay.meta.programId}|${pay.meta.monthKey}`
+      const item = bucket.get(byLinkKey) || bucket.get(byProgramKey)
       if (!item) continue
       item.paidAmount += pay.amount
       if (pay.paymentId) item.payoutPaymentIds.push(pay.paymentId)
