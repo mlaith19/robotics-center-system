@@ -1699,6 +1699,25 @@ export default function SchoolViewPage() {
   }
 
   const status = school.status || "active"
+  const gafanAssignmentMeta = useMemo(() => {
+    const totalByProgramId = new Map<string, number>()
+    for (const g of gafanPrograms) {
+      const pid = String(g.id || "")
+      totalByProgramId.set(pid, (totalByProgramId.get(pid) || 0) + 1)
+    }
+    const runningByProgramId = new Map<string, number>()
+    const out = new Map<string, { index: number; total: number; isDuplicate: boolean }>()
+    for (let i = 0; i < gafanPrograms.length; i += 1) {
+      const g = gafanPrograms[i]
+      const pid = String(g.id || "")
+      const nextIndex = (runningByProgramId.get(pid) || 0) + 1
+      runningByProgramId.set(pid, nextIndex)
+      const total = totalByProgramId.get(pid) || 1
+      const rowKey = String(g.linkId || `${pid}::${i}`)
+      out.set(rowKey, { index: nextIndex, total, isDuplicate: total > 1 })
+    }
+    return out
+  }, [gafanPrograms])
 
   return (
     <div dir="rtl" className="container mx-auto max-w-7xl space-y-4 p-3 sm:space-y-6 sm:p-6">
@@ -1917,7 +1936,9 @@ export default function SchoolViewPage() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {gafanPrograms.map((g) => {
+                          {gafanPrograms.map((g, idx) => {
+                            const rowKey = String(g.linkId || `${String(g.id || "")}::${idx}`)
+                            const assignmentMeta = gafanAssignmentMeta.get(rowKey)
                             const tids = parseGafanTeacherIds(g)
                             const rateMap = parseGafanTeacherRates(g)
                             const workshopRows = parseGafanWorkshopRows(g)
@@ -1936,9 +1957,18 @@ export default function SchoolViewPage() {
                                     })
                                     .join(", ")
                             return (
-                              <Fragment key={g.id}>
-                                <TableRow key={`${g.id}-main`}>
-                                  <TableCell className="font-medium">{g.name}</TableCell>
+                              <Fragment key={rowKey}>
+                                <TableRow key={`${rowKey}-main`}>
+                                  <TableCell className="font-medium">
+                                    <div className="flex items-center gap-2">
+                                      <span>{g.name}</span>
+                                      {assignmentMeta?.isDuplicate ? (
+                                        <Badge variant="secondary" className="bg-amber-100 text-amber-800">
+                                          שיוך #{assignmentMeta.index}
+                                        </Badge>
+                                      ) : null}
+                                    </div>
+                                  </TableCell>
                                   <TableCell>{safe(g.programNumber)}</TableCell>
                                   <TableCell>{safe(g.validYear)}</TableCell>
                                   <TableCell>{safe(g.status)}</TableCell>
@@ -2001,7 +2031,7 @@ export default function SchoolViewPage() {
                                     </div>
                                   </TableCell>
                                 </TableRow>
-                                <TableRow key={`${g.id}-details`}>
+                                <TableRow key={`${rowKey}-details`}>
                                   <TableCell colSpan={6}>
                                     <div className="overflow-x-auto rounded-md border bg-slate-50/50 p-2">
                                       <Table>
