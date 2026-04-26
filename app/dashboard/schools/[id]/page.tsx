@@ -1271,6 +1271,22 @@ export default function SchoolViewPage() {
         alert("אין מורה משויך לתוכנית היעד. יש לשייך מורה לפני העברת שעות.")
         return
       }
+      const targetRows = parseGafanHourRows(targetProgram)
+      const targetRowsAfterAdd = [...targetRows]
+      const assignedRow: GafanHourRow = {
+        ...pending.row,
+        teacherId: resolvedTeacher.teacherId,
+        teacherName: resolvedTeacher.teacherName,
+        pendingAssignment: false,
+      }
+      targetRowsAfterAdd.push(assignedRow)
+      const targetRes = await fetch(`/api/gafan/${encodeURIComponent(targetProgram.id)}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schoolId: school.id, linkId: targetProgram.linkId, hourRows: targetRowsAfterAdd }),
+      })
+      if (!targetRes.ok) throw new Error("failed updating target")
       const sourceRows = parseGafanHourRows(sourceProgram).filter((_, idx) => idx !== pending.rowIndex)
       const sourceRes = await fetch(`/api/gafan/${encodeURIComponent(sourceProgram.id)}`, {
         method: "PATCH",
@@ -1278,21 +1294,17 @@ export default function SchoolViewPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ schoolId: school.id, linkId: sourceProgram.linkId, hourRows: sourceRows }),
       })
-      if (!sourceRes.ok) throw new Error("failed updating source")
-      const targetRows = parseGafanHourRows(targetProgram)
-      const assignedRow: GafanHourRow = {
-        ...pending.row,
-        teacherId: resolvedTeacher.teacherId,
-        teacherName: resolvedTeacher.teacherName,
-        pendingAssignment: false,
+      if (!sourceRes.ok) {
+        // Best-effort rollback on target so rows are not duplicated/lost in partial failures.
+        const rollbackRows = targetRowsAfterAdd.filter((row) => !isSameHourRow(row, assignedRow))
+        await fetch(`/api/gafan/${encodeURIComponent(targetProgram.id)}`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ schoolId: school.id, linkId: targetProgram.linkId, hourRows: rollbackRows }),
+        }).catch(() => null)
+        throw new Error("failed updating source")
       }
-      const targetRes = await fetch(`/api/gafan/${encodeURIComponent(targetProgram.id)}`, {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ schoolId: school.id, linkId: targetProgram.linkId, hourRows: [...targetRows, assignedRow] }),
-      })
-      if (!targetRes.ok) throw new Error("failed updating target")
 
       setPendingAssignTargetByKey((prev) => {
         const next = { ...prev }
