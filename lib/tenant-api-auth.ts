@@ -34,6 +34,7 @@ import {
   type SessionUser,
 } from "@/lib/auth-server"
 import { buildTenantSessionCookie, SESSION_ABSOLUTE_MS } from "@/lib/session-config"
+import { requireTenant, ensureSessionMatchesTenant } from "@/lib/tenant/resolve-tenant"
 
 export type { SessionUser }
 
@@ -53,13 +54,55 @@ export function withTenantAuth<T extends unknown[]>(
 
     // ── 2. Refresh lastActivity timestamp ──────────────────────────────────────
     const refreshed = sessionWithRefreshedActivity(session)
+
+    // Refresh role/permissions from tenant DB so permission changes
+    // from Users page apply immediately (no re-login required).
+    let effectiveSession: SessionUser = refreshed
+    try {
+      const [tenant, tenantErr] = await requireTenant(req)
+      if (!tenantErr) {
+        const mismatch = ensureSessionMatchesTenant(refreshed, tenant)
+        if (!mismatch) {
+          const rows = await tenant.db`
+            SELECT role, permissions
+            FROM "User"
+            WHERE id = ${refreshed.id}
+            LIMIT 1
+          `
+          if (rows.length > 0) {
+            const row = rows[0] as { role?: string | null; permissions?: unknown }
+            const dbRole = String(row.role || "").trim()
+            let dbPerms: string[] = []
+            if (Array.isArray(row.permissions)) {
+              dbPerms = row.permissions.map((p) => String(p)).filter(Boolean)
+            } else if (typeof row.permissions === "string") {
+              try {
+                const parsed = JSON.parse(row.permissions)
+                if (Array.isArray(parsed)) dbPerms = parsed.map((p) => String(p)).filter(Boolean)
+              } catch {
+                // ignore malformed legacy values
+              }
+            }
+            effectiveSession = {
+              ...refreshed,
+              role: dbRole || refreshed.role,
+              roleKey: dbRole || refreshed.roleKey,
+              permissions: dbPerms,
+            }
+          }
+        }
+      }
+    } catch {
+      // Keep existing session on refresh failure.
+    }
+
     const cookieStr = await buildTenantSessionCookie(
-      JSON.stringify(refreshed),
+      JSON.stringify(effectiveSession),
       Math.floor(SESSION_ABSOLUTE_MS / 1000)
     )
 
     // ── 3. Run the handler ─────────────────────────────────────────────────────
-    const result = await handler(req, refreshed, ...rest)
+    const result = await handler(req, effectiveSession, ...rest)
 
     // ── 4. Append Set-Cookie (never overwrite existing headers) ────────────────
     const newHeaders = new Headers(result.headers)

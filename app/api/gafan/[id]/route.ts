@@ -134,20 +134,37 @@ export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
       const hourRows = normalizeGafanHourRows(body.hourRows)
       const workshopRowsJson = db.json(workshopRows)
       const hourRowsJson = db.json(hourRows)
-      await db`
-        INSERT INTO "GafanSchoolLink" (
-          "gafanId", "schoolId", "teacherIds", "teacherRates", "workshopRows", "allocatedHours", "hourRows", "createdAt", "updatedAt"
-        )
-        VALUES (${id}, ${schoolIdPut}, ${teacherIdsJson}, ${teacherRatesJson}, ${workshopRowsJson}, ${allocatedHours}, ${hourRowsJson}, ${now}, ${now})
-        ON CONFLICT ("gafanId", "schoolId")
-        DO UPDATE SET
-          "teacherIds" = EXCLUDED."teacherIds",
-          "teacherRates" = EXCLUDED."teacherRates",
-          "workshopRows" = EXCLUDED."workshopRows",
-          "allocatedHours" = EXCLUDED."allocatedHours",
-          "hourRows" = EXCLUDED."hourRows",
-          "updatedAt" = EXCLUDED."updatedAt"
+      const existingLinkRows = await db`
+        SELECT "id"
+        FROM "GafanSchoolLink"
+        WHERE "gafanId" = ${id} AND "schoolId" = ${schoolIdPut}
+        ORDER BY "createdAt" ASC
+        LIMIT 1
       `
+      if (existingLinkRows.length > 0) {
+        const existingLinkId = String((existingLinkRows[0] as { id?: string | null }).id || "")
+        if (existingLinkId) {
+          await db`
+            UPDATE "GafanSchoolLink"
+            SET
+              "teacherIds" = ${teacherIdsJson},
+              "teacherRates" = ${teacherRatesJson},
+              "workshopRows" = ${workshopRowsJson},
+              "allocatedHours" = ${allocatedHours},
+              "hourRows" = ${hourRowsJson},
+              "updatedAt" = ${now}
+            WHERE "id" = ${existingLinkId}
+          `
+        }
+      } else {
+        const newLinkId = crypto.randomUUID()
+        await db`
+          INSERT INTO "GafanSchoolLink" (
+            "id", "gafanId", "schoolId", "teacherIds", "teacherRates", "workshopRows", "allocatedHours", "hourRows", "createdAt", "updatedAt"
+          )
+          VALUES (${newLinkId}, ${id}, ${schoolIdPut}, ${teacherIdsJson}, ${teacherRatesJson}, ${workshopRowsJson}, ${allocatedHours}, ${hourRowsJson}, ${now}, ${now})
+        `
+      }
     }
     return Response.json(result[0])
   } catch (err) {
@@ -240,24 +257,7 @@ export const PATCH = withTenantAuth(async (req, session, { params }: Ctx) => {
       body.allocatedHours === undefined &&
       body.hourRows === undefined
     if (isLinkOnlyAction) {
-      // Link-only action should NOT duplicate an existing school link.
-      // If link already exists, just return current link row.
-      if (linkRows.length > 0) {
-        const existing = await db`
-          SELECT g.*, l."id" as "linkId", l."schoolId", s.name as "schoolName", COALESCE(l."teacherIds", '[]'::jsonb) as "teacherIds",
-                 COALESCE(l."teacherRates", '{}'::jsonb) as "teacherRates",
-                 COALESCE(l."workshopRows", '[]'::jsonb) as "workshopRows", COALESCE(l."allocatedHours", 0) as "allocatedHours",
-                 COALESCE(l."hourRows", '[]'::jsonb) as "hourRows"
-          FROM "Gafan" g
-          INNER JOIN "GafanSchoolLink" l ON l."gafanId" = g.id
-          LEFT JOIN "School" s ON s.id = l."schoolId"
-          WHERE g.id = ${id} AND l."schoolId" = ${schoolIdPatch}
-          ORDER BY l."createdAt" ASC
-          LIMIT 1
-        `
-        return Response.json(existing[0] ?? { success: true, linkId: String((linkRows[0] as Record<string, unknown>).id || "") })
-      }
-      // No link exists yet -> create exactly one.
+      // Link-only action: always create a new assignment row for this school.
       const newLinkId = crypto.randomUUID()
       await db`
         INSERT INTO "GafanSchoolLink" (

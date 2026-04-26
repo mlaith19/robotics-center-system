@@ -37,7 +37,7 @@ export const GET = withTenantAuth(async (req, session) => {
           ORDER BY g."createdAt" DESC
         `
       : await db`
-          SELECT g.*, l."id" as "linkId", l."schoolId", s.name as "schoolName",
+          SELECT DISTINCT ON (g.id, COALESCE(l."schoolId", g."schoolId")) g.*, l."id" as "linkId", l."schoolId", s.name as "schoolName",
                  COALESCE(l."teacherIds", '[]'::jsonb) as "teacherIds",
                  COALESCE(l."teacherRates", '{}'::jsonb) as "teacherRates",
                  COALESCE(l."workshopRows", '[]'::jsonb) as "workshopRows",
@@ -46,7 +46,7 @@ export const GET = withTenantAuth(async (req, session) => {
           FROM "Gafan" g
           LEFT JOIN "GafanSchoolLink" l ON l."gafanId" = g.id
           LEFT JOIN "School" s ON s.id = l."schoolId"
-          ORDER BY g."createdAt" DESC, l."createdAt" ASC
+          ORDER BY g.id, COALESCE(l."schoolId", g."schoolId"), l."updatedAt" DESC, l."createdAt" DESC, g."createdAt" DESC
         `
     return Response.json(result)
   } catch (err) {
@@ -115,19 +115,12 @@ export const POST = withTenantAuth(async (req, session) => {
       RETURNING *
     `
     if (schoolId) {
+      const linkId = crypto.randomUUID()
       await db`
         INSERT INTO "GafanSchoolLink" (
-          "gafanId", "schoolId", "teacherIds", "teacherRates", "workshopRows", "allocatedHours", "hourRows", "createdAt", "updatedAt"
+          "id", "gafanId", "schoolId", "teacherIds", "teacherRates", "workshopRows", "allocatedHours", "hourRows", "createdAt", "updatedAt"
         )
-        VALUES (${id}, ${schoolId}, ${teacherIdsJson}, ${teacherRatesJson}, ${workshopRowsJson}, ${allocatedHours}, ${hourRowsJson}, ${now}, ${now})
-        ON CONFLICT ("gafanId", "schoolId")
-        DO UPDATE SET
-          "teacherIds" = EXCLUDED."teacherIds",
-          "teacherRates" = EXCLUDED."teacherRates",
-          "workshopRows" = EXCLUDED."workshopRows",
-          "allocatedHours" = EXCLUDED."allocatedHours",
-          "hourRows" = EXCLUDED."hourRows",
-          "updatedAt" = EXCLUDED."updatedAt"
+        VALUES (${linkId}, ${id}, ${schoolId}, ${teacherIdsJson}, ${teacherRatesJson}, ${workshopRowsJson}, ${allocatedHours}, ${hourRowsJson}, ${now}, ${now})
       `
     }
     return Response.json(result[0], { status: 201 })

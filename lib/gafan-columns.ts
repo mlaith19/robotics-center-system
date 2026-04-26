@@ -23,8 +23,7 @@ export async function ensureGafanLinkColumns(db: ReturnType<typeof postgres>): P
         "allocatedHours" NUMERIC DEFAULT 0,
         "hourRows" JSONB DEFAULT '[]'::jsonb,
         "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT "GafanSchoolLink_pkey" PRIMARY KEY ("gafanId", "schoolId")
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `
     await db`CREATE INDEX IF NOT EXISTS "GafanSchoolLink_schoolId_idx" ON "GafanSchoolLink"("schoolId")`
@@ -61,22 +60,20 @@ export async function ensureGafanLinkColumns(db: ReturnType<typeof postgres>): P
     console.warn("[gafan] backfill link table:", e)
   }
   try {
+    await db`UPDATE "GafanSchoolLink" SET "schoolId" = btrim("schoolId") WHERE "schoolId" IS NOT NULL AND "schoolId" <> btrim("schoolId")`
+  } catch (e) {
+    console.warn("[gafan] normalize schoolId whitespace:", e)
+  }
+  try {
     await db`
       UPDATE "GafanSchoolLink"
       SET "id" = md5(random()::text || clock_timestamp()::text || COALESCE("gafanId",'') || COALESCE("schoolId",''))
       WHERE "id" IS NULL OR btrim("id") = ''
     `
-    await db`
-      DELETE FROM "GafanSchoolLink" a
-      USING "GafanSchoolLink" b
-      WHERE a.ctid < b.ctid
-        AND a."gafanId" = b."gafanId"
-        AND a."schoolId" = b."schoolId"
-    `
     await db`ALTER TABLE "GafanSchoolLink" DROP CONSTRAINT IF EXISTS "GafanSchoolLink_pkey"`
     await db`DROP INDEX IF EXISTS "GafanSchoolLink_gafan_school_uidx"`
-    await db`CREATE UNIQUE INDEX IF NOT EXISTS "GafanSchoolLink_gafan_school_uidx" ON "GafanSchoolLink"("gafanId", "schoolId")`
     await db`CREATE UNIQUE INDEX IF NOT EXISTS "GafanSchoolLink_id_uidx" ON "GafanSchoolLink"("id")`
+    await db`CREATE INDEX IF NOT EXISTS "GafanSchoolLink_gafan_school_idx" ON "GafanSchoolLink"("gafanId", "schoolId")`
   } catch (e) {
     console.warn("[gafan] ensure link ids:", e)
   }
