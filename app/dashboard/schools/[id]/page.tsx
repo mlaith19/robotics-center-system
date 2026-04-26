@@ -842,11 +842,21 @@ export default function SchoolViewPage() {
     const fallbackTeacherId = assignedTeacherIds[0] ? String(assignedTeacherIds[0]) : ""
     const fallbackTeacherName = fallbackTeacherId ? (teacherNameById.get(fallbackTeacherId) || "") : ""
     const resolvedDayOfWeek = weekdayFromDate(hourDate)
+    const editTeacherId = String(hourEditSourceRow?.teacherId || "").trim()
+    const editTeacherName = String(hourEditSourceRow?.teacherName || "").trim()
+    const resolvedTeacherId = editTeacherId || currentTeacherId || fallbackTeacherId
+    const resolvedTeacherName =
+      editTeacherName ||
+      (resolvedTeacherId ? (teacherNameById.get(resolvedTeacherId) || "") : "") ||
+      currentUser?.full_name ||
+      currentUser?.username ||
+      fallbackTeacherName ||
+      ""
     const row: GafanHourRow = {
       date: hourDate,
       dayOfWeek: resolvedDayOfWeek,
-      teacherName: currentUser?.full_name || currentUser?.username || fallbackTeacherName || "",
-      teacherId: currentTeacherId || fallbackTeacherId,
+      teacherName: resolvedTeacherName,
+      teacherId: resolvedTeacherId,
       startTime: hourStartTime,
       endTime: hourEndTime,
       totalHours: Math.max(0, Number(computedHours || hourTotal || 0)),
@@ -2487,7 +2497,7 @@ export default function SchoolViewPage() {
             )}
           </TabsContent>}
 
-          {canViewAttendanceTab && <TabsContent value="teacher-attendance" className="p-3 sm:p-6">
+          {canViewAttendanceTab && <TabsContent value="teacher-attendance" className="p-3 sm:p-6" forceMount>
             {tabDataLoading ? (
               <div className="flex justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
