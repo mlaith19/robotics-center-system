@@ -35,6 +35,7 @@ import {
 } from "@/lib/auth-server"
 import { buildTenantSessionCookie, SESSION_ABSOLUTE_MS } from "@/lib/session-config"
 import { requireTenant, ensureSessionMatchesTenant } from "@/lib/tenant/resolve-tenant"
+import { hasFullAccessRole } from "@/lib/permissions"
 
 export type { SessionUser }
 
@@ -96,8 +97,17 @@ export function withTenantAuth<T extends unknown[]>(
       // Keep existing session on refresh failure.
     }
 
+    const cookiePermissions = Array.isArray(effectiveSession.permissions) ? effectiveSession.permissions : []
+    const isFullAccess =
+      hasFullAccessRole(effectiveSession.roleKey) || hasFullAccessRole(effectiveSession.role)
+    const cookieSession: SessionUser = {
+      ...effectiveSession,
+      // Prevent oversized Set-Cookie headers that can cause upstream 502 errors.
+      permissions: isFullAccess ? [] : cookiePermissions.slice(0, 20),
+    }
+
     const cookieStr = await buildTenantSessionCookie(
-      JSON.stringify(effectiveSession),
+      JSON.stringify(cookieSession),
       Math.floor(SESSION_ABSOLUTE_MS / 1000)
     )
 
