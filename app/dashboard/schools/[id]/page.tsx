@@ -623,6 +623,36 @@ export default function SchoolViewPage() {
     return m
   }, [teachersMini])
 
+  const resolveProgramTeacherIdentity = useCallback(
+    (program: GafanRow, row: GafanHourRow) => {
+      const programTeacherIds = parseGafanTeacherIds(program).map((tid) => String(tid || "").trim()).filter(Boolean)
+      const rowTeacherId = String(row.teacherId || "").trim()
+      const rowTeacherName = String(row.teacherName || "").trim()
+      const rowTeacherNameNorm = normalizePersonName(rowTeacherName)
+      const canonicalNameById = new Map<string, string>(
+        programTeacherIds.map((tid) => [tid, normalizePersonName(teacherNameById.get(tid) || tid)]),
+      )
+      const byId = rowTeacherId && programTeacherIds.includes(rowTeacherId) ? rowTeacherId : ""
+      const exactMatches = rowTeacherNameNorm
+        ? programTeacherIds.filter((tid) => canonicalNameById.get(tid) === rowTeacherNameNorm)
+        : []
+      const partialMatches = rowTeacherNameNorm
+        ? programTeacherIds.filter((tid) => {
+            const canonical = canonicalNameById.get(tid) || ""
+            return canonical.includes(rowTeacherNameNorm) || rowTeacherNameNorm.includes(canonical)
+          })
+        : []
+      const byExactName = exactMatches.length === 1 ? exactMatches[0] || "" : ""
+      const byPartialName = !byExactName && partialMatches.length === 1 ? partialMatches[0] || "" : ""
+      const resolvedTeacherId = byId || byExactName || byPartialName || (programTeacherIds.length === 1 ? programTeacherIds[0] || "" : "")
+      const resolvedTeacherName = resolvedTeacherId
+        ? (teacherNameById.get(resolvedTeacherId) || rowTeacherName || resolvedTeacherId).toString()
+        : (rowTeacherName || "ללא שם")
+      return { teacherId: resolvedTeacherId, teacherName: resolvedTeacherName }
+    },
+    [teacherNameById],
+  )
+
   useEffect(() => {
     if (
       hoursProgramId &&
@@ -1025,14 +1055,14 @@ export default function SchoolViewPage() {
       const programSerial = programIndex >= 0 ? programIndex + 1 : 0
       const programName = `${program.name}${programSerial ? ` (#${programSerial})` : ""}`
       const programTeacherIds = parseGafanTeacherIds(program)
-      const programTeacherNames = programTeacherIds.map((tid) =>
-        (teacherNameById.get(tid) || tid || "").toString().trim().toLowerCase(),
-      )
       rows.forEach((row, rowIndex) => {
         if (!rowBelongsToCurrentTeacher(row.teacherName)) return
-        const displayName = (row.teacherName || "").trim() || "ללא שם"
-        const teacherKey = displayName.toLowerCase()
-        const teacherPositionInProgram = programTeacherNames.indexOf(teacherKey)
+        const resolvedTeacher = resolveProgramTeacherIdentity(program, row)
+        const displayName = resolvedTeacher.teacherName
+        const teacherKey = resolvedTeacher.teacherId ? `id:${resolvedTeacher.teacherId}` : `name:${normalizePersonName(displayName)}`
+        const teacherPositionInProgram = resolvedTeacher.teacherId
+          ? programTeacherIds.indexOf(resolvedTeacher.teacherId)
+          : -1
         const teacherRoleLabel =
           programTeacherIds.length === 0 || teacherPositionInProgram < 0
             ? ""
@@ -1073,8 +1103,8 @@ export default function SchoolViewPage() {
           rowIndex,
           date: row.date,
           dayOfWeek: row.dayOfWeek || weekdayFromDate(row.date),
-          teacherName: row.teacherName || "",
-          teacherId: row.teacherId || "",
+          teacherName: resolvedTeacher.teacherName,
+          teacherId: resolvedTeacher.teacherId,
           startTime: row.startTime,
           endTime: row.endTime,
           totalHours: hrs,
@@ -1114,7 +1144,7 @@ export default function SchoolViewPage() {
       .sort((a, b) =>
         a.teacherDisplayName.localeCompare(b.teacherDisplayName, "he", { sensitivity: "base" }),
       )
-  }, [gafanPrograms, rowBelongsToCurrentTeacher, teacherNameById])
+  }, [gafanPrograms, rowBelongsToCurrentTeacher, resolveProgramTeacherIdentity])
 
   const pendingAttendanceRows = useMemo(() => {
     const out: Array<{
@@ -1677,10 +1707,9 @@ export default function SchoolViewPage() {
         if (Number.isNaN(d.getTime())) continue
         const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
         const monthLabel = new Intl.DateTimeFormat("he-IL", { month: "numeric", year: "numeric" }).format(d)
-        const teacherIdFromRow = String(row.teacherId || "").trim()
-        let teacherId = teacherIdFromRow
-        if (!teacherId && assignedTeacherIds.length === 1) teacherId = assignedTeacherIds[0] || ""
-        const teacherName = String(row.teacherName || "").trim() || (teacherId ? (teacherNameById.get(teacherId) || teacherId) : "ללא מורה")
+        const resolvedTeacher = resolveProgramTeacherIdentity(program, row)
+        const teacherId = resolvedTeacher.teacherId
+        const teacherName = resolvedTeacher.teacherName || (teacherId ? (teacherNameById.get(teacherId) || teacherId) : "ללא מורה")
         const rate = Number(programHourlyRate || 0)
         const teacherRate = teacherRates[teacherId]
         const teacherHourlyRate = Number(teacherRate?.teachingHourlyRate || 0)
@@ -1753,7 +1782,7 @@ export default function SchoolViewPage() {
     })
     out.sort((a, b) => a.monthKey.localeCompare(b.monthKey) || a.teacherName.localeCompare(b.teacherName, "he", { sensitivity: "base" }) || a.programName.localeCompare(b.programName, "he", { sensitivity: "base" }))
     return out
-  }, [gafanPrograms, schoolPayments, school?.id, teacherNameById])
+  }, [gafanPrograms, schoolPayments, school?.id, teacherNameById, resolveProgramTeacherIdentity])
 
   const schoolPayoutTotals = useMemo(() => {
     const planned = teacherProgramMonthlyRows.reduce((s, r) => s + r.teacherCostAmount, 0)
