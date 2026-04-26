@@ -907,16 +907,6 @@ export default function SchoolViewPage() {
       totalHours: Math.max(0, Number(computedHours || hourTotal || 0)),
       pendingAssignment: Boolean(hourPendingAssignment),
     }
-    const targetRows = [...rows]
-    if (hourEditIdx != null && hourEditIdx >= 0 && hourEditIdx < targetRows.length) {
-      targetRows[hourEditIdx] = row
-    } else if (hourEditSourceRow) {
-      const fallbackIdx = targetRows.findIndex((x) => isSameHourRow(x, hourEditSourceRow))
-      if (fallbackIdx >= 0) targetRows[fallbackIdx] = row
-      else targetRows.push(row)
-    } else {
-      targetRows.push(row)
-    }
     setHoursSaving(true)
     try {
       const sourceProgram =
@@ -924,6 +914,20 @@ export default function SchoolViewPage() {
         hourEditSourceProgramLinkId !== String(hoursProgram.linkId || "")
           ? gafanPrograms.find((g) => String(g.linkId || "") === hourEditSourceProgramLinkId) || null
           : null
+      const targetRows = [...rows]
+      const isCrossProgramTransfer = Boolean(sourceProgram && hourEditSourceRow)
+      if (!isCrossProgramTransfer && hourEditIdx != null && hourEditIdx >= 0 && hourEditIdx < targetRows.length) {
+        // Same program edit: update row in-place by index.
+        targetRows[hourEditIdx] = row
+      } else if (!isCrossProgramTransfer && hourEditSourceRow) {
+        // Same program fallback: update matching row by content.
+        const fallbackIdx = targetRows.findIndex((x) => isSameHourRow(x, hourEditSourceRow))
+        if (fallbackIdx >= 0) targetRows[fallbackIdx] = row
+        else targetRows.push(row)
+      } else {
+        // Cross-program transfer (or new row): append only, never overwrite existing target rows.
+        targetRows.push(row)
+      }
       if (sourceProgram && hourEditSourceRow) {
         const sourceRows = parseGafanHourRows(sourceProgram)
         const sourceIdx = sourceRows.findIndex((x) => isSameHourRow(x, hourEditSourceRow))
