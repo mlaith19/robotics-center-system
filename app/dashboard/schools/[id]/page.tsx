@@ -1051,7 +1051,7 @@ export default function SchoolViewPage() {
     const teacherMap = new Map<string, TeacherBucket>()
     for (const program of gafanPrograms) {
       const rows = parseGafanHourRows(program)
-      const programIndex = gafanPrograms.findIndex((g) => g.id === program.id)
+      const programIndex = gafanPrograms.findIndex((g) => String(g.linkId || "") === String(program.linkId || ""))
       const programSerial = programIndex >= 0 ? programIndex + 1 : 0
       const programName = `${program.name}${programSerial ? ` (#${programSerial})` : ""}`
       const programTeacherIds = parseGafanTeacherIds(program)
@@ -2878,7 +2878,7 @@ export default function SchoolViewPage() {
                     </div>
                   )}
                   {gafanPrograms.map((program) => {
-                    const programIndex = gafanPrograms.findIndex((g) => g.id === program.id)
+                    const programIndex = gafanPrograms.findIndex((g) => String(g.linkId || "") === String(program.linkId || ""))
                     const workshopRows = parseGafanWorkshopRows(program)
                     const allocated = workshopRows.reduce((s, r) => s + Number(r.hours || 0), 0)
                     const hourRows = parseGafanHourRows(program)
@@ -2896,7 +2896,7 @@ export default function SchoolViewPage() {
                       })
                       .filter(Boolean)
                     return (
-                      <div key={program.id} className="space-y-3 rounded-lg border p-3">
+                      <div key={`${program.id}::${String(program.linkId || programIndex)}`} className="space-y-3 rounded-lg border p-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-semibold">
                             <span>
@@ -2950,7 +2950,7 @@ export default function SchoolViewPage() {
                                 </TableRow>
                               ) : (
                                 hourRows.map((r, idx) => (
-                                  <TableRow key={`${program.id}-hr-${idx}`}>
+                                  <TableRow key={`${program.id}::${String(program.linkId || "")}-hr-${idx}`}>
                                     <TableCell>{idx + 1}</TableCell>
                                     <TableCell>{safe(r.date)}</TableCell>
                                     <TableCell>{safe(r.teacherName || (r.teacherId ? teacherNameById.get(String(r.teacherId)) : ""))}</TableCell>
