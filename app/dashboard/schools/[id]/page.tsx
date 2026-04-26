@@ -457,6 +457,7 @@ export default function SchoolViewPage() {
   const [hourTotal, setHourTotal] = useState("0")
   const [hourEditIdx, setHourEditIdx] = useState<number | null>(null)
   const [hourEditSourceRow, setHourEditSourceRow] = useState<GafanHourRow | null>(null)
+  const [hourEditSourceProgramLinkId, setHourEditSourceProgramLinkId] = useState("")
   const [hourDialogContext, setHourDialogContext] = useState<"attendance" | "ngafan">("attendance")
   const [selectedAttendanceMonth, setSelectedAttendanceMonth] = useState("")
   const [selectedAttendanceTeacher, setSelectedAttendanceTeacher] = useState("")
@@ -619,7 +620,10 @@ export default function SchoolViewPage() {
   }, [teachersMini])
 
   useEffect(() => {
-    if (hoursProgramId && !gafanPrograms.some((g) => g.id === hoursProgramId)) {
+    if (
+      hoursProgramId &&
+      !gafanPrograms.some((g) => String(g.linkId || "") === hoursProgramId || g.id === hoursProgramId)
+    ) {
       setHoursProgramId("")
     }
   }, [gafanPrograms, hoursProgramId])
@@ -804,6 +808,7 @@ export default function SchoolViewPage() {
     setHourTotal("0")
     setHourEditIdx(null)
     setHourEditSourceRow(null)
+    setHourEditSourceProgramLinkId("")
     setHourSaveError("")
   }
 
@@ -823,9 +828,14 @@ export default function SchoolViewPage() {
       setHourSaveError("טווח השעות לא תקין. שעת סיום חייבת להיות אחרי שעת התחלה.")
       return
     }
-    const holderProgramId = hourDialogContext === "attendance" ? (hoursProgramId || gafanPrograms[0]?.id || "") : hoursProgramId
-    if (!holderProgramId) return
-    const hoursProgram = gafanPrograms.find((g) => g.id === holderProgramId)
+    const holderProgramRef =
+      hourDialogContext === "attendance"
+        ? (hoursProgramId || String(gafanPrograms[0]?.linkId || "") || gafanPrograms[0]?.id || "")
+        : hoursProgramId
+    if (!holderProgramRef) return
+    const hoursProgram = gafanPrograms.find(
+      (g) => String(g.linkId || "") === holderProgramRef || g.id === holderProgramRef,
+    )
     if (!hoursProgram) return
     const rows = parseGafanHourRows(hoursProgram)
     const assignedTeacherIds = parseGafanTeacherIds(hoursProgram)
@@ -842,23 +852,45 @@ export default function SchoolViewPage() {
       totalHours: Math.max(0, Number(computedHours || hourTotal || 0)),
       pendingAssignment: hourDialogContext === "attendance",
     }
-    const next = [...rows]
-    if (hourEditIdx != null && hourEditIdx >= 0 && hourEditIdx < next.length) {
-      next[hourEditIdx] = row
+    const targetRows = [...rows]
+    if (hourEditIdx != null && hourEditIdx >= 0 && hourEditIdx < targetRows.length) {
+      targetRows[hourEditIdx] = row
     } else if (hourEditSourceRow) {
-      const fallbackIdx = next.findIndex((x) => isSameHourRow(x, hourEditSourceRow))
-      if (fallbackIdx >= 0) next[fallbackIdx] = row
-      else next.push(row)
+      const fallbackIdx = targetRows.findIndex((x) => isSameHourRow(x, hourEditSourceRow))
+      if (fallbackIdx >= 0) targetRows[fallbackIdx] = row
+      else targetRows.push(row)
     } else {
-      next.push(row)
+      targetRows.push(row)
     }
     setHoursSaving(true)
     try {
+      const sourceProgram =
+        hourEditSourceProgramLinkId &&
+        hourEditSourceProgramLinkId !== String(hoursProgram.linkId || "")
+          ? gafanPrograms.find((g) => String(g.linkId || "") === hourEditSourceProgramLinkId) || null
+          : null
+      if (sourceProgram && hourEditSourceRow) {
+        const sourceRows = parseGafanHourRows(sourceProgram)
+        const sourceIdx = sourceRows.findIndex((x) => isSameHourRow(x, hourEditSourceRow))
+        if (sourceIdx >= 0) {
+          const sourceNext = sourceRows.filter((_, i) => i !== sourceIdx)
+          const sourceRes = await fetch(`/api/gafan/${encodeURIComponent(sourceProgram.id)}`, {
+            method: "PATCH",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ schoolId: school.id, linkId: sourceProgram.linkId, hourRows: sourceNext }),
+          })
+          if (!sourceRes.ok) {
+            const sourceBody = (await sourceRes.json().catch(() => null)) as { error?: string } | null
+            throw new Error(sourceBody?.error?.trim() || "failed updating source")
+          }
+        }
+      }
       const res = await fetch(`/api/gafan/${encodeURIComponent(hoursProgram.id)}`, {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ schoolId: school.id, linkId: hoursProgram.linkId, hourRows: next }),
+        body: JSON.stringify({ schoolId: school.id, linkId: hoursProgram.linkId, hourRows: targetRows }),
       })
       if (res.ok) {
         const rowDate = new Date(`${row.date}T12:00:00`)
@@ -934,6 +966,7 @@ export default function SchoolViewPage() {
   const attendanceByTeacher = useMemo(() => {
     type AttendanceRow = {
       programId: string
+      programLinkId: string
       programName: string
       rowIndex: number
       date: string
@@ -1010,6 +1043,7 @@ export default function SchoolViewPage() {
         const status: "approved" | "pending" = row.pendingAssignment ? "pending" : "approved"
         bucket.rows.push({
           programId: program.id,
+          programLinkId: String(program.linkId || ""),
           programName,
           rowIndex,
           date: row.date,
@@ -2474,7 +2508,7 @@ export default function SchoolViewPage() {
                         size="sm"
                         onClick={() => {
                           setHourDialogContext("attendance")
-                          setHoursProgramId(gafanPrograms[0]?.id || "")
+                          setHoursProgramId(String(gafanPrograms[0]?.linkId || gafanPrograms[0]?.id || ""))
                           resetHourForm()
                           setHourDialogOpen(true)
                         }}
@@ -2585,7 +2619,7 @@ export default function SchoolViewPage() {
                                                     title="עריכה"
                                                     onClick={() => {
                                                       setHourDialogContext("attendance")
-                                                      setHoursProgramId(row.programId)
+                                                      setHoursProgramId(row.programLinkId || row.programId)
                                                       setHourDate(row.date)
                                                       setHourStartTime(row.startTime)
                                                       setHourEndTime(row.endTime)
@@ -2601,6 +2635,7 @@ export default function SchoolViewPage() {
                                                         totalHours: Number(row.totalHours || 0),
                                                         pendingAssignment: row.status === "pending",
                                                       })
+                                                      setHourEditSourceProgramLinkId(row.programLinkId || "")
                                                       setHourDialogOpen(true)
                                                     }}
                                                   >
@@ -2612,7 +2647,10 @@ export default function SchoolViewPage() {
                                                     size="sm"
                                                     title="מחיקה"
                                                     onClick={() => {
-                                                      const program = gafanPrograms.find((g) => g.id === row.programId)
+                                                      const program = gafanPrograms.find(
+                                                        (g) =>
+                                                          String(g.linkId || "") === row.programLinkId || g.id === row.programId,
+                                                      )
                                                       if (!program) return
                                                       void deleteHourRow(program, row.rowIndex, {
                                                         date: row.date,
@@ -2648,7 +2686,13 @@ export default function SchoolViewPage() {
                 <Dialog open={hourDialogOpen} onOpenChange={setHourDialogOpen}>
                   <DialogContent dir="rtl" className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
                     <DialogHeader>
-                      <DialogTitle>{hourDialogContext === "attendance" ? "הוספת נוכחות מורה" : "הוספת שעות"}</DialogTitle>
+                      <DialogTitle>
+                        {hourEditIdx != null || hourEditSourceRow
+                          ? "עריכת שורת שעות"
+                          : hourDialogContext === "attendance"
+                            ? "הוספת נוכחות מורה"
+                            : "הוספת שעות"}
+                      </DialogTitle>
                     </DialogHeader>
                     {hourDialogContext === "ngafan" && (
                       <div className="space-y-2">
@@ -2658,9 +2702,12 @@ export default function SchoolViewPage() {
                             <SelectValue placeholder="בחר תוכנית" />
                           </SelectTrigger>
                           <SelectContent>
-                            {gafanPrograms.map((program) => (
-                              <SelectItem key={program.id} value={program.id}>
-                                {program.name}
+                            {gafanPrograms.map((program, idx) => (
+                              <SelectItem
+                                key={`${program.id}::${String(program.linkId || idx)}`}
+                                value={String(program.linkId || program.id)}
+                              >
+                                {program.name} (#{idx + 1})
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -2689,7 +2736,7 @@ export default function SchoolViewPage() {
                         disabled={hourDialogContext === "ngafan" ? (!hoursProgramId || hoursSaving) : (gafanPrograms.length === 0 || hoursSaving)}
                         onClick={() => void saveHourRow()}
                       >
-                        הוספה
+                        {hourEditIdx != null || hourEditSourceRow ? "שמירת עריכה" : "הוספה"}
                       </Button>
                       <Button type="button" variant="outline" onClick={resetHourForm}>נקה</Button>
                     </div>
@@ -2821,7 +2868,7 @@ export default function SchoolViewPage() {
                             size="sm"
                             onClick={() => {
                               setHourDialogContext("ngafan")
-                              setHoursProgramId(program.id)
+                              setHoursProgramId(String(program.linkId || program.id))
                               resetHourForm()
                               setHourDialogOpen(true)
                             }}
@@ -2843,6 +2890,7 @@ export default function SchoolViewPage() {
                               <TableRow className="bg-muted/50">
                                 <TableHead className="text-right">מס׳</TableHead>
                                 <TableHead className="text-right">תאריך</TableHead>
+                                <TableHead className="text-right">שם מורה</TableHead>
                                 <TableHead className="text-right">שעת התחלה</TableHead>
                                 <TableHead className="text-right">שעת סיום</TableHead>
                                 <TableHead className="text-right">סה&quot;כ שעות</TableHead>
@@ -2852,13 +2900,14 @@ export default function SchoolViewPage() {
                             <TableBody>
                               {hourRows.length === 0 ? (
                                 <TableRow>
-                                  <TableCell colSpan={6} className="text-center text-muted-foreground">אין נתוני שעות</TableCell>
+                                  <TableCell colSpan={7} className="text-center text-muted-foreground">אין נתוני שעות</TableCell>
                                 </TableRow>
                               ) : (
                                 hourRows.map((r, idx) => (
                                   <TableRow key={`${program.id}-hr-${idx}`}>
                                     <TableCell>{idx + 1}</TableCell>
                                     <TableCell>{safe(r.date)}</TableCell>
+                                    <TableCell>{safe(r.teacherName || (r.teacherId ? teacherNameById.get(String(r.teacherId)) : ""))}</TableCell>
                                     <TableCell>{safe(r.startTime)}</TableCell>
                                     <TableCell>{safe(r.endTime)}</TableCell>
                                     <TableCell>{Number(r.totalHours || 0)}</TableCell>
@@ -2870,7 +2919,7 @@ export default function SchoolViewPage() {
                                           size="sm"
                                           onClick={() => {
                                             setHourDialogContext("ngafan")
-                                            setHoursProgramId(program.id)
+                                            setHoursProgramId(String(program.linkId || program.id))
                                             setHourDate(r.date)
                                             setHourStartTime(r.startTime)
                                             setHourEndTime(r.endTime)
@@ -2886,6 +2935,7 @@ export default function SchoolViewPage() {
                                               totalHours: Number(r.totalHours || 0),
                                               pendingAssignment: false,
                                             })
+                                            setHourEditSourceProgramLinkId(String(program.linkId || ""))
                                             setHourDialogOpen(true)
                                           }}
                                           title="עריכה"
