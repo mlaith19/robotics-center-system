@@ -1167,12 +1167,42 @@ export default function SchoolViewPage() {
     const sourceProgram = gafanPrograms.find((g) => String(g.linkId || "") === pending.holderProgramLinkId)
     const targetProgram = gafanPrograms.find((g) => String(g.linkId || "") === targetProgramLinkId)
     if (!sourceProgram || !targetProgram) return
+    const resolveAssignedTeacherForProgram = (program: GafanRow, row: GafanHourRow) => {
+      const assignedTeacherIds = parseGafanTeacherIds(program).map((tid) => String(tid || "").trim()).filter(Boolean)
+      const rowTeacherId = String(row.teacherId || "").trim()
+      const rowTeacherName = normalizePersonName(row.teacherName)
+      const namesById = new Map<string, string>(
+        assignedTeacherIds.map((tid) => [tid, normalizePersonName(teacherNameById.get(tid) || tid)]),
+      )
+      const matchById = rowTeacherId && assignedTeacherIds.includes(rowTeacherId) ? rowTeacherId : ""
+      const matchByName =
+        !matchById && rowTeacherName
+          ? assignedTeacherIds.find((tid) => namesById.get(tid) === rowTeacherName) || ""
+          : ""
+      const pickedTeacherId = matchById || matchByName || assignedTeacherIds[0] || ""
+      const pickedTeacherName = pickedTeacherId
+        ? (teacherNameById.get(pickedTeacherId) || row.teacherName || "").toString()
+        : String(row.teacherName || "")
+      return { teacherId: pickedTeacherId, teacherName: pickedTeacherName, hasAnyAssignedTeacher: assignedTeacherIds.length > 0 }
+    }
 
     setHoursSaving(true)
     try {
       if (targetProgramLinkId === pending.holderProgramLinkId) {
+        const resolvedTeacher = resolveAssignedTeacherForProgram(sourceProgram, pending.row)
+        if (!resolvedTeacher.hasAnyAssignedTeacher) {
+          alert("אין מורה משויך לתוכנית זו. יש לשייך מורה לפני אישור שעות.")
+          return
+        }
         const sourceRowsAfterApprove = parseGafanHourRows(sourceProgram).map((r, idx) =>
-          idx === pending.rowIndex ? { ...r, pendingAssignment: false } : r,
+          idx === pending.rowIndex
+            ? {
+                ...r,
+                teacherId: resolvedTeacher.teacherId,
+                teacherName: resolvedTeacher.teacherName,
+                pendingAssignment: false,
+              }
+            : r,
         )
         const sourceRes = await fetch(`/api/gafan/${encodeURIComponent(sourceProgram.id)}`, {
           method: "PATCH",
@@ -1190,6 +1220,11 @@ export default function SchoolViewPage() {
         return
       }
 
+      const resolvedTeacher = resolveAssignedTeacherForProgram(targetProgram, pending.row)
+      if (!resolvedTeacher.hasAnyAssignedTeacher) {
+        alert("אין מורה משויך לתוכנית היעד. יש לשייך מורה לפני העברת שעות.")
+        return
+      }
       const sourceRows = parseGafanHourRows(sourceProgram).filter((_, idx) => idx !== pending.rowIndex)
       const sourceRes = await fetch(`/api/gafan/${encodeURIComponent(sourceProgram.id)}`, {
         method: "PATCH",
@@ -1198,9 +1233,13 @@ export default function SchoolViewPage() {
         body: JSON.stringify({ schoolId: school.id, linkId: sourceProgram.linkId, hourRows: sourceRows }),
       })
       if (!sourceRes.ok) throw new Error("failed updating source")
-
       const targetRows = parseGafanHourRows(targetProgram)
-      const assignedRow: GafanHourRow = { ...pending.row, pendingAssignment: false }
+      const assignedRow: GafanHourRow = {
+        ...pending.row,
+        teacherId: resolvedTeacher.teacherId,
+        teacherName: resolvedTeacher.teacherName,
+        pendingAssignment: false,
+      }
       const targetRes = await fetch(`/api/gafan/${encodeURIComponent(targetProgram.id)}`, {
         method: "PATCH",
         credentials: "include",
