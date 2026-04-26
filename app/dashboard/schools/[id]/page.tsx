@@ -217,6 +217,14 @@ function parseGafanHourRows(row: GafanRow): GafanHourRow[] {
   })
 }
 
+function normalizePersonName(raw: unknown): string {
+  return String(raw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/["'`׳״]/g, "")
+    .replace(/\s+/g, " ")
+}
+
 const WEEKDAY_OPTIONS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"]
 
 function weekdayFromDate(value: string): string {
@@ -1053,6 +1061,7 @@ export default function SchoolViewPage() {
     const out: Array<{
       key: string
       holderProgramId: string
+      holderProgramLinkId: string
       holderProgramName: string
       rowIndex: number
       row: GafanHourRow
@@ -1062,9 +1071,12 @@ export default function SchoolViewPage() {
       rows.forEach((row, idx) => {
         if (!row.pendingAssignment) return
         if (!rowBelongsToCurrentTeacher(row.teacherName)) return
+        const programLinkId = String(program.linkId || "")
+        if (!programLinkId) return
         out.push({
-          key: `${program.id}::${idx}`,
+          key: `${program.id}::${programLinkId}::${idx}`,
           holderProgramId: program.id,
+          holderProgramLinkId: programLinkId,
           holderProgramName: program.name,
           rowIndex: idx,
           row,
@@ -1074,18 +1086,47 @@ export default function SchoolViewPage() {
     return out.sort((a, b) => a.row.date.localeCompare(b.row.date))
   }, [gafanPrograms, rowBelongsToCurrentTeacher])
 
+  const allowedTargetProgramIdsByPendingKey = useMemo(() => {
+    const out = new Map<string, Set<string>>()
+    for (const p of pendingAttendanceRows) {
+      const rowTeacherId = String(p.row.teacherId || "").trim()
+      const rowTeacherName = normalizePersonName(p.row.teacherName)
+      const allowed = new Set<string>()
+      for (const program of gafanPrograms) {
+        const programLinkId = String(program.linkId || "")
+        if (!programLinkId) continue
+        const teacherIds = parseGafanTeacherIds(program)
+        const teacherNames = teacherIds
+          .map((tid) => normalizePersonName(teacherNameById.get(tid) || tid))
+          .filter(Boolean)
+        const belongsById = rowTeacherId ? teacherIds.includes(rowTeacherId) : false
+        const belongsByName = rowTeacherName ? teacherNames.includes(rowTeacherName) : false
+        if (belongsById || belongsByName) allowed.add(programLinkId)
+      }
+      // Always allow in-place approval.
+      allowed.add(p.holderProgramLinkId)
+      out.set(p.key, allowed)
+    }
+    return out
+  }, [pendingAttendanceRows, gafanPrograms, teacherNameById])
+
   const assignPendingAttendanceRow = async (rowKey: string) => {
     if (!school?.id) return
     const pending = pendingAttendanceRows.find((r) => r.key === rowKey)
-    const targetProgramId = pendingAssignTargetByKey[rowKey]
-    if (!pending || !targetProgramId) return
-    const sourceProgram = gafanPrograms.find((g) => g.id === pending.holderProgramId)
-    const targetProgram = gafanPrograms.find((g) => g.id === targetProgramId)
+    const targetProgramLinkId = pendingAssignTargetByKey[rowKey]
+    if (!pending || !targetProgramLinkId) return
+    const allowedTargets = allowedTargetProgramIdsByPendingKey.get(rowKey)
+    if (allowedTargets && !allowedTargets.has(targetProgramLinkId)) {
+      alert("לא ניתן לאשר שעות לתוכנית שהמורה אינו משויך אליה")
+      return
+    }
+    const sourceProgram = gafanPrograms.find((g) => String(g.linkId || "") === pending.holderProgramLinkId)
+    const targetProgram = gafanPrograms.find((g) => String(g.linkId || "") === targetProgramLinkId)
     if (!sourceProgram || !targetProgram) return
 
     setHoursSaving(true)
     try {
-      if (targetProgramId === pending.holderProgramId) {
+      if (targetProgramLinkId === pending.holderProgramLinkId) {
         const sourceRowsAfterApprove = parseGafanHourRows(sourceProgram).map((r, idx) =>
           idx === pending.rowIndex ? { ...r, pendingAssignment: false } : r,
         )
@@ -2709,12 +2750,22 @@ export default function SchoolViewPage() {
                                         <SelectValue placeholder="בחר תוכנית לאישור" />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        {gafanPrograms.map((g, programIdx) => (
-                                          <SelectItem key={g.id} value={g.id}>
-                                            {g.name} (#{programIdx + 1})
-                                            {g.id === p.holderProgramId ? " - אותה תוכנית" : ""}
-                                          </SelectItem>
-                                        ))}
+                                        {gafanPrograms
+                                          .filter((g) =>
+                                            (allowedTargetProgramIdsByPendingKey.get(p.key) || new Set<string>()).has(
+                                              String(g.linkId || ""),
+                                            ),
+                                          )
+                                          .map((g) => {
+                                            const programIdx = gafanPrograms.findIndex((x) => x.linkId === g.linkId)
+                                            const linkValue = String(g.linkId || "")
+                                            return (
+                                              <SelectItem key={`${g.id}::${linkValue}`} value={linkValue}>
+                                                {g.name} (#{programIdx + 1})
+                                                {linkValue === p.holderProgramLinkId ? " - אותה תוכנית" : ""}
+                                              </SelectItem>
+                                            )
+                                          })}
                                       </SelectContent>
                                     </Select>
                                     <Button

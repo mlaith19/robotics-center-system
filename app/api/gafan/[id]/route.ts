@@ -14,6 +14,14 @@ type Ctx = { params: Promise<{ id: string }> }
 const DEFAULT_GAFAN_TEACHING_HOURLY_RATE = 50
 const DEFAULT_GAFAN_TRAVEL_HOURLY_RATE = 30
 
+function normalizePersonName(raw: unknown): string {
+  return String(raw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/["'`׳״]/g, "")
+    .replace(/\s+/g, " ")
+}
+
 function pickSchoolId(body: Record<string, unknown>, existing: Record<string, unknown> | undefined): string | null {
   if (!Object.prototype.hasOwnProperty.call(body, "schoolId") && !Object.prototype.hasOwnProperty.call(body, "school_id")) {
     const v = existing?.schoolId
@@ -319,6 +327,39 @@ export const PATCH = withTenantAuth(async (req, session, { params }: Ctx) => {
     const nextHourRows = Object.prototype.hasOwnProperty.call(body, "hourRows")
       ? normalizeGafanHourRows(body.hourRows)
       : existingHourRows
+
+    // Guardrail: approved hour rows must belong to teachers assigned to this specific program link.
+    if (Object.prototype.hasOwnProperty.call(body, "hourRows")) {
+      const assignedTeacherIds = new Set(nextTeacherIds.map((tid) => String(tid || "").trim()).filter(Boolean))
+      const assignedTeacherNames = new Set<string>()
+      if (assignedTeacherIds.size > 0) {
+        const teacherRows = await db<{ id: string; name: string | null }[]>`
+          SELECT id, name
+          FROM "Teacher"
+          WHERE id = ANY(${Array.from(assignedTeacherIds)}::text[])
+        `
+        for (const t of teacherRows) {
+          const normalizedName = normalizePersonName(t.name)
+          if (normalizedName) assignedTeacherNames.add(normalizedName)
+        }
+      }
+
+      const invalidRow = nextHourRows.find((row) => {
+        // Pending rows may temporarily be unassigned.
+        if (row.pendingAssignment === true) return false
+        const rowTeacherId = String(row.teacherId || "").trim()
+        const rowTeacherName = normalizePersonName(row.teacherName)
+        const belongsById = rowTeacherId ? assignedTeacherIds.has(rowTeacherId) : false
+        const belongsByName = rowTeacherName ? assignedTeacherNames.has(rowTeacherName) : false
+        return !belongsById && !belongsByName
+      })
+      if (invalidRow) {
+        return Response.json(
+          { error: "לא ניתן לאשר נוכחות למורה שאינו משויך לתוכנית זו" },
+          { status: 400 },
+        )
+      }
+    }
     const workshopRowsJson = db.json(nextWorkshopRows)
     const hourRowsJson = db.json(nextHourRows)
 
