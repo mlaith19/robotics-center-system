@@ -328,7 +328,19 @@ export const PATCH = withTenantAuth(async (req, session, { params }: Ctx) => {
       ? normalizeGafanHourRows(body.hourRows)
       : existingHourRows
 
+    const hourRowFingerprint = (row: ReturnType<typeof normalizeGafanHourRows>[number]) =>
+      [
+        String(row.date || "").trim(),
+        String(row.startTime || "").trim(),
+        String(row.endTime || "").trim(),
+        String(row.teacherId || "").trim(),
+        normalizePersonName(row.teacherName),
+        String(Number(row.totalHours || 0)),
+        row.pendingAssignment ? "pending" : "approved",
+      ].join("|")
+
     // Guardrail: approved hour rows must belong to teachers assigned to this specific program link.
+    // Important: allow unchanged legacy rows to remain, so admin can still edit/clean data gradually.
     if (Object.prototype.hasOwnProperty.call(body, "hourRows")) {
       const assignedTeacherIds = new Set(nextTeacherIds.map((tid) => String(tid || "").trim()).filter(Boolean))
       const assignedTeacherNames = new Set<string>()
@@ -344,6 +356,7 @@ export const PATCH = withTenantAuth(async (req, session, { params }: Ctx) => {
         }
       }
 
+      const existingRowFpSet = new Set(existingHourRows.map((row) => hourRowFingerprint(row)))
       const invalidRow = nextHourRows.find((row) => {
         // Pending rows may temporarily be unassigned.
         if (row.pendingAssignment === true) return false
@@ -351,7 +364,9 @@ export const PATCH = withTenantAuth(async (req, session, { params }: Ctx) => {
         const rowTeacherName = normalizePersonName(row.teacherName)
         const belongsById = rowTeacherId ? assignedTeacherIds.has(rowTeacherId) : false
         const belongsByName = rowTeacherName ? assignedTeacherNames.has(rowTeacherName) : false
-        return !belongsById && !belongsByName
+        if (belongsById || belongsByName) return false
+        // Keep backward compatibility: if this exact row already existed, do not block unrelated edits.
+        return !existingRowFpSet.has(hourRowFingerprint(row))
       })
       if (invalidRow) {
         return Response.json(
