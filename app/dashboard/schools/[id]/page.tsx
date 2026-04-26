@@ -2497,7 +2497,7 @@ export default function SchoolViewPage() {
             )}
           </TabsContent>}
 
-          {canViewAttendanceTab && <TabsContent value="teacher-attendance" className="p-3 sm:p-6" forceMount>
+          {canViewAttendanceTab && <TabsContent value="teacher-attendance" className="p-3 sm:p-6">
             {tabDataLoading ? (
               <div className="flex justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -2693,65 +2693,6 @@ export default function SchoolViewPage() {
                     )}
                   </>
                 )}
-                <Dialog open={hourDialogOpen} onOpenChange={setHourDialogOpen}>
-                  <DialogContent dir="rtl" className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
-                    <DialogHeader>
-                      <DialogTitle>
-                        {hourEditIdx != null || hourEditSourceRow
-                          ? "עריכת שורת שעות"
-                          : hourDialogContext === "attendance"
-                            ? "הוספת נוכחות מורה"
-                            : "הוספת שעות"}
-                      </DialogTitle>
-                    </DialogHeader>
-                    {hourDialogContext === "ngafan" && (
-                      <div className="space-y-2">
-                        <Label>תוכנית</Label>
-                        <Select value={hoursProgramId} onValueChange={setHoursProgramId}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="בחר תוכנית" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {gafanPrograms.map((program, idx) => (
-                              <SelectItem
-                                key={`${program.id}::${String(program.linkId || idx)}`}
-                                value={String(program.linkId || program.id)}
-                              >
-                                {program.name} (#{idx + 1})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-5">
-                      <Input
-                        type="date"
-                        className="sm:col-span-2 md:col-span-2"
-                        value={hourDate}
-                        onChange={(e) => setHourDate(e.target.value)}
-                      />
-                      <Input type="time" value={hourStartTime} onChange={(e) => setHourStartTime(e.target.value)} />
-                      <Input type="time" value={hourEndTime} onChange={(e) => setHourEndTime(e.target.value)} />
-                      <Input type="number" min={0} step="0.25" value={hourTotal} readOnly />
-                    </div>
-                    {hourSaveError ? (
-                      <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                        {hourSaveError}
-                      </div>
-                    ) : null}
-                    <div className="flex gap-2">
-                      <Button
-                        type="button"
-                        disabled={hourDialogContext === "ngafan" ? (!hoursProgramId || hoursSaving) : (gafanPrograms.length === 0 || hoursSaving)}
-                        onClick={() => void saveHourRow()}
-                      >
-                        {hourEditIdx != null || hourEditSourceRow ? "שמירת עריכה" : "הוספה"}
-                      </Button>
-                      <Button type="button" variant="outline" onClick={resetHourForm}>נקה</Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
               </div>
             )}
           </TabsContent>}
@@ -3383,6 +3324,62 @@ export default function SchoolViewPage() {
             )}
           </TabsContent>}
         </Tabs>
+        <Dialog open={hourDialogOpen} onOpenChange={setHourDialogOpen}>
+          <DialogContent dir="rtl" className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>
+                {hourEditIdx != null || hourEditSourceRow
+                  ? "עריכת שורת שעות"
+                  : hourDialogContext === "attendance"
+                    ? "הוספת נוכחות מורה"
+                    : "הוספת שעות"}
+              </DialogTitle>
+            </DialogHeader>
+            {hourDialogContext === "ngafan" && (
+              <div className="space-y-2">
+                <Label>תוכנית</Label>
+                <Select value={hoursProgramId} onValueChange={setHoursProgramId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="בחר תוכנית" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {gafanPrograms.map((program, idx) => (
+                      <SelectItem key={`${program.id}::${String(program.linkId || idx)}`} value={String(program.linkId || program.id)}>
+                        {program.name} (#{idx + 1})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-5">
+              <Input
+                type="date"
+                className="sm:col-span-2 md:col-span-2"
+                value={hourDate}
+                onChange={(e) => setHourDate(e.target.value)}
+              />
+              <Input type="time" value={hourStartTime} onChange={(e) => setHourStartTime(e.target.value)} />
+              <Input type="time" value={hourEndTime} onChange={(e) => setHourEndTime(e.target.value)} />
+              <Input type="number" min={0} step="0.25" value={hourTotal} readOnly />
+            </div>
+            {hourSaveError ? (
+              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {hourSaveError}
+              </div>
+            ) : null}
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                disabled={hourDialogContext === "ngafan" ? (!hoursProgramId || hoursSaving) : (gafanPrograms.length === 0 || hoursSaving)}
+                onClick={() => void saveHourRow()}
+              >
+                {hourEditIdx != null || hourEditSourceRow ? "שמירת עריכה" : "הוספה"}
+              </Button>
+              <Button type="button" variant="outline" onClick={resetHourForm}>נקה</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </Card>
     </div>
   )
