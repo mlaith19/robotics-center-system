@@ -847,14 +847,24 @@ export default function SchoolViewPage() {
     const resolvedDayOfWeek = weekdayFromDate(hourDate)
     const editTeacherId = String(hourEditSourceRow?.teacherId || "").trim()
     const editTeacherName = String(hourEditSourceRow?.teacherName || "").trim()
-    const resolvedTeacherId = editTeacherId || currentTeacherId || fallbackTeacherId
-    const resolvedTeacherName =
-      editTeacherName ||
-      (resolvedTeacherId ? (teacherNameById.get(resolvedTeacherId) || "") : "") ||
-      currentUser?.full_name ||
-      currentUser?.username ||
-      fallbackTeacherName ||
-      ""
+    const teacherIdsSet = new Set(assignedTeacherIds)
+    const normalizedEditName = normalizePersonName(editTeacherName)
+    const matchedTeacherIdByName =
+      normalizedEditName
+        ? assignedTeacherIds.find((tid) => normalizePersonName(teacherNameById.get(tid) || tid) === normalizedEditName) || ""
+        : ""
+    const preferredTeacherId = editTeacherId || currentTeacherId
+    const resolvedTeacherId =
+      (preferredTeacherId && teacherIdsSet.has(preferredTeacherId) ? preferredTeacherId : "") ||
+      matchedTeacherIdByName ||
+      fallbackTeacherId
+    const resolvedTeacherName = resolvedTeacherId
+      ? (teacherNameById.get(resolvedTeacherId) || editTeacherName || fallbackTeacherName || resolvedTeacherId).toString()
+      : (editTeacherName || currentUser?.full_name || currentUser?.username || fallbackTeacherName || "")
+    if (!resolvedTeacherId && hourDialogContext === "ngafan") {
+      setHourSaveError("אין מורה משויך לתוכנית שנבחרה. יש לשייך מורה לתוכנית לפני שמירת השורה.")
+      return
+    }
     const row: GafanHourRow = {
       date: hourDate,
       dayOfWeek: resolvedDayOfWeek,
@@ -1736,7 +1746,7 @@ export default function SchoolViewPage() {
         teacherCostAmount,
         plannedAmount,
         paidAmount,
-        balance: Math.round((plannedAmount - paidAmount) * 100) / 100,
+        balance: Math.round((teacherCostAmount - paidAmount) * 100) / 100,
       }
     })
     out.sort((a, b) => a.monthKey.localeCompare(b.monthKey) || a.teacherName.localeCompare(b.teacherName, "he", { sensitivity: "base" }) || a.programName.localeCompare(b.programName, "he", { sensitivity: "base" }))
@@ -1744,7 +1754,7 @@ export default function SchoolViewPage() {
   }, [gafanPrograms, schoolPayments, school?.id, teacherNameById])
 
   const schoolPayoutTotals = useMemo(() => {
-    const planned = teacherProgramMonthlyRows.reduce((s, r) => s + r.plannedAmount, 0)
+    const planned = teacherProgramMonthlyRows.reduce((s, r) => s + r.teacherCostAmount, 0)
     const paid = teacherProgramMonthlyRows.reduce((s, r) => s + r.paidAmount, 0)
     const balance = planned - paid
     return { planned, paid, balance }
@@ -3318,8 +3328,8 @@ export default function SchoolViewPage() {
                               <TableHead className="text-right">מורה</TableHead>
                               <TableHead className="text-right">תוכנית</TableHead>
                               <TableHead className="text-right">כמות שעות</TableHead>
-                              <TableHead className="text-right">עלות שעה (מורה)</TableHead>
-                              <TableHead className="text-right">סה"כ לתשלום</TableHead>
+                              <TableHead className="text-right">עלות (מורה)</TableHead>
+                              <TableHead className="text-right">חיוב מול בית ספר</TableHead>
                               <TableHead className="text-right">שולם</TableHead>
                               <TableHead className="text-right">יתרה</TableHead>
                               <TableHead className="text-right">פעולות</TableHead>
