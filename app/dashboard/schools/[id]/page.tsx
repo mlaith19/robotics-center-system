@@ -628,13 +628,11 @@ export default function SchoolViewPage() {
       const res = await fetch(`/api/gafan`, { credentials: "include" })
       const all = res.ok ? await res.json() : []
       const rows = Array.isArray(all) ? all : []
-      const linkedProgramIds = new Set(gafanPrograms.map((g) => String(g.id)))
       const uniquePrograms = new Map<string, GafanRow>()
       for (const row of rows) {
         const r = row as GafanRow
         const pid = String(r.id || "")
         if (!pid) continue
-        if (linkedProgramIds.has(pid)) continue
         if (!uniquePrograms.has(pid)) uniquePrograms.set(pid, r)
       }
       setGafanUnlinkedOptions(Array.from(uniquePrograms.values()))
