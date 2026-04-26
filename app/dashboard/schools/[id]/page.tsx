@@ -1682,23 +1682,6 @@ export default function SchoolViewPage() {
     return { rows, totalSchool, totalMine, totalBalance: Math.round((totalSchool - totalMine) * 100) / 100 }
   }, [schoolPayments, school?.id])
 
-  if (isNewPage) {
-    return <NewSchoolPage />
-  }
-
-  if (loading) {
-    return (
-      <div className="flex min-h-[400px] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    )
-  }
-
-  if (!school) {
-    return <div className="p-6 text-center">לא נמצא בית ספר</div>
-  }
-
-  const status = school.status || "active"
   const gafanAssignmentMeta = useMemo(() => {
     const totalByProgramId = new Map<string, number>()
     for (const g of gafanPrograms) {
@@ -1718,6 +1701,24 @@ export default function SchoolViewPage() {
     }
     return out
   }, [gafanPrograms])
+
+  if (isNewPage) {
+    return <NewSchoolPage />
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
+
+  if (!school) {
+    return <div className="p-6 text-center">לא נמצא בית ספר</div>
+  }
+
+  const status = school.status || "active"
 
   return (
     <div dir="rtl" className="container mx-auto max-w-7xl space-y-4 p-3 sm:space-y-6 sm:p-6">
