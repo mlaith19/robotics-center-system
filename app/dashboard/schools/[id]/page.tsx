@@ -461,6 +461,7 @@ export default function SchoolViewPage() {
   const [hourEditIdx, setHourEditIdx] = useState<number | null>(null)
   const [hourEditSourceRow, setHourEditSourceRow] = useState<GafanHourRow | null>(null)
   const [hourEditSourceProgramLinkId, setHourEditSourceProgramLinkId] = useState("")
+  const [hourPendingAssignment, setHourPendingAssignment] = useState(true)
   const [hourDialogContext, setHourDialogContext] = useState<"attendance" | "ngafan">("attendance")
   const [selectedAttendanceMonth, setSelectedAttendanceMonth] = useState("")
   const [selectedAttendanceTeacher, setSelectedAttendanceTeacher] = useState("")
@@ -812,6 +813,7 @@ export default function SchoolViewPage() {
     setHourEditIdx(null)
     setHourEditSourceRow(null)
     setHourEditSourceProgramLinkId("")
+    setHourPendingAssignment(true)
     setHourSaveError("")
   }
 
@@ -873,7 +875,7 @@ export default function SchoolViewPage() {
       startTime: hourStartTime,
       endTime: hourEndTime,
       totalHours: Math.max(0, Number(computedHours || hourTotal || 0)),
-      pendingAssignment: hourDialogContext === "attendance",
+      pendingAssignment: Boolean(hourPendingAssignment),
     }
     const targetRows = [...rows]
     if (hourEditIdx != null && hourEditIdx >= 0 && hourEditIdx < targetRows.length) {
@@ -2580,6 +2582,7 @@ export default function SchoolViewPage() {
                           setHourDialogContext("attendance")
                           setHoursProgramId(String(gafanPrograms[0]?.linkId || gafanPrograms[0]?.id || ""))
                           resetHourForm()
+                          setHourPendingAssignment(true)
                           setHourDialogOpen(true)
                         }}
                       >
@@ -2690,6 +2693,7 @@ export default function SchoolViewPage() {
                                                     onClick={() => {
                                                       setHourDialogContext("attendance")
                                                       setHoursProgramId(row.programLinkId || row.programId)
+                                                      setHourPendingAssignment(row.status === "pending")
                                                       setHourDate(row.date)
                                                       setHourStartTime(row.startTime)
                                                       setHourEndTime(row.endTime)
@@ -2881,6 +2885,7 @@ export default function SchoolViewPage() {
                               setHourDialogContext("ngafan")
                               setHoursProgramId(String(program.linkId || program.id))
                               resetHourForm()
+                              setHourPendingAssignment(false)
                               setHourDialogOpen(true)
                             }}
                           >
@@ -2931,6 +2936,7 @@ export default function SchoolViewPage() {
                                           onClick={() => {
                                             setHourDialogContext("ngafan")
                                             setHoursProgramId(String(program.linkId || program.id))
+                                            setHourPendingAssignment(false)
                                             setHourDate(r.date)
                                             setHourStartTime(r.startTime)
                                             setHourEndTime(r.endTime)
@@ -3408,6 +3414,23 @@ export default function SchoolViewPage() {
                         {program.name} (#{idx + 1})
                       </SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {hourDialogContext === "attendance" && (
+              <div className="space-y-2">
+                <Label>סטטוס אישור</Label>
+                <Select
+                  value={hourPendingAssignment ? "pending" : "approved"}
+                  onValueChange={(v) => setHourPendingAssignment(v === "pending")}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="approved">מאושר</SelectItem>
+                    <SelectItem value="pending">ממתין לאישור</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
