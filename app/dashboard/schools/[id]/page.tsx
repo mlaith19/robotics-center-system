@@ -463,6 +463,7 @@ export default function SchoolViewPage() {
   const [hourEditSourceProgramLinkId, setHourEditSourceProgramLinkId] = useState("")
   const [hourPendingAssignment, setHourPendingAssignment] = useState(true)
   const [hourDialogContext, setHourDialogContext] = useState<"attendance" | "ngafan">("attendance")
+  const [hourDialogTeacherId, setHourDialogTeacherId] = useState("")
   const [selectedAttendanceMonth, setSelectedAttendanceMonth] = useState("")
   const [selectedAttendanceTeacher, setSelectedAttendanceTeacher] = useState("")
   const [pendingAssignTargetByKey, setPendingAssignTargetByKey] = useState<Record<string, string>>({})
@@ -885,7 +886,7 @@ export default function SchoolViewPage() {
       normalizedEditName
         ? assignedTeacherIds.find((tid) => normalizePersonName(teacherNameById.get(tid) || tid) === normalizedEditName) || ""
         : ""
-    const preferredTeacherId = editTeacherId || currentTeacherId
+    const preferredTeacherId = editTeacherId || hourDialogTeacherId || currentTeacherId
     const resolvedTeacherId =
       (preferredTeacherId && teacherIdsSet.has(preferredTeacherId) ? preferredTeacherId : "") ||
       matchedTeacherIdByName ||
@@ -2625,9 +2626,17 @@ export default function SchoolViewPage() {
                         type="button"
                         size="sm"
                         onClick={() => {
+                          const activeTeacherId = activeAttendanceTeacher?.months
+                            ?.flatMap((m) => m.rows)
+                            .find((r) => r.teacherId)
+                            ?.teacherId || ""
+                          const prog = (activeTeacherId
+                            ? gafanPrograms.find((p) => parseGafanTeacherIds(p).includes(activeTeacherId))
+                            : null) || gafanPrograms[0]
                           setHourDialogContext("attendance")
-                          setHoursProgramId(String(gafanPrograms[0]?.linkId || gafanPrograms[0]?.id || ""))
                           resetHourForm()
+                          setHoursProgramId(String(prog?.linkId || prog?.id || ""))
+                          setHourDialogTeacherId(activeTeacherId)
                           setHourPendingAssignment(true)
                           setHourDialogOpen(true)
                         }}
@@ -3436,7 +3445,7 @@ export default function SchoolViewPage() {
             )}
           </TabsContent>}
         </Tabs>
-        <Dialog open={hourDialogOpen} onOpenChange={setHourDialogOpen}>
+        <Dialog open={hourDialogOpen} onOpenChange={(open) => { setHourDialogOpen(open); if (!open) setHourDialogTeacherId("") }}>
           <DialogContent dir="rtl" className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>

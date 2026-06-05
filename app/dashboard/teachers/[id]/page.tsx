@@ -1504,7 +1504,7 @@ export default function TeacherViewPage() {
             </div>
 
             {/* Attendance Records */}
-            {(filteredAttendanceByMonth.length > 0 || schoolAttendanceTabs.some(t => t.rows.length > 0)) ? (
+            {(filteredAttendanceByMonth.length > 0 || schoolAttendanceTabs.length > 0) ? (
               <div className="space-y-2">
                 {(regularAttendanceRows.length > 0 || schoolAttendanceTabs.length > 0) ? (
                   <div className="space-y-1">
