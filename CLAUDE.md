@@ -48,6 +48,28 @@ Built with Next.js 16, React 19, Prisma, PostgreSQL, Tailwind CSS v4, Radix UI, 
 
 ---
 
+## Deployment Workflow — After Every Change
+
+**After every completed fix or feature, always deploy:**
+
+1. **Commit** the changes with a descriptive message.
+2. **Push to GitHub**:
+   ```bash
+   git push origin main
+   ```
+3. **Deploy to production server** (the user runs this, or via SSH if key is available):
+   ```bash
+   ssh root@147.93.123.132
+   cd /var/www/robotics-center
+   git pull origin main
+   pm2 restart all
+   ```
+
+> **Rule**: Never leave a session without pushing + prompting the user to deploy.
+> The user explicitly requested this as a standing workflow after every change.
+
+---
+
 ## Current Focus
 
 **Bug fixing** across both portals equally:
