@@ -524,19 +524,17 @@ export default function TeacherViewPage() {
         if (r?.pendingAssignment === true) continue
         const rowTeacherId = String(r?.teacherId || "").trim()
         const rowTeacherName = normalizePersonName(r?.teacherName)
+        // If the row has an explicit teacherId, match by ID only — never fall through to name.
+        // This prevents a row saved for teacher A from showing under teacher B by name coincidence.
         const belongsById = rowTeacherId && rowTeacherId === teacherIdStr
-        // Allow partial name match: "ימאן" matches "ימאן סעיפאן" and vice-versa.
-        // Handles the case where the teacher's name was updated after hourRows were saved.
-        const belongsByName = teacherNameNormalized && rowTeacherName && (
+        // Name match only applies when the row has no teacherId (legacy rows).
+        const belongsByName = !rowTeacherId && teacherNameNormalized && rowTeacherName && (
           rowTeacherName === teacherNameNormalized ||
           rowTeacherName.startsWith(teacherNameNormalized + " ") ||
           teacherNameNormalized.startsWith(rowTeacherName + " ")
         )
-        // Legacy rows may miss teacherId.
-        // We only auto-attribute when there is exactly one assigned teacher.
-        // For multi-teacher programs we avoid guessing to prevent stealing hours
-        // from substitute teachers.
-        const belongsBySingleAssignedFallback = !rowTeacherId && assignedById && teacherIds.length === 1
+        // Rows with neither teacherId nor teacherName: only attribute to single-teacher programs.
+        const belongsBySingleAssignedFallback = !rowTeacherId && !rowTeacherName && assignedById && teacherIds.length === 1
         const belongs = Boolean(belongsById || belongsByName || belongsBySingleAssignedFallback)
         if (!belongs) continue
         const date = String(r?.date || "").trim().slice(0, 10)
@@ -685,14 +683,17 @@ export default function TeacherViewPage() {
         .filter(r => {
           const rowTeacherId = String(r?.teacherId || "").trim()
           const rowTeacherName = normalizePersonName(r?.teacherName)
+          // Row has explicit teacherId → match by ID only.
           const belongsById = rowTeacherId && rowTeacherId === teacherIdStr
-          const belongsByName = teacherNameNormalized && rowTeacherName && (
+          // Row has no teacherId but has a name → match by name.
+          const belongsByName = !rowTeacherId && teacherNameNormalized && rowTeacherName && (
             rowTeacherName === teacherNameNormalized ||
             rowTeacherName.startsWith(teacherNameNormalized + " ") ||
             teacherNameNormalized.startsWith(rowTeacherName + " ")
           )
-          const unattributed = !rowTeacherId && !rowTeacherName
-          return Boolean(belongsById || belongsByName || unattributed)
+          // Row has neither → only attribute in single-teacher programs.
+          const singleTeacherFallback = !rowTeacherId && !rowTeacherName && teacherInIds && teacherIds.length === 1
+          return Boolean(belongsById || belongsByName || singleTeacherFallback)
         })
         .filter(r => {
           const date = String(r?.date || "").trim().slice(0, 10)

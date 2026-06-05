@@ -645,7 +645,11 @@ export default function SchoolViewPage() {
         : []
       const byExactName = exactMatches.length === 1 ? exactMatches[0] || "" : ""
       const byPartialName = !byExactName && partialMatches.length === 1 ? partialMatches[0] || "" : ""
-      const resolvedTeacherId = byId || byExactName || byPartialName || (programTeacherIds.length === 1 ? programTeacherIds[0] || "" : "")
+      // If row has explicit teacherId, accept only if it's in the program — no name fallback.
+      // If row has no teacherId, resolve by name or single-teacher fallback.
+      const resolvedTeacherId = rowTeacherId
+        ? byId
+        : (byExactName || byPartialName || (programTeacherIds.length === 1 ? programTeacherIds[0] || "" : ""))
       const resolvedTeacherName = resolvedTeacherId
         ? (teacherNameById.get(resolvedTeacherId) || rowTeacherName || resolvedTeacherId).toString()
         : (rowTeacherName || "ללא שם")
