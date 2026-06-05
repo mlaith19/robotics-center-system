@@ -524,7 +524,13 @@ export default function TeacherViewPage() {
         const rowTeacherId = String(r?.teacherId || "").trim()
         const rowTeacherName = normalizePersonName(r?.teacherName)
         const belongsById = rowTeacherId && rowTeacherId === teacherIdStr
-        const belongsByName = teacherNameNormalized && rowTeacherName && rowTeacherName === teacherNameNormalized
+        // Allow partial name match: "ימאן" matches "ימאן סעיפאן" and vice-versa.
+        // Handles the case where the teacher's name was updated after hourRows were saved.
+        const belongsByName = teacherNameNormalized && rowTeacherName && (
+          rowTeacherName === teacherNameNormalized ||
+          rowTeacherName.startsWith(teacherNameNormalized + " ") ||
+          teacherNameNormalized.startsWith(rowTeacherName + " ")
+        )
         // Legacy rows may miss teacherId.
         // We only auto-attribute when there is exactly one assigned teacher.
         // For multi-teacher programs we avoid guessing to prevent stealing hours
