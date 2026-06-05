@@ -84,6 +84,55 @@ Reference `TODO.md` and `QA.md` for known issues and audit checklist.
 
 ---
 
+## Business Logic: Teacher Hours & Gafan System
+
+### שני מקורות שעות למורה
+מורה יכול לצבור שעות מ-**שני מקורות שונים**, ושניהם חייבים להופיע בכרטסת שלו:
+
+#### 1. מרכז — שעות רגילות
+- המורה מסמן נוכחות תלמידים בקורס → המערכת **אוטומטית** יוצרת שורת נוכחות למורה.
+- מקור הנתונים: טבלת `Attendance` (שורות עם `teacherId`, `studentId = NULL`).
+- API: `GET /api/attendance?teacherId=<id>`
+
+#### 2. בית ספר — תוכנית גפ"ן
+- המורה משובץ לבית ספר תחת תוכנית גפ"ן (מימון ממשלתי).
+- **הכנסת שעות ידנית** בדף בית הספר (לא אוטומטית מנוכחות).
+- מקור הנתונים: `GafanSchoolLink.hourRows` — מערך JSON של שורות שעות לכל מורה בכל בית ספר.
+- API: `GET /api/gafan` → מחזיר **כל** תוכניות הגפ"ן עם כל הקישורים לבתי ספר.
+- הסינון לפי מורה ספציפי מתבצע **בצד הלקוח** ב-`teacherSchoolAttendanceRows` (דף המורה).
+
+### כרטסת המורה (`/dashboard/teachers/[id]`)
+בטאב **נוכחות** יש שני סאב-טאבים:
+- **רגיל** — שעות מרכז מ-`/api/attendance?teacherId=...`
+- **גפ"ן** — שעות בתי ספר מ-`/api/gafan` (מסוננות client-side לפי teacherId/name)
+
+### מבנה נתוני גפ"ן
+```
+Gafan (תוכנית)
+  └── GafanSchoolLink (קישור לבית ספר — אחד לכל בית ספר)
+        ├── schoolId
+        ├── teacherIds[]     — מורים משובצים
+        ├── teacherRates{}   — תעריף לכל מורה
+        └── hourRows[]       — שורות שעות שהוכנסו ידנית
+              ├── date, startTime, endTime, totalHours
+              ├── teacherId   — מזהה המורה (ייתכן חסר בשורות ישנות)
+              └── teacherName — שם המורה (fallback לזיהוי)
+```
+
+### כלל זיהוי שורת שעות לפי מורה (client-side)
+```
+belongs = belongsById      // rowTeacherId === teacherIdStr
+       || belongsByName    // שם מנורמל תואם
+       || belongsBySingleAssignedFallback  // אין teacherId + זהו המורה היחיד בתוכנית
+```
+
+### נקודות רגישות וBugs ידועים שתוקנו
+- `ensureGafanLinkColumns` רץ 16 DDL/DML בכל GET — תוקן עם WeakSet cache.
+- אם בית ספר מסוים לא מופיע בכרטסת המורה — לרוב timeout ב-`/api/gafan` שמחזיר נתונים חלקיים.
+- `ensureAttendanceCampColumns`, `ensureAttendanceHourKindColumn`, `ensureTeacherTariffTables`, `backfillCampTeacherRowsIfMissing` — כולם עם WeakSet/WeakMap cache.
+
+---
+
 ## What NOT to Do
 
 - Do not add new dependencies without asking.
