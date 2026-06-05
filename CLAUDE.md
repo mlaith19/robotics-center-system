@@ -57,12 +57,9 @@ Built with Next.js 16, React 19, Prisma, PostgreSQL, Tailwind CSS v4, Radix UI, 
    ```bash
    git push origin main
    ```
-3. **Deploy to production server** (the user runs this, or via SSH if key is available):
+3. **Deploy to production server** — הדבק בשרת:
    ```bash
-   ssh root@147.93.123.132
-   cd /var/www/robotics-center
-   git pull origin main
-   pm2 restart all
+   cd /var/www/robotics-center && git pull --rebase origin main && (docker compose --env-file .env.production -f docker-compose.production.yml up -d --build || docker compose --env-file .env -f docker-compose.production.yml up -d --build) && docker image prune -f
    ```
 
 > **Rule**: Never leave a session without pushing + prompting the user to deploy.
