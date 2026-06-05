@@ -316,8 +316,6 @@ export const PATCH = withTenantAuth(async (req, session, { params }: Ctx) => {
     for (const tid of Object.keys(nextTeacherRates)) {
       if (!nextTeacherIds.includes(tid)) delete nextTeacherRates[tid]
     }
-    const teacherIdsJson = db.json(nextTeacherIds)
-    const teacherRatesJson = db.json(nextTeacherRates)
     const nextWorkshopRows = Object.prototype.hasOwnProperty.call(body, "workshopRows")
       ? normalizeGafanWorkshopRows(body.workshopRows)
       : existingWorkshopRows
@@ -327,6 +325,30 @@ export const PATCH = withTenantAuth(async (req, session, { params }: Ctx) => {
     const nextHourRows = Object.prototype.hasOwnProperty.call(body, "hourRows")
       ? normalizeGafanHourRows(body.hourRows)
       : existingHourRows
+
+    // Auto-assign: if an hourRow has a teacherId not yet in teacherIds, add it automatically.
+    // Ensures entering hours for a teacher always registers them to the school program.
+    if (Object.prototype.hasOwnProperty.call(body, "hourRows")) {
+      for (const row of nextHourRows) {
+        const tid = String(row.teacherId || "").trim()
+        if (tid && !nextTeacherIds.includes(tid)) {
+          nextTeacherIds = [...nextTeacherIds, tid]
+          if (!nextTeacherRates[tid]) {
+            nextTeacherRates = {
+              ...nextTeacherRates,
+              [tid]: {
+                teachingHourlyRate: DEFAULT_GAFAN_TEACHING_HOURLY_RATE,
+                travelHourlyRate: DEFAULT_GAFAN_TRAVEL_HOURLY_RATE,
+              },
+            }
+          }
+        }
+      }
+    }
+
+    // Compute JSON after auto-assign so new teacherIds/Rates are persisted
+    const teacherIdsJson = db.json(nextTeacherIds)
+    const teacherRatesJson = db.json(nextTeacherRates)
 
     const hourRowFingerprint = (row: ReturnType<typeof normalizeGafanHourRows>[number]) =>
       [
