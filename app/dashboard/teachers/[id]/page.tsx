@@ -216,7 +216,8 @@ export default function TeacherViewPage() {
   const [centerLogo, setCenterLogo] = useState("")
   const [selectedAttendanceCourse, setSelectedAttendanceCourse] = useState<string>("all")
   const [selectedAttendanceMonth, setSelectedAttendanceMonth] = useState<string>("all")
-  const [attendanceTableTab, setAttendanceTableTab] = useState<string>("regular")
+  const [attendanceTableTab, setAttendanceTableTab] = useState<"regular" | "gafan">("regular")
+  const [gafanSchoolTab, setGafanSchoolTab] = useState<string>("")
   const [deletingAttendanceId, setDeletingAttendanceId] = useState<string | null>(null)
   const [payments, setPayments] = useState<any[]>([]) // Declare payments variable
   const [isTeacherUser, setIsTeacherUser] = useState(false)
@@ -657,13 +658,27 @@ export default function TeacherViewPage() {
 
     for (const program of schoolGafanPrograms) {
       const teacherIds = normalizeTeacherIdsList(program.teacherIds)
-      if (!teacherIds.includes(teacherIdStr)) continue
+      const programRows = normalizeGafanHourRowsList(program.hourRows)
+
+      // Include school if teacher is in teacherIds OR has matching rows in hourRows
+      const teacherInIds = teacherIds.includes(teacherIdStr)
+      const teacherInRows = programRows.some(r => {
+        const rowTeacherId = String(r?.teacherId || "").trim()
+        const rowTeacherName = normalizePersonName(r?.teacherName)
+        const byId = rowTeacherId && rowTeacherId === teacherIdStr
+        const byName = teacherNameNormalized && rowTeacherName && (
+          rowTeacherName === teacherNameNormalized ||
+          rowTeacherName.startsWith(teacherNameNormalized + " ") ||
+          teacherNameNormalized.startsWith(rowTeacherName + " ")
+        )
+        return Boolean(byId || byName)
+      })
+      if (!teacherInIds && !teacherInRows) continue
 
       const schoolId = String(program.schoolId || program.id || "unknown")
       const schoolName = String(program.schoolName || "בית ספר")
       const tabId = `school-${schoolId}`
       const rateMap = normalizeTeacherRatesMap(program.teacherRates)
-      const programRows = normalizeGafanHourRowsList(program.hourRows)
 
       const matchingRows = programRows
         .filter(r => r?.pendingAssignment !== true)
@@ -732,10 +747,10 @@ export default function TeacherViewPage() {
   )
 
   useEffect(() => {
-    const isValid = attendanceTableTab === "regular" ||
-      schoolAttendanceTabs.some(t => t.tabId === attendanceTableTab)
-    if (!isValid) setAttendanceTableTab("regular")
-  }, [schoolAttendanceTabs, attendanceTableTab])
+    if (schoolAttendanceTabs.length > 0 && !schoolAttendanceTabs.some(t => t.tabId === gafanSchoolTab)) {
+      setGafanSchoolTab(schoolAttendanceTabs[0].tabId)
+    }
+  }, [schoolAttendanceTabs, gafanSchoolTab])
 
   const activeAttendanceMonthSummary = useMemo(() => {
     if (selectedAttendanceMonth === "all") {
@@ -1437,7 +1452,7 @@ export default function TeacherViewPage() {
                 size="sm"
                 className="gap-1 bg-purple-600 hover:bg-purple-700 text-white"
                 onClick={() => {
-                  const activeSchoolTab = schoolAttendanceTabs.find(t => t.tabId === attendanceTableTab)
+                  const activeSchoolTab = schoolAttendanceTabs.find(t => t.tabId === gafanSchoolTab)
                   const printRows = attendanceTableTab === "regular" ? regularAttendanceRows : (activeSchoolTab?.rows ?? [])
                   const printTypeLabel = attendanceTableTab === "regular" ? "רגיל" : (activeSchoolTab?.schoolName ?? 'גפ"ן')
                   const w = window.open("", "_blank")
@@ -1492,26 +1507,42 @@ export default function TeacherViewPage() {
             {(filteredAttendanceByMonth.length > 0 || schoolAttendanceTabs.some(t => t.rows.length > 0)) ? (
               <div className="space-y-2">
                 {(regularAttendanceRows.length > 0 || schoolAttendanceTabs.length > 0) ? (
-                  <div className="inline-flex flex-wrap items-center gap-1 rounded-lg border bg-muted/30 p-1">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={attendanceTableTab === "regular" ? "default" : "ghost"}
-                      onClick={() => setAttendanceTableTab("regular")}
-                    >
-                      רגיל ({Math.round(regularAttendanceTotalHours * 100) / 100} ש׳)
-                    </Button>
-                    {schoolAttendanceTabs.map(tab => (
+                  <div className="space-y-1">
+                    <div className="inline-flex items-center gap-1 rounded-lg border bg-muted/30 p-1">
                       <Button
-                        key={tab.tabId}
                         type="button"
                         size="sm"
-                        variant={attendanceTableTab === tab.tabId ? "default" : "ghost"}
-                        onClick={() => setAttendanceTableTab(tab.tabId)}
+                        variant={attendanceTableTab === "regular" ? "default" : "ghost"}
+                        onClick={() => setAttendanceTableTab("regular")}
                       >
-                        {tab.schoolName} ({tab.totalHours} ש׳)
+                        רגיל ({Math.round(regularAttendanceTotalHours * 100) / 100} ש׳)
                       </Button>
-                    ))}
+                      {schoolAttendanceTabs.length > 0 && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={attendanceTableTab === "gafan" ? "default" : "ghost"}
+                          onClick={() => setAttendanceTableTab("gafan")}
+                        >
+                          גפ&quot;ן ({Math.round(gafanAttendanceTotalHours * 100) / 100} ש׳)
+                        </Button>
+                      )}
+                    </div>
+                    {attendanceTableTab === "gafan" && schoolAttendanceTabs.length > 0 && (
+                      <div className="inline-flex flex-wrap items-center gap-1 rounded-lg border border-dashed bg-muted/10 p-1">
+                        {schoolAttendanceTabs.map(tab => (
+                          <Button
+                            key={tab.tabId}
+                            type="button"
+                            size="sm"
+                            variant={gafanSchoolTab === tab.tabId ? "secondary" : "ghost"}
+                            onClick={() => setGafanSchoolTab(tab.tabId)}
+                          >
+                            {tab.schoolName} ({tab.totalHours} ש׳)
+                          </Button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ) : null}
                 <div className="overflow-x-auto rounded-md border">
@@ -1538,7 +1569,7 @@ export default function TeacherViewPage() {
                     <tbody>
                       {(attendanceTableTab === "regular"
                         ? regularAttendanceRows
-                        : (schoolAttendanceTabs.find(t => t.tabId === attendanceTableTab)?.rows ?? [])
+                        : (schoolAttendanceTabs.find(t => t.tabId === gafanSchoolTab)?.rows ?? [])
                       ).map((a: any) => {
                         const statusLabel = getStatusLabel(a.status)
                         const isPresent = statusLabel === "נוכח"
@@ -1599,7 +1630,7 @@ export default function TeacherViewPage() {
                     </tbody>
                   </table>
                 </div>
-                {attendanceTableTab !== "regular" && (schoolAttendanceTabs.find(t => t.tabId === attendanceTableTab)?.rows.length ?? 0) === 0 ? (
+                {attendanceTableTab === "gafan" && (schoolAttendanceTabs.find(t => t.tabId === gafanSchoolTab)?.rows.length ?? 0) === 0 ? (
                   <Card className="p-4 text-center text-muted-foreground">אין רשומות נוכחות לבית הספר בחודש שנבחר</Card>
                 ) : null}
                 {attendanceTableTab === "regular" && regularAttendanceRows.length === 0 ? (
