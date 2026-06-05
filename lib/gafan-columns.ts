@@ -1,6 +1,9 @@
 import type postgres from "postgres"
 
+const _gafanLinkDone = new WeakSet<object>()
+
 export async function ensureGafanLinkColumns(db: ReturnType<typeof postgres>): Promise<void> {
+  if (_gafanLinkDone.has(db as object)) return
   try {
     await db`ALTER TABLE "Gafan" ADD COLUMN IF NOT EXISTS "schoolId" TEXT`
   } catch (e) {
@@ -77,6 +80,7 @@ export async function ensureGafanLinkColumns(db: ReturnType<typeof postgres>): P
   } catch (e) {
     console.warn("[gafan] ensure link ids:", e)
   }
+  _gafanLinkDone.add(db as object)
 }
 
 export function normalizeGafanTeacherIds(raw: unknown): string[] {
