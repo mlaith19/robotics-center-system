@@ -47,10 +47,16 @@ const sqlAttendanceTeacherRowAllowed = `(
   )
 )`
 
+const _backfillDone = new WeakMap<object, Set<string>>()
+
 async function backfillCampTeacherRowsIfMissing(
   db: ReturnType<typeof postgres>,
   teacherId: string,
 ): Promise<void> {
+  const dbKey = db as object
+  if (!_backfillDone.has(dbKey)) _backfillDone.set(dbKey, new Set())
+  const done = _backfillDone.get(dbKey)!
+  if (done.has(teacherId)) return
   const teacherRows = await db`SELECT "userId" FROM "Teacher" WHERE id = ${teacherId} LIMIT 1`
   const teacherUserId = String((teacherRows[0] as { userId?: string | null } | undefined)?.userId || "").trim()
   const candidates = await db`
@@ -76,6 +82,7 @@ async function backfillCampTeacherRowsIfMissing(
     if (!isCampCourseType(courseType)) continue
     await resyncCampTeacherAttendanceForCourseDate(db, courseId, dateYmd, nowIso)
   }
+  done.add(teacherId)
 }
 
 async function reconcileRegularTeacherAttendanceForTeacher(

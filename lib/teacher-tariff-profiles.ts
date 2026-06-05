@@ -23,7 +23,10 @@ export type TeacherTariffProfileRow = {
   updatedAt: string
 }
 
+const _tariffTablesDone = new WeakSet<object>()
+
 export async function ensureTeacherTariffTables(sql: Sql) {
+  if (_tariffTablesDone.has(sql as object)) return
   const safe = async (label: string, p: Promise<unknown>) => {
     try {
       await p
@@ -70,6 +73,7 @@ export async function ensureTeacherTariffTables(sql: Sql) {
       ADD COLUMN IF NOT EXISTS "officeHourlyRate" DOUBLE PRECISION
     `,
   )
+  _tariffTablesDone.add(sql as object)
 }
 
 export function normalizeTariffProfilePayload(body: Record<string, unknown>) {
@@ -214,6 +218,7 @@ export async function enrichTeacherAttendanceRowsWithRates(
   teacherId: string,
   rows: Record<string, unknown>[],
 ): Promise<Record<string, unknown>[]> {
+  if (rows.length === 0) return rows
   await ensureTeacherTariffTables(sql)
   const teacherRows = await sql`SELECT * FROM "Teacher" WHERE id = ${teacherId} LIMIT 1`
   const teacherRow = (teacherRows[0] ?? {}) as Record<string, unknown>
