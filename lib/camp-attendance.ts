@@ -87,7 +87,10 @@ export function teacherTeachesCellForStudentGroup(
   return found.cell.groupLabels.some((x) => normCampGroupLabel(x) === g)
 }
 
+const _campColsDone = new WeakSet<object>()
+
 export async function ensureAttendanceCampColumns(db: ReturnType<typeof postgres>) {
+  if (_campColsDone.has(db as object)) return
   const safe = async (q: Promise<unknown>) => {
     try {
       await q
@@ -99,6 +102,7 @@ export async function ensureAttendanceCampColumns(db: ReturnType<typeof postgres
   await safe(db`ALTER TABLE "Attendance" ADD COLUMN IF NOT EXISTS "campLessonTitle" TEXT`)
   await safe(db`ALTER TABLE "Attendance" ADD COLUMN IF NOT EXISTS "campSlotStart" TEXT`)
   await safe(db`ALTER TABLE "Attendance" ADD COLUMN IF NOT EXISTS "campSlotEnd" TEXT`)
+  _campColsDone.add(db as object)
 }
 
 /** סיכום שעות הוראה ליום מפגש לפי משבצות שבהן המורה משובץ (לא כולל הפסקות) */
