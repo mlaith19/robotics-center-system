@@ -216,7 +216,7 @@ export default function TeacherViewPage() {
   const [centerLogo, setCenterLogo] = useState("")
   const [selectedAttendanceCourse, setSelectedAttendanceCourse] = useState<string>("all")
   const [selectedAttendanceMonth, setSelectedAttendanceMonth] = useState<string>("all")
-  const [attendanceTableTab, setAttendanceTableTab] = useState<"regular" | "gafan">("regular")
+  const [attendanceTableTab, setAttendanceTableTab] = useState<string>("regular")
   const [deletingAttendanceId, setDeletingAttendanceId] = useState<string | null>(null)
   const [payments, setPayments] = useState<any[]>([]) // Declare payments variable
   const [isTeacherUser, setIsTeacherUser] = useState(false)
@@ -638,13 +638,6 @@ export default function TeacherViewPage() {
     [filteredAttendanceByMonth],
   )
 
-  const gafanAttendanceRows = useMemo(
-    () => filteredAttendanceByMonth.filter((a: any) => String(a?.sourceType || "") === "school-gafan"),
-    [filteredAttendanceByMonth],
-  )
-
-  const hasGafanAttendanceRows = gafanAttendanceRows.length > 0
-
   const regularAttendanceTotalHours = useMemo(() => {
     return regularAttendanceRows.reduce((sum, a: any) => {
       const status = String(a?.status || "").trim().toLowerCase()
@@ -654,20 +647,95 @@ export default function TeacherViewPage() {
     }, 0)
   }, [regularAttendanceRows])
 
-  const gafanAttendanceTotalHours = useMemo(() => {
-    return gafanAttendanceRows.reduce((sum, a: any) => {
-      const status = String(a?.status || "").trim().toLowerCase()
-      const isPresent = status === "present" || status === "נוכח"
-      if (!isPresent) return sum
-      return sum + calcAttendanceHours(a)
-    }, 0)
-  }, [gafanAttendanceRows])
+  // Per-school gafan tabs — one tab per school where this teacher is assigned.
+  // Uses permissive matching: ID match, name prefix match, or fully unattributed rows.
+  const schoolAttendanceTabs = useMemo(() => {
+    if (!id || !teacher) return []
+    const teacherIdStr = String(id)
+    const teacherNameNormalized = normalizePersonName(teacher.name)
+    const schoolMap = new Map<string, { schoolName: string; tabId: string; rows: any[]; totalHours: number }>()
+
+    for (const program of schoolGafanPrograms) {
+      const teacherIds = normalizeTeacherIdsList(program.teacherIds)
+      if (!teacherIds.includes(teacherIdStr)) continue
+
+      const schoolId = String(program.schoolId || program.id || "unknown")
+      const schoolName = String(program.schoolName || "בית ספר")
+      const tabId = `school-${schoolId}`
+      const rateMap = normalizeTeacherRatesMap(program.teacherRates)
+      const programRows = normalizeGafanHourRowsList(program.hourRows)
+
+      const matchingRows = programRows
+        .filter(r => r?.pendingAssignment !== true)
+        .filter(r => {
+          const rowTeacherId = String(r?.teacherId || "").trim()
+          const rowTeacherName = normalizePersonName(r?.teacherName)
+          const belongsById = rowTeacherId && rowTeacherId === teacherIdStr
+          const belongsByName = teacherNameNormalized && rowTeacherName && (
+            rowTeacherName === teacherNameNormalized ||
+            rowTeacherName.startsWith(teacherNameNormalized + " ") ||
+            teacherNameNormalized.startsWith(rowTeacherName + " ")
+          )
+          const unattributed = !rowTeacherId && !rowTeacherName
+          return Boolean(belongsById || belongsByName || unattributed)
+        })
+        .filter(r => {
+          const date = String(r?.date || "").trim().slice(0, 10)
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false
+          if (selectedAttendanceMonth !== "all") return date.slice(0, 7) === selectedAttendanceMonth
+          return true
+        })
+        .map((r, idx) => {
+          const date = String(r?.date || "").trim().slice(0, 10)
+          const startTime = String(r?.startTime || "").slice(0, 5)
+          const endTime = String(r?.endTime || "").slice(0, 5)
+          const hours = Number(r?.totalHours || 0)
+          const rowTeacherId = String(r?.teacherId || "").trim()
+          const teacherRateRow =
+            (rowTeacherId && rateMap[rowTeacherId]) || rateMap[teacherIdStr] || Object.values(rateMap)[0]
+          const teachingRate = Number(teacherRateRow?.teachingHourlyRate ?? DEFAULT_GAFAN_TEACHING_HOURLY_RATE)
+          const travelRate = Number(teacherRateRow?.travelHourlyRate ?? teacherRateRow?.officeHourlyRate ?? DEFAULT_GAFAN_TRAVEL_HOURLY_RATE)
+          return {
+            id: `school-gafan-${program.id}-${date}-${startTime}-${endTime}-${idx}`,
+            date,
+            status: "נוכח",
+            courseName: String(program.name || 'גפ"ן'),
+            schoolName,
+            courseStartTime: startTime,
+            courseEndTime: endTime,
+            hours: Number.isFinite(hours) && hours > 0 ? hours : 0,
+            notes: 'נוכחות בית ספר (גפ"ן)',
+            hourKind: "teaching",
+            appliedHourlyRate: Math.max(0, teachingRate + travelRate),
+            sourceType: "school-gafan",
+          }
+        })
+
+      if (!schoolMap.has(tabId)) {
+        schoolMap.set(tabId, { schoolName, tabId, rows: [], totalHours: 0 })
+      }
+      const entry = schoolMap.get(tabId)!
+      entry.rows.push(...matchingRows)
+      entry.totalHours += matchingRows.reduce((sum, r) => sum + Number(r.hours || 0), 0)
+    }
+
+    return Array.from(schoolMap.values()).map(entry => ({
+      ...entry,
+      rows: entry.rows.sort((a: any, b: any) => String(b.date).localeCompare(String(a.date))),
+      totalHours: Math.round(entry.totalHours * 100) / 100,
+    }))
+  }, [schoolGafanPrograms, id, teacher, selectedAttendanceMonth])
+
+  const gafanAttendanceTotalHours = useMemo(
+    () => Math.round(schoolAttendanceTabs.reduce((sum, t) => sum + t.totalHours, 0) * 100) / 100,
+    [schoolAttendanceTabs],
+  )
 
   useEffect(() => {
-    if (!hasGafanAttendanceRows && attendanceTableTab === "gafan") {
-      setAttendanceTableTab("regular")
-    }
-  }, [hasGafanAttendanceRows, attendanceTableTab])
+    const isValid = attendanceTableTab === "regular" ||
+      schoolAttendanceTabs.some(t => t.tabId === attendanceTableTab)
+    if (!isValid) setAttendanceTableTab("regular")
+  }, [schoolAttendanceTabs, attendanceTableTab])
 
   const activeAttendanceMonthSummary = useMemo(() => {
     if (selectedAttendanceMonth === "all") {
@@ -1369,8 +1437,9 @@ export default function TeacherViewPage() {
                 size="sm"
                 className="gap-1 bg-purple-600 hover:bg-purple-700 text-white"
                 onClick={() => {
-                  const printRows = attendanceTableTab === "gafan" ? gafanAttendanceRows : regularAttendanceRows
-                  const printTypeLabel = attendanceTableTab === "gafan" ? "גפ\"ן" : "רגיל"
+                  const activeSchoolTab = schoolAttendanceTabs.find(t => t.tabId === attendanceTableTab)
+                  const printRows = attendanceTableTab === "regular" ? regularAttendanceRows : (activeSchoolTab?.rows ?? [])
+                  const printTypeLabel = attendanceTableTab === "regular" ? "רגיל" : (activeSchoolTab?.schoolName ?? 'גפ"ן')
                   const w = window.open("", "_blank")
                   if (!w) return
                   const logoHtml = centerLogo ? `<img src="${centerLogo}" style="max-height:60px;max-width:160px;object-fit:contain" />` : ""
@@ -1420,10 +1489,10 @@ export default function TeacherViewPage() {
             </div>
 
             {/* Attendance Records */}
-            {filteredAttendanceByMonth.length ? (
+            {(filteredAttendanceByMonth.length > 0 || schoolAttendanceTabs.some(t => t.rows.length > 0)) ? (
               <div className="space-y-2">
-                {hasGafanAttendanceRows ? (
-                  <div className="inline-flex items-center gap-1 rounded-lg border bg-muted/30 p-1">
+                {(regularAttendanceRows.length > 0 || schoolAttendanceTabs.length > 0) ? (
+                  <div className="inline-flex flex-wrap items-center gap-1 rounded-lg border bg-muted/30 p-1">
                     <Button
                       type="button"
                       size="sm"
@@ -1432,14 +1501,17 @@ export default function TeacherViewPage() {
                     >
                       רגיל ({Math.round(regularAttendanceTotalHours * 100) / 100} ש׳)
                     </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={attendanceTableTab === "gafan" ? "default" : "ghost"}
-                      onClick={() => setAttendanceTableTab("gafan")}
-                    >
-                      גפ&quot;ן ({Math.round(gafanAttendanceTotalHours * 100) / 100} ש׳)
-                    </Button>
+                    {schoolAttendanceTabs.map(tab => (
+                      <Button
+                        key={tab.tabId}
+                        type="button"
+                        size="sm"
+                        variant={attendanceTableTab === tab.tabId ? "default" : "ghost"}
+                        onClick={() => setAttendanceTableTab(tab.tabId)}
+                      >
+                        {tab.schoolName} ({tab.totalHours} ש׳)
+                      </Button>
+                    ))}
                   </div>
                 ) : null}
                 <div className="overflow-x-auto rounded-md border">
@@ -1464,7 +1536,10 @@ export default function TeacherViewPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(attendanceTableTab === "gafan" ? gafanAttendanceRows : regularAttendanceRows).map((a: any) => {
+                      {(attendanceTableTab === "regular"
+                        ? regularAttendanceRows
+                        : (schoolAttendanceTabs.find(t => t.tabId === attendanceTableTab)?.rows ?? [])
+                      ).map((a: any) => {
                         const statusLabel = getStatusLabel(a.status)
                         const isPresent = statusLabel === "נוכח"
                         const isAbsent = statusLabel === "חיסור"
@@ -1524,8 +1599,8 @@ export default function TeacherViewPage() {
                     </tbody>
                   </table>
                 </div>
-                {attendanceTableTab === "gafan" && gafanAttendanceRows.length === 0 ? (
-                  <Card className="p-4 text-center text-muted-foreground">אין רשומות נוכחות גפ&quot;ן בחודש שנבחר</Card>
+                {attendanceTableTab !== "regular" && (schoolAttendanceTabs.find(t => t.tabId === attendanceTableTab)?.rows.length ?? 0) === 0 ? (
+                  <Card className="p-4 text-center text-muted-foreground">אין רשומות נוכחות לבית הספר בחודש שנבחר</Card>
                 ) : null}
                 {attendanceTableTab === "regular" && regularAttendanceRows.length === 0 ? (
                   <Card className="p-4 text-center text-muted-foreground">אין רשומות נוכחות רגילות בחודש שנבחר</Card>
