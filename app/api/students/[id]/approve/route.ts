@@ -1,0 +1,101 @@
+import { withTenantAuth } from "@/lib/tenant-api-auth"
+import { requireTenant } from "@/lib/tenant/resolve-tenant"
+import { getPermissionsForRole } from "@/lib/permissions"
+import { requireAnyPerm } from "@/lib/require-perm"
+import { ensureStudentRegistrationInterestColumn } from "@/lib/student-registration-interest"
+
+type Ctx = { params: Promise<{ id: string }> }
+
+function toStringArray(val: unknown): string[] {
+  if (Array.isArray(val)) return val.map((v) => String(v))
+  if (typeof val === "string") {
+    try {
+      const parsed = JSON.parse(val)
+      return Array.isArray(parsed) ? parsed.map((v) => String(v)) : []
+    } catch {
+      return []
+    }
+  }
+  return []
+}
+
+export const POST = withTenantAuth(async (req, session, { params }: Ctx) => {
+  const denied = requireAnyPerm(session, ["registration.view", "students.edit"])
+  if (denied) return denied
+
+  const [tenant, tenantErr] = await requireTenant(req)
+  if (tenantErr) return tenantErr
+  const db = tenant.db
+  const { id: studentId } = await params
+
+  try {
+    await ensureStudentRegistrationInterestColumn(db)
+    const body = await req.json().catch(() => ({}))
+    const requestedCourseId = typeof body.courseId === "string" ? body.courseId : null
+
+    const studentRows = await db`SELECT id, status, "courseIds" FROM "Student" WHERE id = ${studentId} LIMIT 1`
+    if (studentRows.length === 0) {
+      return Response.json({ error: "Student not found" }, { status: 404 })
+    }
+
+    const student = studentRows[0] as { courseIds?: unknown }
+    const courseIds = toStringArray(student.courseIds)
+    const courseId = requestedCourseId || courseIds[0] || null
+    if (!courseId) {
+      return Response.json({ error: "No course selected for this registration" }, { status: 400 })
+    }
+
+    const courseRows = await db`SELECT id FROM "Course" WHERE id = ${courseId} LIMIT 1`
+    if (courseRows.length === 0) {
+      return Response.json({ error: "Course not found" }, { status: 404 })
+    }
+
+    const existingEnrollment = await db`
+      SELECT id FROM "Enrollment"
+      WHERE "studentId" = ${studentId} AND "courseId" = ${courseId}
+      LIMIT 1
+    `
+
+    if (existingEnrollment.length === 0) {
+      const enrollmentId = crypto.randomUUID()
+      const now = new Date().toISOString()
+      const enrollmentDate = now.split("T")[0]
+      await db`
+        INSERT INTO "Enrollment" (id, "studentId", "courseId", "enrollmentDate", status, "sessionsLeft", "createdAt")
+        VALUES (${enrollmentId}, ${studentId}, ${courseId}, ${enrollmentDate}, 'active', 12, ${now})
+      `
+    }
+
+    const mergedCourseIds = [...new Set([...courseIds, courseId])]
+
+    const now = new Date().toISOString()
+    await db`
+      UPDATE "Student"
+      SET status = 'פעיל',
+          "courseIds" = ${JSON.stringify(mergedCourseIds)}::jsonb,
+          "registrationInterest" = NULL,
+          "updatedAt" = ${now}
+      WHERE id = ${studentId}
+    `
+
+    const userRows = await db`SELECT "userId" FROM "Student" WHERE id = ${studentId} LIMIT 1`
+    const userId = userRows.length > 0 ? ((userRows[0] as { userId?: string | null }).userId ?? null) : null
+    if (userId) {
+      const defaultStudentPerms = getPermissionsForRole("student")
+      await db`
+        UPDATE "User"
+        SET status = 'active',
+            role = 'student',
+            permissions = ${JSON.stringify(defaultStudentPerms)}::jsonb,
+            "updatedAt" = ${now}
+        WHERE id = ${userId}
+      `
+    }
+
+    return Response.json({ ok: true, studentId, courseId })
+  } catch (err) {
+    console.error("POST /api/students/[id]/approve error:", err)
+    return Response.json({ error: "Failed to approve registration" }, { status: 500 })
+  }
+})
+

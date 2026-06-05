@@ -1,0 +1,424 @@
+import { randomUUID } from "crypto"
+import { requireFeatureFromRequest } from "@/lib/feature-gate"
+import { withTenantAuth } from "@/lib/tenant-api-auth"
+import { requireTenant } from "@/lib/tenant/resolve-tenant"
+import { requirePerm } from "@/lib/require-perm"
+import { campCourseTabCan, hasFullAccessRole, hasPermission } from "@/lib/permissions"
+import { ensureCampTables, HEBREW_GROUP_LETTERS, isCampCourseType, listCampSessionDates } from "@/lib/camp-kaytana"
+
+type Ctx = { params: Promise<{ id: string }> }
+
+function cleanStr(v: unknown): string {
+  return String(v ?? "").trim()
+}
+
+function isUuidLike(s: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s)
+}
+
+function parseClockToMinutes(raw: unknown): number | null {
+  const hhmm = cleanStr(raw).slice(0, 5)
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm)
+  if (!m) return null
+  const h = Number(m[1])
+  const min = Number(m[2])
+  if (!Number.isFinite(h) || !Number.isFinite(min)) return null
+  if (h < 0 || h > 23 || min < 0 || min > 59) return null
+  return h * 60 + min
+}
+
+/** קריאת לוח קייטנה: טאב תכנון או נוכחות תלמידים (מורים בלי טאב לוח עדיין צריכים JSON לתא) */
+function canReadCampSchedule(session: { permissions?: string[]; roleKey?: string; role: string }): boolean {
+  if (hasFullAccessRole(session.roleKey) || hasFullAccessRole(session.role)) return true
+  const perms = session.permissions ?? []
+  if (!hasPermission(perms, "courses.view")) return false
+  const opts = { isCampCourse: true }
+  return (
+    campCourseTabCan(perms, "campPlan", "view", opts) ||
+    campCourseTabCan(perms, "attendanceStudents", "view", opts)
+  )
+}
+
+function canEditCampStructure(session: { permissions?: string[]; roleKey?: string; role: string }): boolean {
+  if (hasFullAccessRole(session.roleKey) || hasFullAccessRole(session.role)) return true
+  const perms = session.permissions ?? []
+  if (!hasPermission(perms, "courses.edit")) return false
+  return campCourseTabCan(perms, "campPlan", "edit", { isCampCourse: true })
+}
+
+export const GET = withTenantAuth(async (req, session, { params }: Ctx) => {
+  const featureErr = await requireFeatureFromRequest(req, "courses", session)
+  if (featureErr) return featureErr
+  if (!canReadCampSchedule(session)) {
+    return Response.json(
+      { error: "FORBIDDEN", need: "courses.tab.camp or courses.tab.attendance.students" },
+      { status: 403 },
+    )
+  }
+  const [tenant, tenantErr] = await requireTenant(req)
+  if (tenantErr) return tenantErr
+  const db = tenant.db
+  const { id: courseId } = await params
+
+  try {
+    await ensureCampTables(db)
+    const crs = await db`
+      SELECT id, name, "courseType", "startDate", "endDate", "daysOfWeek", "startTime", "endTime"
+      FROM "Course"
+      WHERE id = ${courseId}
+    `
+    if (crs.length === 0) return Response.json({ error: "Course not found" }, { status: 404 })
+    const courseRow = crs[0] as {
+      name?: string
+      courseType?: string
+      startDate?: string | null
+      endDate?: string | null
+      daysOfWeek?: string[] | unknown
+      startTime?: string | null
+      endTime?: string | null
+    }
+    const courseType = String(courseRow.courseType || "")
+    if (!isCampCourseType(courseType)) {
+      return Response.json({ error: "Not a camp course", code: "not_camp" }, { status: 400 })
+    }
+    const daysOfWeek = Array.isArray(courseRow.daysOfWeek) ? (courseRow.daysOfWeek as string[]) : []
+    const sessionDates = listCampSessionDates(courseRow.startDate ?? undefined, courseRow.endDate ?? undefined, daysOfWeek)
+    const defaultStartTime = String(courseRow.startTime || "08:30").slice(0, 5)
+    const defaultEndTime = String(courseRow.endTime || "09:15").slice(0, 5)
+
+    for (let i = 0; i < sessionDates.length; i += 1) {
+      const date = sessionDates[i]
+      await db`
+        INSERT INTO "CampMeeting" (id, "courseId", "sessionDate", "sortOrder")
+        VALUES (${randomUUID()}, ${courseId}, ${date}, ${i + 1})
+        ON CONFLICT ("courseId","sessionDate")
+        DO UPDATE SET "sortOrder" = EXCLUDED."sortOrder"
+      `
+    }
+    const existingMeetingsForCourse =
+      (await db`SELECT id, "sessionDate" FROM "CampMeeting" WHERE "courseId" = ${courseId}`) || []
+    const allowedDates = new Set(sessionDates)
+    for (const row of existingMeetingsForCourse as { id: string; sessionDate: string }[]) {
+      if (!allowedDates.has(String(row.sessionDate))) {
+        await db`DELETE FROM "CampMeeting" WHERE id = ${row.id}`
+      }
+    }
+
+    const settings = (await db`SELECT center_name, logo, camp_classrooms_count, camp_classrooms FROM center_settings WHERE id = 1`) || []
+    const centerName = String((settings[0] as { center_name?: string } | undefined)?.center_name || "")
+    const centerLogo = String((settings[0] as { logo?: string } | undefined)?.logo || "")
+    const classroomsCount = Math.max(1, Math.min(12, Number((settings[0] as { camp_classrooms_count?: number } | undefined)?.camp_classrooms_count || 6)))
+    const classroomsRaw = (settings[0] as { camp_classrooms?: unknown } | undefined)?.camp_classrooms
+    const classroomsConfigured = Array.isArray(classroomsRaw) ? classroomsRaw as Array<{ number?: number; name?: string; notes?: string }> : []
+    const classrooms = Array.from({ length: classroomsCount }, (_, i) => {
+      const n = i + 1
+      const row = classroomsConfigured.find((x) => Number(x.number) === n)
+      return { number: n, name: String(row?.name || `כיתה ${n}`), notes: String(row?.notes || "") }
+    })
+    const teachers =
+      (await db`
+        SELECT id, name FROM "Teacher"
+        ORDER BY name
+      `) || []
+    const meetingsRows =
+      (await db`
+        SELECT id, "sessionDate", "sortOrder", "isActive"
+        FROM "CampMeeting"
+        WHERE "courseId" = ${courseId}
+        ORDER BY "sortOrder", "sessionDate"
+      `) || []
+
+    const meetings: Array<{
+      id: string
+      sessionDate: string
+      sortOrder: number
+      isActive: boolean
+      slots: Array<{
+        id: string
+        sortOrder: number
+        startTime: string
+        endTime: string
+        isBreak: boolean
+        breakTitle: string
+        cells: Array<{
+          id: string
+          classroomNo: number
+          lessonTitle: string
+          groupLabels: string[]
+          teacherIds: string[]
+        }>
+      }>
+    }> = []
+
+    for (const m of meetingsRows as { id: string; sessionDate: string; sortOrder: number; isActive?: boolean }[]) {
+      const slotRows =
+        (await db`
+          SELECT id, "sortOrder", "startTime", "endTime", "isBreak", "breakTitle"
+          FROM "CampMeetingSlot"
+          WHERE "meetingId" = ${m.id}
+          ORDER BY "sortOrder", "startTime"
+        `) || []
+      if (!slotRows.length) {
+        await db`
+          INSERT INTO "CampMeetingSlot" (id, "meetingId", "sortOrder", "startTime", "endTime", "isBreak", "breakTitle")
+          VALUES (${randomUUID()}, ${m.id}, ${1}, ${defaultStartTime}, ${defaultEndTime}, ${false}, ${""})
+        `
+      }
+      const slots = []
+      const effectiveSlotRows =
+        (await db`
+          SELECT id, "sortOrder", "startTime", "endTime", "isBreak", "breakTitle"
+          FROM "CampMeetingSlot"
+          WHERE "meetingId" = ${m.id}
+          ORDER BY "sortOrder", "startTime"
+        `) || []
+      for (const s of effectiveSlotRows as { id: string; sortOrder: number; startTime: string; endTime: string; isBreak: boolean; breakTitle: string }[]) {
+        const cellRows =
+          (await db`
+            SELECT id, "classroomNo", "lessonTitle"
+            FROM "CampMeetingCell"
+            WHERE "slotId" = ${s.id}
+            ORDER BY "classroomNo"
+          `) || []
+        const cells = []
+        for (const c of cellRows as { id: string; classroomNo: number; lessonTitle: string }[]) {
+          const gRows = (await db`SELECT "groupLabel" FROM "CampMeetingCellGroup" WHERE "cellId" = ${c.id} ORDER BY "groupLabel"`) || []
+          const tRows = (await db`SELECT "teacherId" FROM "CampMeetingCellTeacher" WHERE "cellId" = ${c.id}`) || []
+          cells.push({
+            id: c.id,
+            classroomNo: Number(c.classroomNo),
+            lessonTitle: String(c.lessonTitle || ""),
+            groupLabels: (gRows as { groupLabel: string }[]).map((x) => String(x.groupLabel)),
+            teacherIds: (tRows as { teacherId: string }[]).map((x) => String(x.teacherId)),
+          })
+        }
+        slots.push({
+          id: s.id,
+          sortOrder: Number(s.sortOrder),
+          startTime: String(s.startTime),
+          endTime: String(s.endTime),
+          isBreak: Boolean(s.isBreak),
+          breakTitle: String(s.breakTitle || ""),
+          cells,
+        })
+      }
+      meetings.push({
+        id: m.id,
+        sessionDate: m.sessionDate,
+        sortOrder: Number(m.sortOrder || 0),
+        isActive: m.isActive !== false,
+        slots,
+      })
+    }
+
+    return Response.json({
+      courseId,
+      courseName: String(courseRow.name || ""),
+      centerName,
+      centerLogo,
+      classroomsCount,
+      classrooms,
+      teachers,
+      groupLetters: HEBREW_GROUP_LETTERS,
+      meetings,
+      editable: canEditCampStructure(session),
+    })
+  } catch (err) {
+    console.error("GET /api/courses/[id]/camp error:", err)
+    return Response.json({ error: "Failed to load camp data" }, { status: 500 })
+  }
+})
+
+export const PUT = withTenantAuth(async (req, session, { params }: Ctx) => {
+  const featureErr = await requireFeatureFromRequest(req, "courses", session)
+  if (featureErr) return featureErr
+  const denied = requirePerm(session, "courses.edit")
+  if (denied) return denied
+  if (!canEditCampStructure(session)) {
+    return Response.json({ error: "FORBIDDEN", need: "courses.tab.camp" }, { status: 403 })
+  }
+  const [tenant, tenantErr] = await requireTenant(req)
+  if (tenantErr) return tenantErr
+  const db = tenant.db
+  const { id: courseId } = await params
+  const body = await req.json().catch(() => null)
+  if (!body || typeof body !== "object") return Response.json({ error: "Invalid body" }, { status: 400 })
+
+  try {
+    await ensureCampTables(db)
+    const crs = await db`SELECT id, "courseType" FROM "Course" WHERE id = ${courseId}`
+    if (crs.length === 0) return Response.json({ error: "Course not found" }, { status: 404 })
+    const courseType = String((crs[0] as { courseType?: string }).courseType || "")
+    if (!isCampCourseType(courseType)) {
+      return Response.json({ error: "Not a camp course", code: "not_camp" }, { status: 400 })
+    }
+
+    const meetingsIn = Array.isArray(body.meetings) ? body.meetings : []
+
+    // Validation: same teacher cannot be assigned to overlapping slots in the same meeting date.
+    const teacherIdsInPayload = new Set<string>()
+    for (const m of meetingsIn as Array<{ slots?: unknown[] }>) {
+      const slots = Array.isArray(m?.slots) ? m.slots : []
+      for (const s of slots as Array<{ cells?: unknown[] }>) {
+        const cells = Array.isArray(s?.cells) ? s.cells : []
+        for (const c of cells as Array<{ teacherIds?: unknown[] }>) {
+          const teacherIds = Array.isArray(c?.teacherIds) ? c.teacherIds : []
+          for (const t of teacherIds) {
+            const tid = String(t || "").trim()
+            if (isUuidLike(tid)) teacherIdsInPayload.add(tid)
+          }
+        }
+      }
+    }
+    const teacherNameById = new Map<string, string>()
+    if (teacherIdsInPayload.size > 0) {
+      const rows =
+        (await db`SELECT id, name FROM "Teacher" WHERE id = ANY(${db.array(Array.from(teacherIdsInPayload))})`) || []
+      for (const r of rows as Array<{ id: string; name?: string | null }>) {
+        teacherNameById.set(String(r.id), String(r.name || "").trim() || String(r.id))
+      }
+    }
+    for (const m of meetingsIn as Array<{ sessionDate?: string; slots?: unknown[] }>) {
+      const sessionDate = cleanStr(m?.sessionDate)
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) continue
+      const slots = Array.isArray(m?.slots) ? m.slots : []
+      const windowsByTeacher = new Map<string, Array<{ startMin: number; endMin: number; startTime: string; endTime: string }>>()
+      for (const s of slots as Array<{ startTime?: string; endTime?: string; isBreak?: boolean; cells?: unknown[] }>) {
+        if (Boolean(s?.isBreak)) continue
+        const startTime = cleanStr(s?.startTime).slice(0, 5)
+        const endTime = cleanStr(s?.endTime).slice(0, 5)
+        const startMin = parseClockToMinutes(startTime)
+        const endMin = parseClockToMinutes(endTime)
+        if (startMin == null || endMin == null || endMin <= startMin) continue
+        const cells = Array.isArray(s?.cells) ? s.cells : []
+        const slotTeacherIds = new Set<string>()
+        for (const c of cells as Array<{ teacherIds?: unknown[] }>) {
+          const teacherIds = Array.isArray(c?.teacherIds) ? c.teacherIds : []
+          for (const t of teacherIds) {
+            const tid = String(t || "").trim()
+            if (isUuidLike(tid)) slotTeacherIds.add(tid)
+          }
+        }
+        for (const tid of slotTeacherIds) {
+          const arr = windowsByTeacher.get(tid) ?? []
+          arr.push({ startMin, endMin, startTime, endTime })
+          windowsByTeacher.set(tid, arr)
+        }
+      }
+      for (const [tid, windows] of windowsByTeacher.entries()) {
+        if (windows.length < 2) continue
+        const sorted = [...windows].sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin)
+        for (let i = 0; i < sorted.length - 1; i += 1) {
+          const a = sorted[i]
+          const b = sorted[i + 1]
+          if (b.startMin < a.endMin) {
+            const teacherLabel = teacherNameById.get(tid) || tid
+            const msg = `לא ניתן לשמור: למורה ${teacherLabel} יש התנגשות סלוטים בתאריך ${sessionDate} (${a.startTime}-${a.endTime} ו-${b.startTime}-${b.endTime}). יש להסיר את ההתנגשות.`
+            throw Object.assign(new Error(msg), {
+              status: 400,
+              code: "camp.teacher_slot_overlap",
+              details: { teacherId: tid, sessionDate, firstSlot: a, secondSlot: b },
+            })
+          }
+        }
+      }
+    }
+
+    await db.begin(async (sql) => {
+      const meetingIds = meetingsIn.map((m: { id?: string }) => cleanStr(m.id)).filter((x: string) => x && isUuidLike(x))
+      const existingMeetings = (await sql`SELECT id FROM "CampMeeting" WHERE "courseId" = ${courseId}`) || []
+      for (const row of existingMeetings as { id: string }[]) {
+        if (!meetingIds.includes(row.id)) await sql`DELETE FROM "CampMeeting" WHERE id = ${row.id}`
+      }
+
+      for (const m of meetingsIn) {
+        const sessionDate = cleanStr((m as { sessionDate?: string }).sessionDate)
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) continue
+        const sortOrder = Number((m as { sortOrder?: number }).sortOrder || 0)
+        const isActiveRaw = (m as { isActive?: unknown }).isActive
+        const isActive = isActiveRaw === undefined || isActiveRaw === null ? true : Boolean(isActiveRaw)
+        let meetingId = cleanStr((m as { id?: string }).id)
+        if (!meetingId || !isUuidLike(meetingId)) {
+          meetingId = randomUUID()
+          await sql`
+            INSERT INTO "CampMeeting" (id, "courseId", "sessionDate", "sortOrder", "isActive")
+            VALUES (${meetingId}, ${courseId}, ${sessionDate}, ${sortOrder}, ${isActive})
+            ON CONFLICT ("courseId","sessionDate") DO UPDATE SET "sortOrder" = EXCLUDED."sortOrder", "isActive" = EXCLUDED."isActive"
+          `
+          const byDate = (await sql`SELECT id FROM "CampMeeting" WHERE "courseId"=${courseId} AND "sessionDate"=${sessionDate}`) || []
+          meetingId = String((byDate[0] as { id: string }).id)
+        } else {
+          await sql`UPDATE "CampMeeting" SET "sessionDate"=${sessionDate}, "sortOrder"=${sortOrder}, "isActive"=${isActive} WHERE id=${meetingId} AND "courseId"=${courseId}`
+        }
+
+        const oldSlots = (await sql`SELECT id FROM "CampMeetingSlot" WHERE "meetingId" = ${meetingId}`) || []
+        for (const s of oldSlots as { id: string }[]) {
+          const oldCells = (await sql`SELECT id FROM "CampMeetingCell" WHERE "slotId" = ${s.id}`) || []
+          for (const c of oldCells as { id: string }[]) {
+            await sql`DELETE FROM "CampMeetingCellGroup" WHERE "cellId" = ${c.id}`
+            await sql`DELETE FROM "CampMeetingCellTeacher" WHERE "cellId" = ${c.id}`
+          }
+          await sql`DELETE FROM "CampMeetingCell" WHERE "slotId" = ${s.id}`
+        }
+        await sql`DELETE FROM "CampMeetingSlot" WHERE "meetingId" = ${meetingId}`
+
+        const slots = Array.isArray((m as { slots?: unknown[] }).slots) ? (m as { slots: unknown[] }).slots : []
+        for (const s of slots) {
+          const sort = Number((s as { sortOrder?: number }).sortOrder || 0)
+          const startTime = cleanStr((s as { startTime?: string }).startTime)
+          const endTime = cleanStr((s as { endTime?: string }).endTime)
+          const isBreak = Boolean((s as { isBreak?: boolean }).isBreak)
+          const breakTitle = cleanStr((s as { breakTitle?: string }).breakTitle)
+          if (!startTime || !endTime) continue
+          const slotId = randomUUID()
+          await sql`
+            INSERT INTO "CampMeetingSlot" (id, "meetingId", "sortOrder", "startTime", "endTime", "isBreak", "breakTitle")
+            VALUES (${slotId}, ${meetingId}, ${sort}, ${startTime}, ${endTime}, ${isBreak}, ${breakTitle})
+          `
+          const cells = Array.isArray((s as { cells?: unknown[] }).cells) ? (s as { cells: unknown[] }).cells : []
+          for (const c of cells) {
+            const classroomNo = Number((c as { classroomNo?: number }).classroomNo)
+            if (!Number.isFinite(classroomNo) || classroomNo <= 0) continue
+            const lessonTitle = cleanStr((c as { lessonTitle?: string }).lessonTitle)
+            const cellId = randomUUID()
+            await sql`
+              INSERT INTO "CampMeetingCell" (id, "slotId", "classroomNo", "lessonTitle")
+              VALUES (${cellId}, ${slotId}, ${classroomNo}, ${lessonTitle})
+            `
+            const groupLabels = Array.isArray((c as { groupLabels?: unknown[] }).groupLabels)
+              ? (c as { groupLabels: unknown[] }).groupLabels.map((g) => String(g || "").trim()).filter((g) => HEBREW_GROUP_LETTERS.includes(g))
+              : []
+            for (const g of [...new Set(groupLabels)]) {
+              await sql`INSERT INTO "CampMeetingCellGroup" (id, "cellId", "groupLabel") VALUES (${randomUUID()}, ${cellId}, ${g})`
+            }
+            const teacherIds = Array.isArray((c as { teacherIds?: unknown[] }).teacherIds)
+              ? (c as { teacherIds: unknown[] }).teacherIds.map((t) => String(t || "").trim()).filter((t) => isUuidLike(t))
+              : []
+            for (const t of [...new Set(teacherIds)]) {
+              const ok = (await sql`SELECT 1 FROM "Teacher" WHERE id = ${t}`) || []
+              if (!ok.length) continue
+              await sql`INSERT INTO "CampMeetingCellTeacher" (id, "cellId", "teacherId") VALUES (${randomUUID()}, ${cellId}, ${t})`
+            }
+          }
+        }
+      }
+    })
+
+    return Response.json({ ok: true })
+  } catch (err) {
+    const status = Number((err as { status?: number })?.status || 500)
+    const code = String((err as { code?: string })?.code || "")
+    if (status >= 400 && status < 500) {
+      return Response.json(
+        {
+          error: (err as { message?: string })?.message || "נתוני לוח קייטנה לא תקינים",
+          code: code || "camp.validation_error",
+          details: (err as { details?: unknown })?.details,
+        },
+        { status },
+      )
+    }
+    console.error("PUT /api/courses/[id]/camp error:", err)
+    return Response.json({ error: "Failed to save camp data" }, { status: 500 })
+  }
+})

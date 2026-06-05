@@ -1,0 +1,11 @@
+﻿node_modules/
+.next/
+.env
+.env.local
+dist/
+build/
+coverage/
+*.log
+tsconfig.tsbuildinfo
+TXTING
+פקודה.txt

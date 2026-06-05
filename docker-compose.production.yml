@@ -1,0 +1,71 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Production compose — VPS port 9030
+# Usage:
+#   cp .env.production.example .env.production
+#   # fill in all variables in .env.production
+#   docker compose -f docker-compose.production.yml --env-file .env.production up -d
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  # ── PostgreSQL database ──────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: robotics-db-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-robotics}
+      POSTGRES_PASSWORD: ${DB_PASS}
+      POSTGRES_DB: ${DB_NAME:-robotics}
+    volumes:
+      - robotics_pgdata_prod:/var/lib/postgresql/data
+    networks:
+      - robotics_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-robotics}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Next.js application ──────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: robotics-app-prod
+    restart: unless-stopped
+    ports:
+      - "9030:9030"
+    environment:
+      NODE_ENV: production
+      PORT: 9030
+      DATABASE_URL: postgresql://${DB_USER:-robotics}:${DB_PASS}@db:5432/${DB_NAME:-robotics}
+      MASTER_DATABASE_URL: postgresql://${DB_USER:-robotics}:${DB_PASS}@db:5432/${DB_NAME:-robotics}
+      SESSION_SECRET: ${SESSION_SECRET}
+      BASE_DOMAIN: ${BASE_DOMAIN}
+      DEFAULT_DEV_CENTER: ${DEFAULT_DEV_CENTER:-}
+      BACKUP_DIR: /app/backups
+    volumes:
+      - robotics_backups:/app/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - robotics_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9030/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
+volumes:
+  robotics_pgdata_prod:
+    driver: local
+  robotics_backups:
+    driver: local
+
+networks:
+  robotics_net:
+    driver: bridge

@@ -1,0 +1,23 @@
+# Local development database only. Do not use for production.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: robotics-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-robotics}
+      POSTGRES_PASSWORD: ${DB_PASS:-robotics}
+      POSTGRES_DB: ${DB_NAME:-robotics}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - robotics_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U robotics -d robotics"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  robotics_pgdata:
+    name: robotics_pgdata

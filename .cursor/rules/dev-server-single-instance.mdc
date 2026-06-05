@@ -1,0 +1,13 @@
+---
+description: Run one dev server instance on port 3000
+alwaysApply: true
+---
+
+# Dev Server Rule
+
+- Always start local development with `npm run start:dev` (or aliases `npm run up` / `npm run run:all`).
+- Do not run `npm run dev` in multiple terminals at the same time.
+- If restart is needed: stop the running server first (`Ctrl+C`), then start again.
+- Use one server on `http://localhost:3000` and switch by route:
+  - Master: `/master/login`
+  - Tenant app: `/login` or `/dashboard`

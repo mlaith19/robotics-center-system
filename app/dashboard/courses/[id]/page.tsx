@@ -1,0 +1,3880 @@
+"use client"
+
+import { Fragment, useState, useEffect, useMemo } from "react"
+import Link from "next/link"
+import { useParams } from "next/navigation"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { ArrowRight, Pencil, Loader2, BookOpen, Calendar, Users, BarChart3, CalendarCheck, Check, X, Thermometer, Plane, CalendarRange, Printer, Layers, Trash2, Clock, Plus, ToggleLeft, ToggleRight } from "lucide-react"
+import { courseTimeToDisplayValue, normalizeCourseCalendarYmd } from "@/lib/course-db-fields"
+import { courseTypeIsPerSession, normalizeSessionPricesMap } from "@/lib/course-session-prices"
+import { useLanguage } from "@/lib/i18n/context"
+
+interface Course {
+  id: string
+  name: string
+  description: string | null
+  level: string | null
+  duration: number | null
+  price: number | null
+  status: string
+  courseType?: string | null
+  startDate: string | null
+  endDate: string | null
+  startTime: string | null
+  endTime: string | null
+  daysOfWeek: string[] | null
+  teacherIds: string[] | null
+  createdAt: string
+  updatedAt: string
+  campChargeFirstSessionIfNoAttendance?: boolean | null
+  useStudentSiblingDiscountInCourse?: boolean | null
+  billingPlanSelectionMode?: "pricing" | "billing" | null
+  statusManualOverride?: boolean | null
+}
+
+function isTruthyCourseFlag(raw: unknown): boolean {
+  if (raw === true) return true
+  if (raw === false || raw == null) return false
+  const s = String(raw).trim().toLowerCase()
+  return s === "true" || s === "1" || s === "yes"
+}
+
+interface Teacher {
+  id: string
+  name: string
+}
+
+interface Enrollment {
+  id: string
+  studentId: string
+  courseId: string
+  studentName: string
+  status: string
+  enrollmentDate: string
+  campGroupLabel?: string | null
+  createdByUserId?: string | null
+  createdByUserName?: string | null
+  siblingDiscountPackageName?: string | null
+  siblingDiscountPackageSource?: "course" | "student" | null
+  siblingRank?: number | null
+  siblingRankLabel?: string | null
+  siblingAmountForRank?: number | null
+  siblingDiscountDisabled?: boolean | null
+  billingPlanChoice?: "summer" | "discounted" | "perSession" | null
+  /** קבוצת אחים מ־Student — למיון רציף ברשימת נוכחות */
+  siblingGroupId?: string | null
+}
+
+interface StudentOption {
+  id: string
+  name: string
+  status?: string | null
+  idNumber?: string | null
+  father?: string | null
+  mother?: string | null
+  phone?: string | null
+  additionalPhone?: string | null
+  email?: string | null
+}
+
+interface CourseSessionFeedback {
+  id: string
+  studentId: string
+  feedbackText: string | null
+}
+
+interface CourseSessionItem {
+  id: string
+  sessionDate: string
+  generalTopic: string | null
+  teacherName?: string | null
+  feedback: CourseSessionFeedback[]
+}
+
+interface CoursePaymentRow {
+  id: string
+  studentId: string | null
+  studentName: string
+  paymentDate: string
+  paymentType: string | null
+  amount: number
+  description: string | null
+  siblingDiscountPackageName: string | null
+}
+
+const levelLabels: Record<string, Record<"he" | "en" | "ar", string>> = {
+  beginner: { he: "מתחילים", en: "Beginner", ar: "مبتدئ" },
+  intermediate: { he: "מתקדמים", en: "Intermediate", ar: "متوسط" },
+  advanced: { he: "מומחים", en: "Advanced", ar: "متقدم" },
+}
+
+const dayLabels: Record<string, Record<"he" | "en" | "ar", string>> = {
+  sunday: { he: "ראשון", en: "Sunday", ar: "الأحد" },
+  monday: { he: "שני", en: "Monday", ar: "الاثنين" },
+  tuesday: { he: "שלישי", en: "Tuesday", ar: "الثلاثاء" },
+  wednesday: { he: "רביעי", en: "Wednesday", ar: "الأربعاء" },
+  thursday: { he: "חמישי", en: "Thursday", ar: "الخميس" },
+  friday: { he: "שישי", en: "Friday", ar: "الجمعة" },
+  saturday: { he: "שבת", en: "Saturday", ar: "السبت" },
+}
+
+const JS_DAY_TO_KEY = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const
+
+function formatCourseSessionDateOption(ymd: string, locale: "he" | "en" | "ar"): string {
+  const [y, m, d] = ymd.split("-").map(Number)
+  if (!y || !m || !d) return ymd
+  const dt = new Date(y, m - 1, d)
+  if (Number.isNaN(dt.getTime())) return ymd
+  const tag = locale === "ar" ? "ar" : locale === "en" ? "en-GB" : "he-IL"
+  const cal = new Intl.DateTimeFormat(tag, { day: "2-digit", month: "2-digit", year: "numeric" }).format(dt)
+  const key = JS_DAY_TO_KEY[dt.getDay()]
+  const dayName = dayLabels[key]?.[locale] || key
+  return `${cal} · ${dayName}`
+}
+
+function attendanceSlotTimeDisplay(raw: unknown): string {
+  const s = String(raw ?? "").trim()
+  if (!s) return "—"
+  const hm = /^(\d{1,2}):(\d{2})/.exec(s)
+  if (hm) {
+    const h = hm[1]!.padStart(2, "0")
+    return `${h}:${hm[2]}`
+  }
+  const d = new Date(s)
+  if (!Number.isNaN(d.getTime())) {
+    return new Intl.DateTimeFormat("he-IL", { hour: "2-digit", minute: "2-digit", hour12: false }).format(d)
+  }
+  return "—"
+}
+
+function attendanceHoursFromSlots(
+  hours: unknown,
+  slotStart: unknown,
+  slotEnd: unknown,
+  courseStart: string | null | undefined,
+  courseEnd: string | null | undefined,
+): string {
+  if (hours != null && hours !== "") {
+    const n = Number(hours)
+    if (!Number.isNaN(n) && n >= 0) return n.toFixed(1)
+  }
+  const parseHM = (t: string) => {
+    const m = /^(\d{2}):(\d{2})$/.exec(t)
+    return m ? Number(m[1]) + Number(m[2]) / 60 : 0
+  }
+  let sd = attendanceSlotTimeDisplay(slotStart)
+  let ed = attendanceSlotTimeDisplay(slotEnd)
+  if (sd === "—" || ed === "—") {
+    sd = courseTimeToDisplayValue(courseStart) || "—"
+    ed = courseTimeToDisplayValue(courseEnd) || "—"
+  }
+  if (sd !== "—" && ed !== "—") {
+    const total = Math.max(0, parseHM(ed) - parseHM(sd))
+    return total > 0 ? total.toFixed(1) : "—"
+  }
+  return "—"
+}
+
+function attendanceHoursToNumber(
+  hours: unknown,
+  slotStart: unknown,
+  slotEnd: unknown,
+  courseStart: string | null | undefined,
+  courseEnd: string | null | undefined,
+): number {
+  const str = attendanceHoursFromSlots(hours, slotStart, slotEnd, courseStart, courseEnd)
+  if (str === "—") return 0
+  const n = Number(str)
+  return Number.isNaN(n) || n < 0 ? 0 : n
+}
+
+function normalizeSearchText(raw: unknown): string {
+  return String(raw ?? "").toLowerCase().trim()
+}
+
+function matchesStudentSearchText(searchText: string, query: string): boolean {
+  const normalizedQuery = normalizeSearchText(query)
+  if (!normalizedQuery) return true
+  const haystack = normalizeSearchText(searchText)
+  if (!haystack) return false
+  const parts = normalizedQuery.split(/\s+/).filter(Boolean)
+  return parts.every((part) => haystack.includes(part))
+}
+
+const TEACHER_HOURS_CHIP_STYLES = [
+  "border-violet-300/80 bg-gradient-to-br from-violet-50 to-violet-100/90 text-violet-950 shadow-sm",
+  "border-sky-300/80 bg-gradient-to-br from-sky-50 to-sky-100/90 text-sky-950 shadow-sm",
+  "border-amber-300/80 bg-gradient-to-br from-amber-50 to-amber-100/90 text-amber-950 shadow-sm",
+  "border-emerald-300/80 bg-gradient-to-br from-emerald-50 to-emerald-100/90 text-emerald-950 shadow-sm",
+  "border-rose-300/80 bg-gradient-to-br from-rose-50 to-rose-100/90 text-rose-950 shadow-sm",
+  "border-indigo-300/80 bg-gradient-to-br from-indigo-50 to-indigo-100/90 text-indigo-950 shadow-sm",
+] as const
+
+/** פס צבע לשורה בטבלת נוכחות מורה — תואם לסדר הצבעים בכרטיסי הסיכום; ! כדי לנצח hover:bg-muted/50 של TableRow */
+const TEACHER_ROW_ACCENT_STYLES = [
+  "border-s-[3px] border-s-violet-500 !bg-violet-100/85 hover:!bg-violet-100 data-[state=selected]:!bg-violet-100",
+  "border-s-[3px] border-s-sky-500 !bg-sky-100/85 hover:!bg-sky-100 data-[state=selected]:!bg-sky-100",
+  "border-s-[3px] border-s-amber-500 !bg-amber-100/85 hover:!bg-amber-100 data-[state=selected]:!bg-amber-100",
+  "border-s-[3px] border-s-emerald-500 !bg-emerald-100/85 hover:!bg-emerald-100 data-[state=selected]:!bg-emerald-100",
+  "border-s-[3px] border-s-rose-500 !bg-rose-100/85 hover:!bg-rose-100 data-[state=selected]:!bg-rose-100",
+  "border-s-[3px] border-s-indigo-500 !bg-indigo-100/85 hover:!bg-indigo-100 data-[state=selected]:!bg-indigo-100",
+] as const
+
+function attendanceDateYmdForSort(raw: string): string {
+  const head = String(raw ?? "").trim().slice(0, 10)
+  return /^\d{4}-\d{2}-\d{2}$/.test(head) ? head : String(raw ?? "")
+}
+
+/** תואם ל־DB (עברית «נוכח») ולערכים באנגלית */
+function isTeacherAttendancePresentStatus(status: unknown): boolean {
+  const s = String(status ?? "").trim()
+  if (!s) return false
+  if (s === "נוכח") return true
+  const low = s.toLowerCase()
+  return low === "present"
+}
+
+function slotStartDecimalForSort(
+  campSlotStart: unknown,
+  courseStart: string | null | undefined,
+): number {
+  const disp = attendanceSlotTimeDisplay(campSlotStart)
+  if (disp !== "—") {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(disp)
+    if (m) return Number(m[1]) + Number(m[2]) / 60
+  }
+  const cv = courseTimeToDisplayValue(courseStart) || ""
+  const m2 = /^(\d{1,2}):(\d{2})$/.exec(cv)
+  return m2 ? Number(m2[1]) + Number(m2[2]) / 60 : 0
+}
+
+type TeacherAttRow = {
+  id: string
+  teacherId: string | null
+  date: string
+  campSlotStart?: string | null
+  [k: string]: unknown
+}
+
+function compareTeacherAttendanceRows(
+  a: TeacherAttRow,
+  b: TeacherAttRow,
+  courseStart: string | null | undefined,
+  nameOf: (teacherId: string | null) => string,
+): number {
+  const da = attendanceDateYmdForSort(a.date)
+  const db = attendanceDateYmdForSort(b.date)
+  const dc = da.localeCompare(db)
+  if (dc !== 0) return dc
+  const na = nameOf(a.teacherId)
+  const nb = nameOf(b.teacherId)
+  const nc = na.localeCompare(nb, "he", { sensitivity: "base" })
+  if (nc !== 0) return nc
+  const ta = slotStartDecimalForSort(a.campSlotStart, courseStart)
+  const tb = slotStartDecimalForSort(b.campSlotStart, courseStart)
+  if (ta !== tb) return ta - tb
+  return String(a.id).localeCompare(String(b.id))
+}
+
+function normalizeAttendanceStatus(raw: unknown): "present" | "absent" | "sick" | "vacation" | "" {
+  const s = String(raw ?? "").trim().toLowerCase()
+  if (s === "present" || s === "נוכח") return "present"
+  if (s === "absent" || s === "לא נוכח") return "absent"
+  if (s === "sick" || s === "חולה") return "sick"
+  if (s === "vacation" || s === "חופש") return "vacation"
+  return ""
+}
+
+function latestStudentStatusFromRows(rows: Array<Record<string, unknown>>): "present" | "absent" | "sick" | "vacation" | "" {
+  if (!Array.isArray(rows) || rows.length === 0) return ""
+  const sorted = [...rows].sort((a, b) => {
+    const ta = Date.parse(String(a.createdAt ?? a.updatedAt ?? a.date ?? ""))
+    const tb = Date.parse(String(b.createdAt ?? b.updatedAt ?? b.date ?? ""))
+    if (Number.isFinite(ta) && Number.isFinite(tb) && ta !== tb) return tb - ta
+    return String(b.id ?? "").localeCompare(String(a.id ?? ""))
+  })
+  return normalizeAttendanceStatus(sorted[0]?.status)
+}
+
+import { useCurrentUser } from "@/lib/auth-context"
+import {
+  hasPermission,
+  hasFullAccessRole,
+  canDeleteTeacherAttendanceRecord,
+  campCourseTabCan,
+} from "@/lib/permissions"
+import { getCourseStatusPresentation } from "@/lib/course-status"
+import { HEBREW_GROUP_LETTERS, isCampCourseType, listCampSessionDates } from "@/lib/camp-kaytana"
+import { CourseCampTab } from "./course-camp-tab"
+
+export default function CourseViewPage() {
+  const { locale } = useLanguage()
+  const isRtl = locale !== "en"
+  const localeTag = locale === "ar" ? "ar" : locale === "en" ? "en-GB" : "he-IL"
+  const tr = {
+    notFound: locale === "ar" ? "لم يتم العثور على الدورة" : locale === "en" ? "Course not found" : "לא נמצא קורס",
+    courseDetails: locale === "ar" ? "تفاصيل الدورة" : locale === "en" ? "Course Details" : "פרטי קורס",
+    courses: locale === "ar" ? "الدورات" : locale === "en" ? "Courses" : "קורסים",
+    editCourse: locale === "ar" ? "تعديل الدورة" : locale === "en" ? "Edit Course" : "ערוך קורס",
+    general: locale === "ar" ? "عام" : locale === "en" ? "General" : "כללי",
+    linkedStudents: locale === "ar" ? "الطلاب المرتبطون" : locale === "en" ? "Linked Students" : "ילדים משויכים",
+    siblingPackagesTab: locale === "ar" ? "حزم الإخوة" : locale === "en" ? "Sibling Packages" : "חבילות",
+    noSiblingPackagesLinked:
+      locale === "ar"
+        ? "لا توجد حزم إخوة مرتبطة بطلاب هذا المساق."
+        : locale === "en"
+          ? "No sibling packages are linked to students in this course."
+          : "אין חבילות אחים משויכות לתלמידים בקורס זה.",
+    packageStudents: locale === "ar" ? "الطلاب في الحزمة" : locale === "en" ? "Students in package" : "ילדים בחבילה",
+    campGroupsTab: locale === "ar" ? "المجموعات" : locale === "en" ? "Groups" : "קבוצות",
+    campGroupsTabTitle:
+      locale === "ar" ? "الطلاب حسب مجموعة المخيّم" : locale === "en" ? "Students by camp group" : "תלמידים לפי קבוצת קייטנה",
+    studentsInGroup:
+      locale === "ar" ? "عدد الطلاب في المجموعة" : locale === "en" ? "Students in this group" : "תלמידים בקבוצה",
+    unassignedCampGroup:
+      locale === "ar" ? "بدون مجموعة" : locale === "en" ? "Unassigned" : "ללא קבוצה",
+    noCampGroupAssignments:
+      locale === "ar"
+        ? "لا يوجد طلاب مخصصون لمجموعات بعد."
+        : locale === "en"
+          ? "No students are assigned to a camp group yet."
+          : "אין עדיין תלמידים משויכים לקבוצות. ניתן לשבץ בטאב «ילדים משויכים».",
+    costPayments: locale === "ar" ? "المدفوعات" : locale === "en" ? "Payments" : "תשלומים",
+    debtors: locale === "ar" ? "المدينون" : locale === "en" ? "Debtors" : "חייבים",
+    studentAttendance: locale === "ar" ? "حضور الطلاب" : locale === "en" ? "Student Attendance" : "נוכחות תלמיד",
+    teacherAttendance: locale === "ar" ? "حضور المعلمين" : locale === "en" ? "Teacher Attendance" : "נוכחות מורה",
+    courseInfo: locale === "ar" ? "معلومات الدورة" : locale === "en" ? "Course Info" : "פרטי הקורס",
+    level: locale === "ar" ? "المستوى" : locale === "en" ? "Level" : "רמה",
+    duration: locale === "ar" ? "المدة" : locale === "en" ? "Duration" : "משך",
+    weeks: locale === "ar" ? "أسابيع" : locale === "en" ? "weeks" : "שבועות",
+    status: locale === "ar" ? "الحالة" : locale === "en" ? "Status" : "סטטוס",
+    totalCoursePrice: locale === "ar" ? "السعر الإجمالي للدورة" : locale === "en" ? "Total Course Price" : "מחיר כולל לקורס",
+    pricePerStudent: locale === "ar" ? "السعر لكل طالب" : locale === "en" ? "Price Per Student" : "מחיר לתלמיד",
+    dateTime: locale === "ar" ? "التواريخ والأوقات" : locale === "en" ? "Dates & Times" : "תאריכים ושעות",
+    startDate: locale === "ar" ? "تاريخ البدء" : locale === "en" ? "Start Date" : "תאריך התחלה",
+    endDate: locale === "ar" ? "تاريخ الانتهاء" : locale === "en" ? "End Date" : "תאריך סיום",
+    startTime: locale === "ar" ? "وقت البدء" : locale === "en" ? "Start Time" : "שעות התחלה",
+    endTime: locale === "ar" ? "وقت الانتهاء" : locale === "en" ? "End Time" : "שעות סיום",
+    weekdays: locale === "ar" ? "أيام الأسبوع" : locale === "en" ? "Weekdays" : "ימי שבוע",
+    stats: locale === "ar" ? "إحصائيات" : locale === "en" ? "Statistics" : "סטטיסטיקות",
+    totalStudents: locale === "ar" ? "إجمالي الطلاب" : locale === "en" ? "Total Students" : "סה\"כ תלמידים",
+    teachers: locale === "ar" ? "المعلمون" : locale === "en" ? "Teachers" : "מורים",
+    noTeachers: locale === "ar" ? "لا يوجد معلمون مرتبطون" : locale === "en" ? "No teachers assigned" : "לא משויכים מורים",
+    enrolledStudents: locale === "ar" ? "الطلاب المسجلون في الدورة" : locale === "en" ? "Students Enrolled In Course" : "תלמידים רשומים לקורס",
+    student: locale === "ar" ? "الطالب" : locale === "en" ? "Student" : "תלמיד",
+    enrollmentDate: locale === "ar" ? "تاريخ التسجيل" : locale === "en" ? "Enrollment Date" : "תאריך רישום",
+    siblingPackage: locale === "ar" ? "حزمة خصم إخوة" : locale === "en" ? "Sibling Discount Package" : "חבילת הנחת אחים",
+    siblingRank: locale === "ar" ? "ترتيب الأخ" : locale === "en" ? "Sibling Order" : "סדר אחאות",
+    packageSource: locale === "ar" ? "מקור חבילה" : locale === "en" ? "Package Source" : "מקור חבילה",
+    sourceCourse: locale === "ar" ? "من الدورة" : locale === "en" ? "From Course" : "מהקורס",
+    sourceStudent: locale === "ar" ? "من الطالب" : locale === "en" ? "From Student" : "מהתלמיד",
+    performedBy: locale === "ar" ? "تم بواسطة" : locale === "en" ? "Performed By" : "בוצע על ידי",
+    noneStudents: locale === "ar" ? "لا يوجد طلاب مسجلون في هذه الدورة" : locale === "en" ? "No students enrolled in this course" : "אין תלמידים רשומים לקורס זה",
+    paymentInfoPlaceholder: locale === "ar" ? "سيتم عرض معلومات التكلفة والمدفوعات هنا" : locale === "en" ? "Cost and payment details will be shown here" : "פרטי עלות ותשלומים יוצגו כאן",
+    studentAttendanceTitle: locale === "ar" ? "حضور الطلاب في الدورة" : locale === "en" ? "Course Student Attendance" : "נוכחות תלמידים בקורס",
+    teacherAttendanceTitle: locale === "ar" ? "حضور المعلمين في الدورة" : locale === "en" ? "Course Teacher Attendance" : "נוכחות מורים בקורס",
+    campLessonCol: locale === "ar" ? "الدرس" : locale === "en" ? "Lesson" : "שיעור",
+    campNoTeacherSlots:
+      locale === "ar"
+        ? "لا يوجد حصص مخصصة لك في جدول المخيم لهذا التاريخ."
+        : locale === "en"
+          ? "No camp slots are assigned to you on this date."
+          : "אין שיבוץ שלך בלוח המפגשים לתאריך זה.",
+    date: locale === "ar" ? "التاريخ" : locale === "en" ? "Date" : "תאריך",
+    note: locale === "ar" ? "ملاحظة" : locale === "en" ? "Note" : "הערה",
+    attendanceStatus: locale === "ar" ? "حالة الحضور" : locale === "en" ? "Attendance Status" : "סטטוס נוכחות",
+    present: locale === "ar" ? "حاضر" : locale === "en" ? "Present" : "נוכח",
+    absent: locale === "ar" ? "غائب" : locale === "en" ? "Absent" : "לא נוכח",
+    sick: locale === "ar" ? "مريض" : locale === "en" ? "Sick" : "חולה",
+    vacation: locale === "ar" ? "إجازة" : locale === "en" ? "Vacation" : "חופש",
+    noLinkedStudents: locale === "ar" ? "لا يوجد طلاب مرتبطون بهذه الدورة" : locale === "en" ? "No students linked to this course" : "אין תלמידים משויכים לקורס זה",
+    campNoAttendanceChargeRule:
+      locale === "ar"
+        ? "بالمخيم: عند عدم حضور الطالب إطلاقًا، يُحسب له سعر الجلسة الأولى"
+        : locale === "en"
+          ? "Camp: if a student has no attendance at all, charge first session price"
+          : "קייטנה: אם תלמיד לא נכח בכלל — החיוב לפי מחיר המפגש הראשון",
+    studentSiblingDiscountRule:
+      locale === "ar"
+        ? "تفعيل خصم الإخوة من إعدادات الطالب لهذه الدورة"
+        : locale === "en"
+          ? "Use student-level sibling discount in this course"
+          : "הנחת אחים לפי הגדרת תלמיד פעילה בקורס זה",
+    studentSiblingDiscountRuleOff:
+      locale === "ar"
+        ? "خصم الإخوة מהגדרת الطالب כבוי בקורס זה"
+        : locale === "en"
+          ? "Student-level sibling discount is disabled in this course"
+          : "הנחת אחים מהגדרת תלמיד כבויה בקורס זה",
+    assignStudentsTitle:
+      locale === "ar" ? "إسناد طلاب للدورة" : locale === "en" ? "Assign students to course" : "שיוך תלמידים לקורס",
+    assignStudentsSearch:
+      locale === "ar" ? "بحث عن طالب..." : locale === "en" ? "Search student..." : "חיפוש תלמיד...",
+    assignStudentsSelected:
+      locale === "ar" ? "تم تحديد" : locale === "en" ? "Selected" : "נבחרו",
+    assignStudentsBulk:
+      locale === "ar" ? "إسناد المحددين" : locale === "en" ? "Assign selected" : "שייך מסומנים",
+    assignStudentsNoneLeft:
+      locale === "ar"
+        ? "كل الطلاب مسندون بالفعل لهذه الدورة."
+        : locale === "en"
+          ? "All students are already assigned to this course."
+          : "כל התלמידים כבר משויכים לקורס זה.",
+    assignStudentsNoResults:
+      locale === "ar" ? "لا توجد نتائج للبحث" : locale === "en" ? "No students found" : "לא נמצאו תלמידים לחיפוש",
+    assignStudentsSelectAll:
+      locale === "ar" ? "تحديد הכל" : locale === "en" ? "Select all" : "בחר הכל",
+    assignStudentsClear:
+      locale === "ar" ? "مسح" : locale === "en" ? "Clear" : "נקה",
+    assignStudentsDone:
+      locale === "ar"
+        ? "تم إسناد الطلاب بنجاح."
+        : locale === "en"
+          ? "Students were assigned successfully."
+          : "התלמידים שויכו בהצלחה.",
+    expand: locale === "ar" ? "فتح" : locale === "en" ? "Expand" : "פתח",
+    collapse: locale === "ar" ? "إغلاق" : locale === "en" ? "Collapse" : "סגור",
+    noStudentAttendance: locale === "ar" ? "لا توجد سجلات حضور طلاب لهذه الدورة بعد." : locale === "en" ? "No student attendance records for this course yet." : "אין עדיין רשומות נוכחות תלמידים לקורס זה.",
+    noTeacherAttendance: locale === "ar" ? "لا توجد سجلات حضور معلمين لهذه الدورة." : locale === "en" ? "No teacher attendance records for this course." : "אין רשומות נוכחות מורים לקורס זה.",
+    teacherHoursGrandTotal:
+      locale === "ar"
+        ? "الإجمالي العام"
+        : locale === "en"
+          ? "General total"
+          : "סה״כ כללי",
+    hoursShort: locale === "ar" ? "س" : locale === "en" ? "h" : "ש׳",
+    actions: locale === "ar" ? "إجراءات" : locale === "en" ? "Actions" : "פעולות",
+    deleteTeacherAttendanceConfirm:
+      locale === "ar"
+        ? "حذف سجل حضور المعلم؟"
+        : locale === "en"
+          ? "Delete this teacher attendance record?"
+          : "למחוק את רשומת נוכחות המורה?",
+    duplicatePaymentConfirm:
+      locale === "ar"
+        ? "يوجد دفعة بنفس المبلغ ونفس التاريخ لهذا الطالب. هل تريد المتابعة على أي حال؟"
+        : locale === "en"
+          ? "A payment with the same amount and date already exists for this student. Do you want to continue anyway?"
+          : "קיים כבר תשלום עם אותו סכום ואותו תאריך לתלמיד הזה. האם לבצע בכל זאת?",
+    sessionsFeedback: locale === "ar" ? "الجلسات والملاحظات" : locale === "en" ? "Sessions & Feedback" : "מפגשים ומשוב",
+    newSession: locale === "ar" ? "מפגש חדש" : locale === "en" ? "New Session" : "מפגש חדש",
+    sessionDate: locale === "ar" ? "تاريخ الجلسة" : locale === "en" ? "Session Date" : "תאריך מפגש",
+    generalTopic: locale === "ar" ? "الموضوع العام" : locale === "en" ? "General Topic" : "נושא כללי",
+    addSession: locale === "ar" ? "إضافة جلسة" : locale === "en" ? "Add Session" : "הוסף מפגש",
+    saveFeedback: locale === "ar" ? "حفظ الملاحظات" : locale === "en" ? "Save Feedback" : "שמור משוב",
+    noSessionsYet: locale === "ar" ? "لا توجد جلسات بعد" : locale === "en" ? "No sessions yet" : "אין מפגשים עדיין",
+    feedbackForStudent: locale === "ar" ? "ملاحظة للطالب" : locale === "en" ? "Feedback for student" : "משוב לתלמיד",
+    yourFeedback: locale === "ar" ? "ملاحظتك" : locale === "en" ? "Your feedback" : "המשוב שלך",
+  }
+  const params = useParams()
+  const id = params.id as string
+  const [course, setCourse] = useState<Course | null>(null)
+  const [teachers, setTeachers] = useState<Teacher[]>([])
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([])
+  const [students, setStudents] = useState<StudentOption[]>([])
+  const [assignStudentsQuery, setAssignStudentsQuery] = useState("")
+  const [sessionsStudentsQuery, setSessionsStudentsQuery] = useState("")
+  const [studentsTabQuery, setStudentsTabQuery] = useState("")
+  const [campGroupsQuery, setCampGroupsQuery] = useState("")
+  const [siblingPackagesQuery, setSiblingPackagesQuery] = useState("")
+  const [paymentsQuery, setPaymentsQuery] = useState("")
+  const [debtorsQuery, setDebtorsQuery] = useState("")
+  const [attendanceStudentsQuery, setAttendanceStudentsQuery] = useState("")
+  const [selectedStudentIdsToAssign, setSelectedStudentIdsToAssign] = useState<string[]>([])
+  const [isAssigningStudents, setIsAssigningStudents] = useState(false)
+  const [assignStudentsMessage, setAssignStudentsMessage] = useState<string | null>(null)
+  const [isAssignStudentsCardOpen, setIsAssignStudentsCardOpen] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [isStudentUser, setIsStudentUser] = useState(false)
+
+  const currentUser = useCurrentUser()
+  const roleKey = (currentUser?.roleKey || currentUser?.role)?.toString().toLowerCase()
+  const isAdmin =
+    hasFullAccessRole(currentUser?.roleKey) ||
+    hasFullAccessRole(currentUser?.role) ||
+    roleKey === "admin" ||
+    currentUser?.role === "Administrator" ||
+    currentUser?.role === "אדמין" ||
+    currentUser?.role === "מנהל"
+  const userPerms = currentUser?.permissions || []
+  const canEditCourses = isAdmin || hasPermission(userPerms, "courses.edit")
+  const isCampCourse = !!(course && isCampCourseType(course.courseType))
+  const campTab = (tab: Parameters<typeof campCourseTabCan>[1], level: "view" | "edit" | "delete") =>
+    campCourseTabCan(userPerms, tab, level, { isCampCourse: true })
+
+  const canTabGeneral =
+    isAdmin ||
+    (isCampCourse ? campTab("general", "view") : hasPermission(userPerms, "courses.tab.general"))
+  const canTabStudents =
+    isAdmin ||
+    (isCampCourse ? campTab("students", "view") : hasPermission(userPerms, "courses.tab.students"))
+  const canTabPayments =
+    isAdmin ||
+    (isCampCourse ? campTab("payments", "view") : hasPermission(userPerms, "courses.tab.payments"))
+  const canTabAttendanceStudents =
+    isAdmin ||
+    (isCampCourse
+      ? campTab("attendanceStudents", "view")
+      : hasPermission(userPerms, "courses.tab.attendance.students"))
+  const canTabAttendanceTeachers =
+    isAdmin ||
+    (isCampCourse
+      ? campTab("attendanceTeachers", "view")
+      : hasPermission(userPerms, "courses.tab.attendance.teachers"))
+  const canTabSessionsFeedback =
+    isAdmin ||
+    (isCampCourse
+      ? campTab("feedback", "view")
+      : hasPermission(userPerms, "courses.tab.feedback") ||
+        hasPermission(userPerms, "courses.tab.attendance.students"))
+  const canTabDebtors =
+    isCampCourse ? isAdmin || campTab("debtors", "view") : canTabPayments
+  const canSeeCourseFinancial = isAdmin || hasPermission(userPerms, "courses.financial")
+  const canTabCamp = isCampCourse && (isAdmin || campTab("campPlan", "view"))
+  /** טאב קבוצות קייטנה — הרשאה נפרדת בקייטנה; אחרת נשען על טאב תלמידים */
+  const canTabCampGroups =
+    isCampCourse && !isStudentUser && (isAdmin || campTab("campGroups", "view"))
+  const canEditCourseFromGeneralTab =
+    isAdmin || (isCampCourse ? campTab("general", "edit") : canEditCourses)
+  const canEditEnrollmentCampGroup = isCampCourse ? isAdmin || campTab("campGroups", "edit") : canEditCourses
+  const canEditCampPlanTab = isCampCourse && (isAdmin || campTab("campPlan", "edit"))
+  const canEditSessionsFeedbackTab =
+    !isStudentUser &&
+    (isCampCourse ? campTab("feedback", "edit") : canTabSessionsFeedback && canEditCourses)
+  const canEditPaymentsTab =
+    isAdmin || (isCampCourse ? campTab("payments", "edit") : canTabPayments)
+  const canEditAttendanceStudentsTab =
+    isAdmin || (isCampCourse ? campTab("attendanceStudents", "edit") : canTabAttendanceStudents)
+  const canDeleteTeacherAttendanceRow =
+    isAdmin ||
+    (isCampCourse
+      ? campTab("attendanceTeachers", "delete")
+      : canDeleteTeacherAttendanceRecord({
+          roleKey: currentUser?.roleKey,
+          role: currentUser?.role,
+          permissions: userPerms,
+        }))
+
+  const canLoadCampScheduleApi = useMemo(() => {
+    if (!isCampCourse) return false
+    return (
+      isAdmin ||
+      campCourseTabCan(userPerms, "campPlan", "view", { isCampCourse: true }) ||
+      campCourseTabCan(userPerms, "attendanceStudents", "view", { isCampCourse: true })
+    )
+  }, [isCampCourse, isAdmin, userPerms])
+
+  const [centerName, setCenterName] = useState("")
+  const [centerLogo, setCenterLogo] = useState("")
+  const [attendanceList, setAttendanceList] = useState<
+    {
+      id: string
+      studentId: string | null
+      teacherId: string | null
+      date: string
+      status: string
+      notes?: string | null
+      createdByUserName?: string | null
+      campMeetingCellId?: string | null
+      campLessonTitle?: string | null
+      campSlotStart?: string | null
+      campSlotEnd?: string | null
+      hours?: number | string | null
+    }[]
+  >([])
+  const [attendanceDate, setAttendanceDate] = useState(() => new Date().toISOString().split("T")[0])
+  const [attendanceByStudent, setAttendanceByStudent] = useState<Record<string, string>>({})
+  const [isBulkAttendanceOpen, setIsBulkAttendanceOpen] = useState(false)
+  const [bulkAttendanceByStudent, setBulkAttendanceByStudent] = useState<Record<string, "present" | "absent" | "sick" | "vacation">>({})
+  const [savingByStudent, setSavingByStudent] = useState<Record<string, boolean>>({})
+  const [deletingTeacherAttendanceId, setDeletingTeacherAttendanceId] = useState<string | null>(null)
+  const [sessions, setSessions] = useState<CourseSessionItem[]>([])
+  const [newSessionDate, setNewSessionDate] = useState(() => new Date().toISOString().split("T")[0])
+  const [newSessionTopic, setNewSessionTopic] = useState("")
+  const [savingSession, setSavingSession] = useState(false)
+  const [feedbackDrafts, setFeedbackDrafts] = useState<Record<string, Record<string, string>>>({})
+  const [savingFeedbackBySession, setSavingFeedbackBySession] = useState<Record<string, boolean>>({})
+  const [isAddPaymentOpen, setIsAddPaymentOpen] = useState(false)
+  const [payTargetMode, setPayTargetMode] = useState<"single" | "multi">("single")
+  const [payStudentId, setPayStudentId] = useState("")
+  const [payStudentIds, setPayStudentIds] = useState<string[]>([])
+  const [payStudentSearchQuery, setPayStudentSearchQuery] = useState("")
+  const [payAmount, setPayAmount] = useState("")
+  const [payMethod, setPayMethod] = useState<"cash" | "credit" | "transfer" | "check" | "bit">("cash")
+  const [payDate, setPayDate] = useState(() => new Date().toISOString().split("T")[0])
+  const [payDescription, setPayDescription] = useState("")
+  const [isAddingPayment, setIsAddingPayment] = useState(false)
+  const [paidStudentIds, setPaidStudentIds] = useState<string[]>([])
+  const [paymentsForCourse, setPaymentsForCourse] = useState<CoursePaymentRow[]>([])
+  /** רשימת תלמידים מסוננת לפי שיבוץ מורה בקייטנה (טאב נוכחות בלבד) */
+  const [campAttendanceEnrollments, setCampAttendanceEnrollments] = useState<Enrollment[] | null>(null)
+  const [myTeacherId, setMyTeacherId] = useState<string | null>(null)
+  const [campScheduleMeetings, setCampScheduleMeetings] = useState<Array<Record<string, unknown>>>([])
+  const [campScheduleRefreshTick, setCampScheduleRefreshTick] = useState(0)
+  const [selectedCampCellId, setSelectedCampCellId] = useState("")
+  const campGroups = HEBREW_GROUP_LETTERS
+  const enrolledStudentIds = useMemo(() => new Set(enrollments.map((e) => String(e.studentId))), [enrollments])
+  const studentsAvailableToAssign = useMemo(
+    () => students.filter((s) => !enrolledStudentIds.has(String(s.id))),
+    [students, enrolledStudentIds],
+  )
+  const assignStudentsFiltered = useMemo(() => {
+    const q = assignStudentsQuery.trim().toLowerCase()
+    if (!q) return studentsAvailableToAssign
+    return studentsAvailableToAssign.filter((s) => String(s.name || "").toLowerCase().includes(q))
+  }, [studentsAvailableToAssign, assignStudentsQuery])
+  const studentsById = useMemo(
+    () => new Map(students.map((s) => [String(s.id), s])),
+    [students],
+  )
+
+  const studentSearchPlaceholder =
+    locale === "ar"
+      ? "بحث: اسم الطالب/العائلة/رقم الهوية..."
+      : locale === "en"
+        ? "Search student/family/ID..."
+        : "חיפוש תלמיד/משפחה/ת״ז..."
+
+  const enrollmentSearchText = (enrollment: Enrollment): string => {
+    const student = studentsById.get(String(enrollment.studentId || ""))
+    return [
+      enrollment.studentName,
+      student?.name,
+      student?.idNumber,
+      student?.father,
+      student?.mother,
+      student?.phone,
+      student?.additionalPhone,
+      student?.email,
+      enrollment.siblingDiscountPackageName,
+    ]
+      .map((v) => String(v || "").trim())
+      .filter(Boolean)
+      .join(" ")
+  }
+
+  const campGroupTabsData = useMemo(() => {
+    if (!isCampCourse) return [] as { label: string; members: Enrollment[] }[]
+    const byLabel = new Map<string, Enrollment[]>()
+    for (const e of enrollments) {
+      const g = String(e.campGroupLabel || "").trim()
+      if (!g) continue
+      if (!byLabel.has(g)) byLabel.set(g, [])
+      byLabel.get(g)!.push(e)
+    }
+    const order = new Map(HEBREW_GROUP_LETTERS.map((l, i) => [l, i]))
+    return [...byLabel.keys()]
+      .sort((a, b) => (order.get(a) ?? 999) - (order.get(b) ?? 999) || a.localeCompare(b, "he"))
+      .map((label) => ({ label, members: byLabel.get(label) || [] }))
+  }, [isCampCourse, enrollments])
+
+  const campUnassignedEnrollments = useMemo(() => {
+    if (!isCampCourse) return []
+    return enrollments.filter((e) => !String(e.campGroupLabel || "").trim())
+  }, [isCampCourse, enrollments])
+
+  const campGroupsInnerDefault = useMemo(() => {
+    if (campGroupTabsData.length > 0) return campGroupTabsData[0].label
+    return "__unassigned__"
+  }, [campGroupTabsData])
+
+  const inactiveCampMeetingDates = useMemo(() => {
+    if (!isCampCourse) return new Set<string>()
+    const out = new Set<string>()
+    for (const m of campScheduleMeetings) {
+      const row = m as { sessionDate?: unknown; isActive?: unknown }
+      if (row.isActive === false) {
+        const date = String(row.sessionDate ?? "").trim().slice(0, 10)
+        if (/^\d{4}-\d{2}-\d{2}$/.test(date)) out.add(date)
+      }
+    }
+    return out
+  }, [isCampCourse, campScheduleMeetings])
+
+  const allowedAttendanceDates = useMemo(() => {
+    if (!course) return []
+    const start = normalizeCourseCalendarYmd(course.startDate)
+    const end = normalizeCourseCalendarYmd(course.endDate)
+    const days = Array.isArray(course.daysOfWeek) && course.daysOfWeek.length > 0 ? course.daysOfWeek : []
+    if (!start || !end || days.length === 0) return []
+    const base = listCampSessionDates(start, end, days)
+    if (!isCampCourse || inactiveCampMeetingDates.size === 0) return base
+    return base.filter((d) => !inactiveCampMeetingDates.has(d))
+  }, [course?.startDate, course?.endDate, course?.daysOfWeek, isCampCourse, inactiveCampMeetingDates])
+
+  const attendanceDateBounds = useMemo(() => {
+    if (!course) return { min: "", max: "" }
+    return {
+      min: normalizeCourseCalendarYmd(course.startDate) || "",
+      max: normalizeCourseCalendarYmd(course.endDate) || "",
+    }
+  }, [course?.startDate, course?.endDate])
+
+  /** תאריך נוכחות אפקטיבי ל-API/UI כשיש רשימת מפגשים — מונע ערך שלא קיים ב-Select */
+  const attendanceDateForApi = useMemo(() => {
+    if (allowedAttendanceDates.length === 0) return attendanceDate
+    return allowedAttendanceDates.includes(attendanceDate) ? attendanceDate : allowedAttendanceDates[0]
+  }, [allowedAttendanceDates.join("|"), attendanceDate])
+
+  const campMeetingForSelectedDate = useMemo(() => {
+    if (!attendanceDateForApi) return null
+    const toYmd = (v: unknown) => {
+      const head = String(v ?? "").trim().slice(0, 10)
+      return /^\d{4}-\d{2}-\d{2}$/.test(head) ? head : ""
+    }
+    const hit = campScheduleMeetings.find((row) => toYmd((row as { sessionDate?: string }).sessionDate) === attendanceDateForApi)
+    return hit ?? null
+  }, [campScheduleMeetings, attendanceDateForApi])
+
+  const teacherCampCells = useMemo(() => {
+    if (!campMeetingForSelectedDate || !myTeacherId || !course) return [] as { cellId: string; label: string }[]
+    const out: { cellId: string; label: string }[] = []
+    const slots = Array.isArray((campMeetingForSelectedDate as { slots?: unknown[] }).slots)
+      ? ((campMeetingForSelectedDate as { slots: unknown[] }).slots as Array<{
+          isBreak?: boolean
+          startTime?: string
+          endTime?: string
+          cells?: Array<{ id?: string; lessonTitle?: string; teacherIds?: string[] }>
+        }>)
+      : []
+    for (const slot of slots) {
+      if (slot.isBreak) continue
+      const st = String(slot.startTime || "").slice(0, 5)
+      const et = String(slot.endTime || "").slice(0, 5)
+      for (const cell of Array.isArray(slot.cells) ? slot.cells : []) {
+        const tids = Array.isArray(cell.teacherIds) ? cell.teacherIds.map((x) => String(x)) : []
+        if (!tids.includes(myTeacherId)) continue
+        const lesson = String(cell.lessonTitle || course.name || "שיעור").trim()
+        out.push({ cellId: String(cell.id || ""), label: `${lesson} · ${st}–${et}` })
+      }
+    }
+    return out.filter((c) => c.cellId)
+  }, [campMeetingForSelectedDate, myTeacherId, course])
+
+  const teacherCampAttendanceMode = Boolean(
+    isCampCourse && !isAdmin && !!myTeacherId && teacherCampCells.length > 0,
+  )
+
+  const teacherCampDayNoSlots = Boolean(
+    isCampCourse &&
+      !isAdmin &&
+      !!myTeacherId &&
+      !!campMeetingForSelectedDate &&
+      teacherCampCells.length === 0 &&
+      canTabAttendanceStudents,
+  )
+
+  useEffect(() => {
+    if (teacherCampCells.length === 0) {
+      setSelectedCampCellId("")
+      return
+    }
+    setSelectedCampCellId((prev) =>
+      teacherCampCells.some((c) => c.cellId === prev) ? prev : teacherCampCells[0]!.cellId,
+    )
+  }, [teacherCampCells])
+
+  useEffect(() => {
+    if (isAdmin || !currentUser?.id) {
+      setMyTeacherId(null)
+      return
+    }
+    fetch(`/api/teachers/by-user/${currentUser.id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setMyTeacherId(d?.id ? String(d.id) : null))
+      .catch(() => setMyTeacherId(null))
+  }, [isAdmin, currentUser?.id])
+
+  useEffect(() => {
+    if (!canLoadCampScheduleApi || !id) {
+      setCampScheduleMeetings([])
+      return
+    }
+    fetch(`/api/courses/${id}/camp`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setCampScheduleMeetings(Array.isArray(d?.meetings) ? d.meetings : []))
+      .catch(() => setCampScheduleMeetings([]))
+  }, [id, canLoadCampScheduleApi, campScheduleRefreshTick])
+
+  /** מורה בקייטנה: לא ליפול לרשימת כל הרישומים כש־API נכשל או לפני סינון */
+  const enrollmentsForAttendanceTab = useMemo(() => {
+    if (isCampCourse && !isAdmin && canTabAttendanceStudents) {
+      return campAttendanceEnrollments ?? []
+    }
+    return campAttendanceEnrollments ?? enrollments
+  }, [isCampCourse, isAdmin, canTabAttendanceStudents, campAttendanceEnrollments, enrollments])
+
+  /** נוכחים קודם, אחר כך שאר הסטטוסים; אחים מאותה siblingGroupId רצופים (לפי סדר אח) */
+  const sortedEnrollmentsForAttendanceTab = useMemo(() => {
+    const list = enrollmentsForAttendanceTab
+    const isPresent = (e: Enrollment) => {
+      const st = attendanceByStudent[e.studentId]
+      return st === "present" || st === "PRESENT"
+    }
+    const sibRank = (e: Enrollment) =>
+      e.siblingRank != null && Number(e.siblingRank) > 0 ? Number(e.siblingRank) : 9999
+    const groupKey = (e: Enrollment) => {
+      const g = String(e.siblingGroupId ?? "").trim()
+      return g.length > 0 ? g : `__solo_${e.studentId}`
+    }
+    const sortBlock = (block: Enrollment[]) => {
+      const byGroup = new Map<string, Enrollment[]>()
+      for (const e of block) {
+        const k = groupKey(e)
+        if (!byGroup.has(k)) byGroup.set(k, [])
+        byGroup.get(k)!.push(e)
+      }
+      for (const arr of byGroup.values()) {
+        arr.sort(
+          (a, b) =>
+            sibRank(a) - sibRank(b) ||
+            (a.studentName || "").localeCompare(b.studentName || "", "he", { sensitivity: "base" }),
+        )
+      }
+      const keys = [...byGroup.keys()].sort((ka, kb) => {
+        const a0 = byGroup.get(ka)![0]!
+        const b0 = byGroup.get(kb)![0]!
+        return (a0.studentName || "").localeCompare(b0.studentName || "", "he", { sensitivity: "base" })
+      })
+      return keys.flatMap((k) => byGroup.get(k)!)
+    }
+    const present = list.filter(isPresent)
+    const rest = list.filter((e) => !isPresent(e))
+    return [...sortBlock(present), ...sortBlock(rest)]
+  }, [enrollmentsForAttendanceTab, attendanceByStudent])
+
+  /** מורה רואה רק נוכחות מורה של עצמו; מנהלים — הכל */
+  const courseTeacherAttendanceList = useMemo(() => {
+    const teacherRows = attendanceList.filter((a) => a.teacherId != null)
+    const visibleByRole = isAdmin
+      ? teacherRows
+      : myTeacherId
+        ? teacherRows.filter((a) => String(a.teacherId) === String(myTeacherId))
+        : []
+
+    const presentStudentDateKeys = new Set<string>()
+    const presentStudentCellKeys = new Set<string>()
+    for (const row of attendanceList) {
+      if (row.studentId == null) continue
+      if (!isTeacherAttendancePresentStatus(row.status)) continue
+      const dateKey = attendanceDateYmdForSort(row.date)
+      if (!dateKey) continue
+      presentStudentDateKeys.add(dateKey)
+      const cellKey = String(row.campMeetingCellId || "").trim()
+      if (cellKey) {
+        presentStudentCellKeys.add(`${dateKey}::${cellKey}`)
+      }
+    }
+
+    return visibleByRole.filter((row) => {
+      const dateKey = attendanceDateYmdForSort(row.date)
+      if (!dateKey) return false
+      const cellKey = String(row.campMeetingCellId || "").trim()
+      if (isCampCourse && cellKey) {
+        return presentStudentCellKeys.has(`${dateKey}::${cellKey}`)
+      }
+      return presentStudentDateKeys.has(dateKey)
+    })
+  }, [attendanceList, isAdmin, myTeacherId, isCampCourse])
+
+  /** אינדקס צבע לפי מורה — סדר אחיד עם שורות הטבלה (לפי שם מורה בעברית) */
+  const teacherAttendanceColorIndexById = useMemo(() => {
+    const ids = [...new Set(courseTeacherAttendanceList.map((a) => String(a.teacherId || "")))].filter(Boolean)
+    const decorated = ids.map((id) => ({
+      id,
+      name: teachers.find((t) => t.id === id)?.name ?? "\uFFFF",
+    }))
+    decorated.sort(
+      (x, y) =>
+        x.name.localeCompare(y.name, "he", { sensitivity: "base" }) || x.id.localeCompare(y.id),
+    )
+    const m = new Map<string, number>()
+    decorated.forEach((d, i) => m.set(d.id, i))
+    return m
+  }, [courseTeacherAttendanceList, teachers])
+
+  /** סיכום שעות הוראה מצטברות לפי מורה (רק רשומות «נוכח») — לתצוגה ליד הדפסה */
+  const teacherAttendanceHoursSummary = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const a of courseTeacherAttendanceList) {
+      if (!a.teacherId) continue
+      if (!isTeacherAttendancePresentStatus(a.status)) continue
+      const add = attendanceHoursToNumber(
+        a.hours,
+        a.campSlotStart,
+        a.campSlotEnd,
+        course?.startTime,
+        course?.endTime,
+      )
+      const id = String(a.teacherId)
+      map.set(id, (map.get(id) || 0) + add)
+    }
+    return [...map.entries()]
+      .map(([teacherId, hours]) => ({
+        teacherId,
+        name: teachers.find((t) => t.id === teacherId)?.name ?? "—",
+        hours,
+      }))
+      .filter((x) => x.hours > 0)
+      .sort((a, b) => a.name.localeCompare(b.name, "he", { sensitivity: "base" }))
+  }, [courseTeacherAttendanceList, teachers, course?.startTime, course?.endTime])
+
+  const teacherAttendanceHoursGrandTotal = useMemo(
+    () => teacherAttendanceHoursSummary.reduce((sum, row) => sum + row.hours, 0),
+    [teacherAttendanceHoursSummary],
+  )
+
+  /** תאריך ישן→חדש, אז מורה, אז שעת התחלה, אז id */
+  const sortedCourseTeacherAttendanceList = useMemo(() => {
+    const nameOf = (tid: string | null) => (tid ? teachers.find((t) => t.id === tid)?.name ?? "" : "")
+    return [...courseTeacherAttendanceList].sort((a, b) =>
+      compareTeacherAttendanceRows(
+        a as TeacherAttRow,
+        b as TeacherAttRow,
+        course?.startTime ?? null,
+        nameOf,
+      ),
+    )
+  }, [courseTeacherAttendanceList, teachers, course?.startTime])
+
+  async function loadCourseEnrollments() {
+    try {
+      const enrollmentsRes = await fetch(`/api/enrollments?courseId=${id}&_ts=${Date.now()}`, {
+        cache: "no-store",
+      })
+      if (!enrollmentsRes.ok) return
+      const data = await enrollmentsRes.json()
+      setEnrollments(Array.isArray(data) ? data : [])
+    } catch {
+      // ignore
+    }
+  }
+
+  async function assignSelectedStudents() {
+    const candidateIds = selectedStudentIdsToAssign.filter((sid) => !enrolledStudentIds.has(sid))
+    if (!id || candidateIds.length === 0 || isAssigningStudents) return
+    setIsAssigningStudents(true)
+    setAssignStudentsMessage(null)
+    const defaultBillingPlan =
+      String((course as any)?.billingPlan || "").trim() === "discounted" ||
+      String((course as any)?.billingPlan || "").trim() === "perSession"
+        ? String((course as any)?.billingPlan || "").trim()
+        : "summer"
+    const shouldUseBillingPlanMode = String((course as any)?.billingPlanSelectionMode || "").trim() === "billing"
+    try {
+      const results = await Promise.allSettled(
+        candidateIds.map((studentId) =>
+          fetch("/api/enrollments", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              studentId,
+              courseId: id,
+              status: "active",
+              billingPlanChoice: shouldUseBillingPlanMode ? defaultBillingPlan : null,
+            }),
+          }),
+        ),
+      )
+      const successCount = results.filter(
+        (result) => result.status === "fulfilled" && result.value.ok,
+      ).length
+      await loadCourseEnrollments()
+      setSelectedStudentIdsToAssign([])
+      if (successCount > 0) {
+        setAssignStudentsMessage(`${tr.assignStudentsDone} (${successCount})`)
+      }
+    } finally {
+      setIsAssigningStudents(false)
+    }
+  }
+
+  async function saveEnrollmentBillingPlanChoice(enrollmentId: string, billingPlanChoice: "summer" | "discounted" | "perSession") {
+    const prevEnrollments = enrollments
+    setEnrollments((prev) =>
+      prev.map((e) => (String(e.id) === String(enrollmentId) ? { ...e, billingPlanChoice } : e)),
+    )
+    try {
+      const res = await fetch(`/api/enrollments/${enrollmentId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ billingPlanChoice }),
+      })
+      if (!res.ok) {
+        setEnrollments(prevEnrollments)
+        return
+      }
+      await loadCourseEnrollments()
+      await loadCoursePayments()
+    } catch {
+      setEnrollments(prevEnrollments)
+    }
+  }
+
+  async function saveEnrollmentSiblingDiscountDisabled(enrollmentId: string, disabled: boolean) {
+    try {
+      const res = await fetch(`/api/enrollments/${enrollmentId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ siblingDiscountDisabled: disabled }),
+      })
+      if (!res.ok) return
+      await loadCourseEnrollments()
+      await loadCoursePayments()
+    } catch {
+      // ignore
+    }
+  }
+
+  useEffect(() => {
+    if (!currentUser?.id) return
+    fetch(`/api/students/by-user/${currentUser.id}`)
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => { if (data) setIsStudentUser(true) })
+      .catch(() => {})
+  }, [currentUser?.id])
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [courseRes, teachersRes, enrollmentsRes, settingsRes, studentsRes] = await Promise.all([
+          fetch(`/api/courses/${id}?_ts=${Date.now()}`, { cache: "no-store" }),
+          fetch("/api/teachers"),
+          fetch(`/api/enrollments?courseId=${id}&_ts=${Date.now()}`, { cache: "no-store" }),
+          fetch("/api/settings"),
+          fetch("/api/students"),
+        ])
+        if (courseRes.ok) {
+          const data = await courseRes.json()
+          setCourse(data)
+        }
+        if (teachersRes.ok) {
+          const data = await teachersRes.json()
+          setTeachers(Array.isArray(data) ? data : [])
+        }
+        if (enrollmentsRes.ok) {
+          const data = await enrollmentsRes.json()
+          setEnrollments(Array.isArray(data) ? data : [])
+        }
+        if (studentsRes.ok) {
+          const data = await studentsRes.json()
+          setStudents(
+            Array.isArray(data)
+              ? data.map((s: any) => ({
+                  id: String(s.id || ""),
+                  name: String(s.name || ""),
+                  status: s.status ? String(s.status) : null,
+                  idNumber: s.idNumber ? String(s.idNumber) : null,
+                  father: s.father ? String(s.father) : null,
+                  mother: s.mother ? String(s.mother) : null,
+                  phone: s.phone ? String(s.phone) : null,
+                  additionalPhone: s.additionalPhone ? String(s.additionalPhone) : null,
+                  email: s.email ? String(s.email) : null,
+                }))
+              : [],
+          )
+        } else {
+          setStudents([])
+        }
+        if (settingsRes.ok) {
+          const s = await settingsRes.json()
+          setCenterName(String(s.center_name || ""))
+          setCenterLogo(String(s.logo || ""))
+        }
+      } catch (err) {
+        console.error("Failed to fetch data:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
+  }, [id])
+
+  useEffect(() => {
+    setSelectedStudentIdsToAssign((prev) => prev.filter((sid) => !enrolledStudentIds.has(sid)))
+  }, [enrolledStudentIds])
+
+  useEffect(() => {
+    if (!id || !course) return
+    if (!isCampCourse || isAdmin || !canTabAttendanceStudents || !attendanceDateForApi) {
+      setCampAttendanceEnrollments(null)
+      return
+    }
+    if (teacherCampDayNoSlots) {
+      setCampAttendanceEnrollments([])
+      return
+    }
+    if (teacherCampAttendanceMode && !selectedCampCellId) {
+      setCampAttendanceEnrollments([])
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        let url = `/api/enrollments?courseId=${id}&forCampAttendanceDate=${encodeURIComponent(attendanceDateForApi)}`
+        if (teacherCampAttendanceMode && selectedCampCellId) {
+          url += `&forCampMeetingCellId=${encodeURIComponent(selectedCampCellId)}`
+        }
+        const res = await fetch(url)
+        if (cancelled) return
+        if (res.ok) {
+          const data = await res.json()
+          setCampAttendanceEnrollments(Array.isArray(data) ? data : [])
+        } else if (!cancelled) {
+          setCampAttendanceEnrollments([])
+        }
+      } catch {
+        if (!cancelled) setCampAttendanceEnrollments([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [
+    id,
+    course?.id,
+    isCampCourse,
+    isAdmin,
+    canTabAttendanceStudents,
+    attendanceDateForApi,
+    teacherCampAttendanceMode,
+    teacherCampDayNoSlots,
+    selectedCampCellId,
+  ])
+
+  useEffect(() => {
+    if ((!canTabAttendanceStudents && !canTabAttendanceTeachers) || !id) return
+    fetch(`/api/attendance?courseId=${id}&_ts=${Date.now()}`, { cache: "no-store" })
+      .then((res) => res.ok ? res.json() : [])
+      .then((data) => setAttendanceList(Array.isArray(data) ? data : []))
+      .catch(() => setAttendanceList([]))
+  }, [id, canTabAttendanceStudents, canTabAttendanceTeachers])
+
+  useEffect(() => {
+    if (!canTabAttendanceStudents || !id || !attendanceDateForApi) return
+    if (teacherCampAttendanceMode && !selectedCampCellId) {
+      setAttendanceByStudent({})
+      return
+    }
+    let url = `/api/attendance?courseId=${id}&date=${attendanceDateForApi}`
+    if (teacherCampAttendanceMode && selectedCampCellId) {
+      url += `&campMeetingCellId=${encodeURIComponent(selectedCampCellId)}`
+    }
+    fetch(url, { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((rows) => {
+        const next: Record<string, string> = {}
+        const rowsByStudent = new Map<string, Record<string, unknown>[]>()
+        ;(Array.isArray(rows) ? rows : []).forEach((r: any) => {
+          const sid = String(r?.studentId || "").trim()
+          if (!sid) return
+          if (!rowsByStudent.has(sid)) rowsByStudent.set(sid, [])
+          rowsByStudent.get(sid)!.push(r as Record<string, unknown>)
+        })
+        for (const [sid, studentRows] of rowsByStudent.entries()) {
+          const status = latestStudentStatusFromRows(studentRows)
+          if (status) next[sid] = status
+        }
+        setAttendanceByStudent(next)
+      })
+      .catch(() => setAttendanceByStudent({}))
+  }, [
+    id,
+    attendanceDateForApi,
+    canTabAttendanceStudents,
+    teacherCampAttendanceMode,
+    selectedCampCellId,
+  ])
+
+  async function loadCoursePayments() {
+    if (!canTabPayments && !canTabDebtors) return
+    if (!enrollments.length) {
+      setPaidStudentIds([])
+      setPaymentsForCourse([])
+      return
+    }
+    try {
+      const res = await fetch(
+        `/api/payments?courseId=${encodeURIComponent(id)}&includeLegacyCoursePayments=1`,
+      )
+      if (!res.ok) {
+        setPaidStudentIds([])
+        setPaymentsForCourse([])
+        return
+      }
+      const rows = await res.json()
+      const enrolledByStudentId = new Map(enrollments.map((e) => [e.studentId, e]))
+      const paymentRows: CoursePaymentRow[] = []
+      const paidSet = new Set<string>()
+      for (const row of Array.isArray(rows) ? rows : []) {
+        const sid = row?.studentId ? String(row.studentId) : ""
+        const enr = sid ? enrolledByStudentId.get(sid) : undefined
+        if (!sid || !enr) continue
+        paidSet.add(sid)
+        paymentRows.push({
+          id: String(row.id || crypto.randomUUID()),
+          studentId: sid,
+          studentName: String(row.studentName || enr.studentName || "—"),
+          paymentDate: String(row.paymentDate || ""),
+          paymentType: row.paymentType ? String(row.paymentType) : null,
+          amount: Number(row.amount || 0),
+          description: row.description ? String(row.description) : null,
+          siblingDiscountPackageName: enr.siblingDiscountPackageName || null,
+        })
+      }
+      setPaidStudentIds(Array.from(paidSet))
+      setPaymentsForCourse(paymentRows)
+    } catch {
+      setPaidStudentIds([])
+      setPaymentsForCourse([])
+    }
+  }
+
+  useEffect(() => {
+    loadCoursePayments()
+  }, [canTabPayments, canTabDebtors, enrollments])
+
+  useEffect(() => {
+    if (!id || !canTabSessionsFeedback) return
+    fetch(`/api/course-sessions?courseId=${id}`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((rows) => {
+        const list = Array.isArray(rows) ? rows : []
+        setSessions(list)
+        const next: Record<string, Record<string, string>> = {}
+        for (const s of list as CourseSessionItem[]) {
+          const byStudent: Record<string, string> = {}
+          for (const f of s.feedback || []) byStudent[String(f.studentId)] = String(f.feedbackText || "")
+          next[String(s.id)] = byStudent
+        }
+        setFeedbackDrafts(next)
+      })
+      .catch(() => setSessions([]))
+  }, [id, canTabSessionsFeedback])
+
+  async function handleAddSession() {
+    if (!canEditSessionsFeedbackTab || !newSessionDate || !id || savingSession) return
+    setSavingSession(true)
+    try {
+      const res = await fetch("/api/course-sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId: id, sessionDate: newSessionDate, generalTopic: newSessionTopic }),
+      })
+      if (!res.ok) throw new Error("failed")
+      const listRes = await fetch(`/api/course-sessions?courseId=${id}`)
+      const list = listRes.ok ? await listRes.json() : []
+      setSessions(Array.isArray(list) ? list : [])
+      setNewSessionTopic("")
+    } catch {
+      // ignore
+    } finally {
+      setSavingSession(false)
+    }
+  }
+
+  async function handleSaveSessionFeedback(sessionId: string) {
+    if (!canEditSessionsFeedbackTab || !id || savingFeedbackBySession[sessionId]) return
+    const byStudent = feedbackDrafts[sessionId] || {}
+    const payload = Object.entries(byStudent).map(([studentId, feedbackText]) => ({ studentId, feedbackText }))
+    setSavingFeedbackBySession((p) => ({ ...p, [sessionId]: true }))
+    try {
+      const res = await fetch(`/api/course-sessions/${sessionId}/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ feedbacks: payload }),
+      })
+      if (!res.ok) throw new Error("failed")
+    } catch {
+      // ignore
+    } finally {
+      setSavingFeedbackBySession((p) => ({ ...p, [sessionId]: false }))
+    }
+  }
+
+  async function saveEnrollmentCampGroup(enrollmentId: string, campGroupLabel: string) {
+    try {
+      const res = await fetch(`/api/enrollments/${enrollmentId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ campGroupLabel: campGroupLabel || null }),
+      })
+      if (!res.ok) return
+      await loadCourseEnrollments()
+    } catch {
+      // ignore
+    }
+  }
+
+  async function refreshAttendanceData() {
+    if (!id) return
+    const allRes = await fetch(`/api/attendance?courseId=${id}&_ts=${Date.now()}`, { cache: "no-store" })
+    const allRows = allRes.ok ? await allRes.json() : []
+    setAttendanceList(Array.isArray(allRows) ? allRows : [])
+
+    if (!canTabAttendanceStudents || !attendanceDateForApi) return
+    let dayUrl = `/api/attendance?courseId=${id}&date=${attendanceDateForApi}&_ts=${Date.now()}`
+    if (teacherCampAttendanceMode && selectedCampCellId) {
+      dayUrl += `&campMeetingCellId=${encodeURIComponent(selectedCampCellId)}`
+    }
+    const dayRes = await fetch(dayUrl, { cache: "no-store" })
+    const dayRows = dayRes.ok ? await dayRes.json() : []
+    const next: Record<string, string> = {}
+    const rowsByStudent = new Map<string, Record<string, unknown>[]>()
+    ;(Array.isArray(dayRows) ? dayRows : []).forEach((r: any) => {
+      const sid = String(r?.studentId || "").trim()
+      if (!sid) return
+      if (!rowsByStudent.has(sid)) rowsByStudent.set(sid, [])
+      rowsByStudent.get(sid)!.push(r as Record<string, unknown>)
+    })
+    for (const [sid, rows] of rowsByStudent.entries()) {
+      const status = latestStudentStatusFromRows(rows)
+      if (status) next[sid] = status
+    }
+    setAttendanceByStudent(next)
+  }
+
+  async function saveStudentAttendance(studentId: string, status: "present" | "absent" | "sick" | "vacation") {
+    if (!canEditAttendanceStudentsTab) return
+    const prev = attendanceByStudent[studentId]
+    setAttendanceByStudent((p) => ({ ...p, [studentId]: status }))
+    setSavingByStudent((p) => ({ ...p, [studentId]: true }))
+    try {
+      const body: Record<string, unknown> = {
+        studentId,
+        courseId: id,
+        date: attendanceDateForApi,
+        status,
+      }
+      if (teacherCampAttendanceMode && selectedCampCellId) {
+        body.campMeetingCellId = selectedCampCellId
+      }
+      const res = await fetch("/api/attendance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => null)
+        const msg =
+          errBody && typeof errBody === "object" && "error" in errBody
+            ? String((errBody as { error?: string }).error || "")
+            : ""
+        throw new Error(msg || "Failed to save attendance")
+      }
+      await refreshAttendanceData()
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : ""
+      if (msg) window.alert(msg)
+      setAttendanceByStudent((p) => ({ ...p, [studentId]: prev }))
+    } finally {
+      setSavingByStudent((p) => ({ ...p, [studentId]: false }))
+    }
+  }
+
+  async function saveBulkAttendanceForSelectedDate() {
+    if (!canEditAttendanceStudentsTab || !id || !attendanceDateForApi) return
+    const entries = Object.entries(bulkAttendanceByStudent)
+    if (entries.length === 0) {
+      setIsBulkAttendanceOpen(false)
+      return
+    }
+    try {
+      await Promise.all(
+        entries.map(async ([studentId, status]) => {
+          const body: Record<string, unknown> = { studentId, courseId: id, date: attendanceDateForApi, status }
+          if (teacherCampAttendanceMode && selectedCampCellId) body.campMeetingCellId = selectedCampCellId
+          const res = await fetch("/api/attendance", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          })
+          if (!res.ok) throw new Error("Failed to save bulk attendance")
+        }),
+      )
+      await refreshAttendanceData()
+      setIsBulkAttendanceOpen(false)
+    } catch {
+      // keep page behavior silent
+    }
+  }
+
+  async function deleteTeacherAttendanceRecord(recordId: string) {
+    if (!canDeleteTeacherAttendanceRow) return
+    if (!window.confirm(tr.deleteTeacherAttendanceConfirm)) return
+    setDeletingTeacherAttendanceId(recordId)
+    try {
+      const res = await fetch(`/api/attendance?id=${encodeURIComponent(recordId)}`, { method: "DELETE" })
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => null)
+        const msg =
+          errBody && typeof errBody === "object" && "error" in errBody
+            ? String((errBody as { error?: string }).error || "")
+            : ""
+        throw new Error(msg || "Failed to delete")
+      }
+      await refreshAttendanceData()
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : ""
+      if (msg) window.alert(msg)
+    } finally {
+      setDeletingTeacherAttendanceId(null)
+    }
+  }
+
+  async function addCoursePayment() {
+    if (!canEditPaymentsTab || !payAmount || Number(payAmount) <= 0) return
+    const amount = Number(payAmount)
+    const dateYmd = String(payDate || "").trim().split("T")[0]
+    const targetStudentIds =
+      payTargetMode === "single"
+        ? [String(payStudentId || "").trim()].filter(Boolean)
+        : Array.from(new Set(payStudentIds.map((x) => String(x || "").trim()).filter(Boolean)))
+    if (targetStudentIds.length === 0) return
+
+    type Allocation = { studentId: string; amount: number }
+    const allocations: Allocation[] = []
+    if (payTargetMode === "single") {
+      const hasDuplicatePayment = paymentsForCourse.some((row) => {
+        const rowDateYmd = String(row.paymentDate || "").trim().split("T")[0]
+        return (
+          String(row.studentId || "") === String(targetStudentIds[0]) &&
+          Number(row.amount || 0) === amount &&
+          rowDateYmd === dateYmd
+        )
+      })
+      if (hasDuplicatePayment && !window.confirm(tr.duplicatePaymentConfirm)) return
+      allocations.push({ studentId: targetStudentIds[0], amount })
+    } else {
+      const balances = targetStudentIds.map((sid) => Math.max(0, Number(balanceByStudent.get(sid) || 0)))
+      const totalBalance = balances.reduce((s, n) => s + n, 0)
+      let remaining = Math.round(amount * 100) / 100
+      targetStudentIds.forEach((sid, idx) => {
+        let share = 0
+        if (idx === targetStudentIds.length - 1) {
+          share = remaining
+        } else if (totalBalance > 0) {
+          share = Math.round((amount * (balances[idx] / totalBalance)) * 100) / 100
+          if (share > remaining) share = remaining
+        } else {
+          share = Math.round((amount / targetStudentIds.length) * 100) / 100
+          if (share > remaining) share = remaining
+        }
+        remaining = Math.round((remaining - share) * 100) / 100
+        if (share > 0) allocations.push({ studentId: sid, amount: share })
+      })
+    }
+
+    setIsAddingPayment(true)
+    try {
+      await Promise.all(
+        allocations.map(async (a) => {
+          const res = await fetch("/api/payments", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              studentId: a.studentId,
+              courseId: id,
+              amount: a.amount,
+              date: payDate,
+              paymentMethod: payMethod,
+              description:
+                payDescription.trim() ||
+                (payTargetMode === "multi"
+                  ? `תשלום מרוכז (${allocations.length} תלמידים): ${course?.name || ""}`
+                  : `תשלום לקורס: ${course?.name || ""}`),
+            }),
+          })
+          if (!res.ok) throw new Error("Failed to create payment")
+        }),
+      )
+      await loadCoursePayments()
+      resetAddPaymentFormAndClose()
+    } catch {
+      // keep silent as existing page style
+    } finally {
+      setIsAddingPayment(false)
+    }
+  }
+
+  function resetAddPaymentFormAndClose() {
+    setIsAddPaymentOpen(false)
+    setPayTargetMode("single")
+    setPayStudentId("")
+    setPayStudentIds([])
+    setPayStudentSearchQuery("")
+    setPayAmount("")
+    setPayMethod("cash")
+    setPayDate(new Date().toISOString().split("T")[0])
+    setPayDescription("")
+  }
+
+  function attendanceStatusButton(studentId: string, status: "present" | "absent" | "sick" | "vacation", label: string, Icon: any) {
+    const isActive = attendanceByStudent[studentId] === status
+    const isSaving = !!savingByStudent[studentId]
+    return (
+      <Button
+        variant={isActive ? "default" : "outline"}
+        size="sm"
+        className={`gap-1 min-h-[40px] text-xs px-2 ${
+          isActive
+            ? status === "present"
+              ? "bg-green-600 hover:bg-green-700"
+              : status === "absent"
+                ? "bg-red-600 hover:bg-red-700"
+                : status === "sick"
+                  ? "bg-orange-600 hover:bg-orange-700"
+                  : "bg-blue-600 hover:bg-blue-700"
+            : "bg-transparent"
+        }`}
+        disabled={isSaving || !canEditAttendanceStudentsTab}
+        onClick={() => saveStudentAttendance(studentId, status)}
+      >
+        <Icon className="h-4 w-4" />
+        {label}
+      </Button>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
+
+  if (!course) {
+    return <div className="p-3 text-center sm:p-6">{tr.notFound}</div>
+  }
+
+  const enrollmentsWithPayments = enrollments.filter((e) => paidStudentIds.includes(e.studentId))
+  const paymentTypeLabel = (type: string | null | undefined) => {
+    if (type === "cash") return "מזומן"
+    if (type === "credit") return "אשראי"
+    if (type === "transfer") return "העברה בנקאית"
+    if (type === "check") return "שיק"
+    if (type === "bit") return "ביט"
+    return "—"
+  }
+  const paymentTypeBadgeClass = (type: string) => {
+    if (type === "cash") return "border-emerald-200 bg-emerald-50 text-emerald-700"
+    if (type === "credit") return "border-sky-200 bg-sky-50 text-sky-700"
+    if (type === "transfer") return "border-violet-200 bg-violet-50 text-violet-700"
+    if (type === "check") return "border-amber-200 bg-amber-50 text-amber-700"
+    if (type === "bit") return "border-pink-200 bg-pink-50 text-pink-700"
+    return "border-slate-200 bg-slate-50 text-slate-700"
+  }
+  const paymentMethodOrder: Array<"cash" | "credit" | "transfer" | "check" | "bit"> = ["cash", "credit", "transfer", "check", "bit"]
+  const paymentTotalsByMethod = paymentMethodOrder.map((method) => ({
+    method,
+    label: paymentTypeLabel(method),
+    total: paymentsForCourse
+      .filter((p) => (p.paymentType || "").toLowerCase() === method)
+      .reduce((sum, p) => sum + Number(p.amount || 0), 0),
+  }))
+  const paymentGrandTotal = paymentsForCourse.reduce((sum, p) => sum + Number(p.amount || 0), 0)
+  const paidByStudent = new Map<string, number>()
+  for (const p of paymentsForCourse) {
+    if (!p.studentId) continue
+    paidByStudent.set(p.studentId, (paidByStudent.get(p.studentId) || 0) + Number(p.amount || 0))
+  }
+  const isPerSessionCoursePricing = courseTypeIsPerSession(String((course as any)?.courseType || ""))
+  const scheduleDatesSet = new Set(allowedAttendanceDates)
+  const sessionPriceMap = normalizeSessionPricesMap((course as any)?.sessionPrices)
+  const campNoAttendanceRuleEnabled = isTruthyCourseFlag(course?.campChargeFirstSessionIfNoAttendance)
+  const firstSessionPriceFromMap = (() => {
+    const firstDate = Object.keys(sessionPriceMap).sort((a, b) => a.localeCompare(b))[0]
+    if (!firstDate) return null
+    const n = Number(sessionPriceMap[firstDate])
+    return Number.isFinite(n) ? n : null
+  })()
+  const plannedSessionCountForFallback = Math.max(
+    1,
+    allowedAttendanceDates.length || Number(course?.duration || 0) || 0,
+  )
+  const fallbackPerSessionPrice =
+    Number(course?.price || 0) / plannedSessionCountForFallback
+  const firstSessionPrice = firstSessionPriceFromMap ?? Number(fallbackPerSessionPrice || 0)
+  const presentDatesByStudent = new Map<string, Set<string>>()
+  const rowsByStudentAndDate = new Map<string, Record<string, unknown>[]>()
+  for (const row of attendanceList) {
+    const sid = String((row as any)?.studentId || "").trim()
+    if (!sid) continue
+    const ymd = String((row as any)?.date || "").trim().slice(0, 10)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) continue
+    if (scheduleDatesSet.size > 0 && !scheduleDatesSet.has(ymd)) continue
+    const key = `${sid}__${ymd}`
+    if (!rowsByStudentAndDate.has(key)) rowsByStudentAndDate.set(key, [])
+    rowsByStudentAndDate.get(key)!.push(row as unknown as Record<string, unknown>)
+  }
+  for (const [key, rows] of rowsByStudentAndDate.entries()) {
+    const latest = latestStudentStatusFromRows(rows)
+    if (latest !== "present") continue
+    const idx = key.indexOf("__")
+    if (idx <= 0) continue
+    const sid = key.slice(0, idx)
+    const ymd = key.slice(idx + 2)
+    const set = presentDatesByStudent.get(sid) || new Set<string>()
+    set.add(ymd)
+    presentDatesByStudent.set(sid, set)
+  }
+
+  const dueByStudent = new Map<string, { studentName: string; totalDue: number }>()
+  const firstEnrollmentByStudent = new Map<string, Enrollment>()
+  const presentCountByStudent = new Map<string, number>()
+  for (const e of enrollments) {
+    const sid = String(e.studentId || "").trim()
+    if (!sid) continue
+    const studentName = e.studentName || "—"
+    if (!firstEnrollmentByStudent.has(sid)) firstEnrollmentByStudent.set(sid, e)
+    const presentDates = Array.from(presentDatesByStudent.get(sid) || [])
+    presentCountByStudent.set(sid, presentDates.length)
+    // coursePrice שמגיע מ-API /enrollments כבר כולל התאמות אפקטיביות
+    // (למשל הנחות אחים), לכן הוא חייב להיות בסיס החישוב לחייבים.
+    let enrollmentDue = Number((e as any).coursePrice ?? course?.price ?? 0)
+    // בתוכנית חיוב "לפי מפגש": סכום לתשלום = נוכחות * מחיר למפגש
+    const billingMode = String((course as any)?.billingPlanSelectionMode || "").trim()
+    const planChoice = normalizeBillingPlanChoice((e as any)?.billingPlanChoice ?? (course as any)?.billingPlan)
+    const perSessionPrice = Number((course as any)?.billingPlanPerSessionPrice ?? 0)
+    if (billingMode === "billing" && planChoice === "perSession" && Number.isFinite(perSessionPrice) && perSessionPrice >= 0) {
+      enrollmentDue = Math.round(presentDates.length * perSessionPrice * 100) / 100
+    }
+    if (
+      isCampCourse &&
+      campNoAttendanceRuleEnabled &&
+      presentDates.length === 0
+    ) {
+      enrollmentDue = Math.round(Number(firstSessionPrice || 0) * 100) / 100
+    }
+    const prev = dueByStudent.get(sid)
+    if (!prev) {
+      dueByStudent.set(sid, { studentName, totalDue: enrollmentDue })
+    } else {
+      dueByStudent.set(sid, { studentName: prev.studentName || studentName, totalDue: prev.totalDue + enrollmentDue })
+    }
+  }
+
+  function normalizeBillingPlanChoice(raw: unknown): "summer" | "discounted" | "perSession" {
+    const v = String(raw || "").trim()
+    if (v === "discounted") return "discounted"
+    if (v === "perSession") return "perSession"
+    return "summer"
+  }
+
+  const debtRowsAll = Array.from(dueByStudent.entries()).map(([studentId, due]) => {
+    const enrollment = firstEnrollmentByStudent.get(studentId)
+    const paid = paidByStudent.get(studentId) || 0
+    const balance = Math.max(0, due.totalDue - paid)
+    return {
+      enrollmentId: enrollment?.id || studentId,
+      studentId,
+      studentName: due.studentName,
+      siblingDiscountPackageName: String((enrollment as any)?.siblingDiscountPackageName || "").trim(),
+      siblingDiscountDisabled: (enrollment as any)?.siblingDiscountDisabled === true,
+      totalDue: due.totalDue,
+      paid,
+      balance,
+      billingPlanChoice: normalizeBillingPlanChoice(enrollment?.billingPlanChoice ?? (course as any)?.billingPlan),
+    }
+  })
+  const balanceByStudent = new Map<string, number>(
+    debtRowsAll.map((r) => [String(r.studentId), Number(r.balance || 0)]),
+  )
+  const paymentPreviewAllocations = (() => {
+    if (payTargetMode !== "multi") return [] as Array<{ studentId: string; studentName: string; amount: number }>
+    const total = Number(payAmount || 0)
+    if (!Number.isFinite(total) || total <= 0) return [] as Array<{ studentId: string; studentName: string; amount: number }>
+    const targetStudentIds = Array.from(new Set(payStudentIds.map((x) => String(x || "").trim()).filter(Boolean)))
+    if (targetStudentIds.length === 0) return [] as Array<{ studentId: string; studentName: string; amount: number }>
+
+    const balances = targetStudentIds.map((sid) => Math.max(0, Number(balanceByStudent.get(sid) || 0)))
+    const totalBalance = balances.reduce((s, n) => s + n, 0)
+    let remaining = Math.round(total * 100) / 100
+    return targetStudentIds.map((sid, idx) => {
+      let share = 0
+      if (idx === targetStudentIds.length - 1) {
+        share = remaining
+      } else if (totalBalance > 0) {
+        share = Math.round((total * (balances[idx] / totalBalance)) * 100) / 100
+        if (share > remaining) share = remaining
+      } else {
+        share = Math.round((total / targetStudentIds.length) * 100) / 100
+        if (share > remaining) share = remaining
+      }
+      remaining = Math.round((remaining - share) * 100) / 100
+      const studentName =
+        enrollments.find((e) => String(e.studentId || "") === sid)?.studentName ||
+        students.find((s) => String(s.id || "") === sid)?.name ||
+        "—"
+      return { studentId: sid, studentName, amount: Math.max(0, share) }
+    })
+  })()
+  const canSubmitPayment =
+    payTargetMode === "single"
+      ? !!payStudentId && Number(payAmount || 0) > 0
+      : paymentPreviewAllocations.length > 0
+  const debtRows = debtRowsAll
+    .filter((r) => r.balance > 0.009)
+    .sort((a, b) => b.balance - a.balance || a.studentName.localeCompare(b.studentName, "he"))
+  const filteredSessionFeedbackEnrollments = enrollments.filter((enrollment) =>
+    matchesStudentSearchText(enrollmentSearchText(enrollment), sessionsStudentsQuery),
+  )
+  const filteredStudentsTabEnrollments = enrollments.filter((enrollment) =>
+    matchesStudentSearchText(enrollmentSearchText(enrollment), studentsTabQuery),
+  )
+  const filteredCampGroupTabsData = campGroupTabsData
+    .map((group) => ({
+      ...group,
+      members: group.members.filter((enrollment) =>
+        matchesStudentSearchText(enrollmentSearchText(enrollment), campGroupsQuery),
+      ),
+    }))
+    .filter((group) => group.members.length > 0)
+  const filteredCampUnassignedEnrollments = campUnassignedEnrollments.filter((enrollment) =>
+    matchesStudentSearchText(enrollmentSearchText(enrollment), campGroupsQuery),
+  )
+  const filteredPaymentsForCourse = paymentsForCourse.filter((row) => {
+    const student = row.studentId ? studentsById.get(String(row.studentId)) : null
+    const searchText = [
+      row.studentName,
+      row.description,
+      row.siblingDiscountPackageName,
+      student?.idNumber,
+      student?.father,
+      student?.mother,
+    ]
+      .map((v) => String(v || "").trim())
+      .filter(Boolean)
+      .join(" ")
+    return matchesStudentSearchText(searchText, paymentsQuery)
+  })
+  const paymentsGroupedByStudent = Array.from(
+    filteredPaymentsForCourse.reduce((map, payment) => {
+      const sid = String(payment.studentId || "")
+      const key = sid || `__no_student__${payment.id}`
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          studentId: sid,
+          studentName: payment.studentName || "—",
+          rows: [] as CoursePaymentRow[],
+        })
+      }
+      map.get(key)!.rows.push(payment)
+      return map
+    }, new Map<string, { key: string; studentId: string; studentName: string; rows: CoursePaymentRow[] }>()),
+  ).map(([, group]) => ({
+    ...group,
+    totalPaid: group.rows.reduce((sum, r) => sum + Number(r.amount || 0), 0),
+    attendanceCount: presentCountByStudent.get(group.studentId) || 0,
+    rows: [...group.rows].sort(
+      (a, b) =>
+        new Date(String(b.paymentDate || "")).getTime() - new Date(String(a.paymentDate || "")).getTime(),
+    ),
+  }))
+  const filteredDebtRows = debtRows.filter((row) => {
+    const student = studentsById.get(String(row.studentId || ""))
+    const searchText = [
+      row.studentName,
+      row.siblingDiscountPackageName,
+      student?.idNumber,
+      student?.father,
+      student?.mother,
+    ]
+      .map((v) => String(v || "").trim())
+      .filter(Boolean)
+      .join(" ")
+    return matchesStudentSearchText(searchText, debtorsQuery)
+  })
+  const filteredAttendanceEnrollments = sortedEnrollmentsForAttendanceTab.filter((enrollment) =>
+    matchesStudentSearchText(enrollmentSearchText(enrollment), attendanceStudentsQuery),
+  )
+  const filteredPayTargetEnrollments = enrollments.filter((enrollment) =>
+    matchesStudentSearchText(enrollmentSearchText(enrollment), payStudentSearchQuery),
+  )
+  // כותרת חייבים מחושבת לפי העמודות של הטבלה המוצגת (רק תלמידים עם יתרה)
+  const debtRowsTotalDue = filteredDebtRows.reduce((sum, r) => sum + r.totalDue, 0)
+  const debtRowsTotalPaid = filteredDebtRows.reduce((sum, r) => sum + r.paid, 0)
+  const totalDebtAmount = filteredDebtRows.reduce((sum, r) => sum + r.balance, 0)
+
+  const courseTeachers = teachers.filter(t => 
+    course.teacherIds && course.teacherIds.includes(t.id)
+  )
+  const expectedTotalByEnrollments = enrollments.reduce((sum, e) => sum + Number((e as any).coursePrice || 0), 0)
+  const siblingPackageGroups = Array.from(
+    enrollments.reduce((map, enrollment) => {
+      const pkgName = String(enrollment.siblingDiscountPackageName || "").trim()
+      if (!pkgName) return map
+      if (!map.has(pkgName)) map.set(pkgName, [])
+      map.get(pkgName)!.push(enrollment)
+      return map
+    }, new Map<string, Enrollment[]>()),
+  )
+    .map(([packageName, members]) => ({
+      packageName,
+      members: [...members].sort((a, b) => {
+        const rankA = a.siblingRank != null && Number(a.siblingRank) > 0 ? Number(a.siblingRank) : 9999
+        const rankB = b.siblingRank != null && Number(b.siblingRank) > 0 ? Number(b.siblingRank) : 9999
+        if (rankA !== rankB) return rankA - rankB
+        return String(a.studentName || "").localeCompare(String(b.studentName || ""), "he", { sensitivity: "base" })
+      }),
+      totalDue: members.reduce((sum, m) => sum + Number((m as any).coursePrice || 0), 0),
+    }))
+    .sort((a, b) => a.packageName.localeCompare(b.packageName, "he", { sensitivity: "base" }))
+  const filteredSiblingPackageGroups = siblingPackageGroups
+    .map((group) => ({
+      ...group,
+      members: group.members.filter((member) =>
+        matchesStudentSearchText(enrollmentSearchText(member), siblingPackagesQuery),
+      ),
+    }))
+    .filter((group) => group.members.length > 0)
+  const canTabSiblingPackages = !isStudentUser && canTabStudents && siblingPackageGroups.length > 0
+
+  const daysOfWeek = Array.isArray(course.daysOfWeek) ? course.daysOfWeek : []
+  const isTotalPriceMode =
+    typeof (course as any).courseType === "string" &&
+    (
+      (course as any).courseType.endsWith("_total") ||
+      (course as any).courseType.endsWith("_session") ||
+      (course as any).courseType.endsWith("_hour")
+    )
+  const statusPres = getCourseStatusPresentation({
+    status: course.status,
+    endDate: course.endDate,
+    statusManualOverride: (course as any).statusManualOverride === true,
+  })
+  const visibleTabCount = [
+    canTabGeneral,
+    canTabSessionsFeedback,
+    !isStudentUser && canTabStudents,
+    canTabSiblingPackages,
+    !isStudentUser && canTabCampGroups,
+    canTabCamp,
+    !isStudentUser && canTabPayments,
+    !isStudentUser && canTabDebtors,
+    canTabAttendanceStudents,
+    canTabAttendanceTeachers,
+  ].filter(Boolean).length
+
+  return (
+    <div dir={isRtl ? "rtl" : "ltr"} className="container mx-auto max-w-[1400px] space-y-4 p-3 sm:space-y-6 sm:p-6">
+      {/* Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <Link href="/dashboard/courses">
+            <Button variant="ghost" size="icon" className="shrink-0">
+              <ArrowRight className="h-5 w-5" />
+            </Button>
+          </Link>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl font-bold sm:text-3xl">{tr.courseDetails}</h1>
+            <p className="mt-1 break-words text-sm text-muted-foreground sm:text-base">
+              <Link href="/dashboard/courses" className="hover:underline">{tr.courses}</Link>
+              {" > "}
+              <span className="font-medium text-foreground">{course.name}</span>
+            </p>
+          </div>
+        </div>
+
+        {!isStudentUser && canEditCourseFromGeneralTab && (
+          <Link href={`/dashboard/courses/${course.id}/edit`} className="w-full shrink-0 sm:w-auto">
+            <Button className="w-full gap-2 sm:w-auto">
+              <Pencil className="h-4 w-4" />
+              {tr.editCourse}
+            </Button>
+          </Link>
+        )}
+      </div>
+
+      {/* Tabs - לפי הרשאות טאב בכרטסת קורס */}
+      <Tabs defaultValue={canTabGeneral ? "general" : canTabSessionsFeedback ? "sessions-feedback" : !isStudentUser && canTabStudents ? "students" : canTabSiblingPackages ? "sibling-packages" : !isStudentUser && canTabCampGroups ? "camp-groups" : canTabCamp ? "camp" : !isStudentUser && canTabPayments ? "payments" : !isStudentUser && canTabDebtors ? "debtors" : canTabAttendanceStudents ? "attendance-students" : "attendance-teachers"} className="w-full" dir={isRtl ? "rtl" : "ltr"}>
+        <div className="-mx-1 overflow-x-auto px-1 pb-1 sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0">
+          <TabsList
+            className="mb-4 flex h-auto min-h-10 w-max min-w-full max-w-none flex-nowrap justify-start gap-1 overflow-x-auto p-[3px] sm:mb-6 md:grid md:w-full md:max-w-full md:overflow-visible"
+            style={
+              visibleTabCount > 0
+                ? { gridTemplateColumns: `repeat(${visibleTabCount}, minmax(0, 1fr))` }
+                : undefined
+            }
+            dir={isRtl ? "rtl" : "ltr"}
+          >
+            {canTabGeneral && (
+              <TabsTrigger value="general" className="shrink-0 px-2 text-xs sm:text-sm md:min-w-0">
+                {tr.general}
+              </TabsTrigger>
+            )}
+            {canTabSessionsFeedback && (
+              <TabsTrigger value="sessions-feedback" className="shrink-0 px-2 text-xs sm:text-sm md:min-w-0">
+                {tr.sessionsFeedback}
+              </TabsTrigger>
+            )}
+            {!isStudentUser && canTabStudents && (
+              <TabsTrigger value="students" className="shrink-0 px-2 text-xs sm:text-sm md:min-w-0">
+                {tr.linkedStudents} ({enrollments.length})
+              </TabsTrigger>
+            )}
+            {canTabSiblingPackages && (
+              <TabsTrigger value="sibling-packages" className="shrink-0 px-2 text-xs sm:text-sm md:min-w-0">
+                {tr.siblingPackagesTab}
+              </TabsTrigger>
+            )}
+            {!isStudentUser && canTabCampGroups && (
+              <TabsTrigger value="camp-groups" className="shrink-0 gap-1 px-2 text-xs sm:text-sm md:min-w-0">
+                <Layers className="h-3.5 w-3.5 opacity-70" />
+                {tr.campGroupsTab}
+              </TabsTrigger>
+            )}
+            {canTabCamp && (
+              <TabsTrigger value="camp" className="shrink-0 gap-1 px-2 text-xs sm:text-sm md:min-w-0">
+                <CalendarRange className="h-3.5 w-3.5 opacity-70" />
+                {locale === "ar" ? "مخيم" : locale === "en" ? "Camp" : "קייטנה"}
+              </TabsTrigger>
+            )}
+            {!isStudentUser && canTabPayments && (
+              <TabsTrigger value="payments" className="shrink-0 px-2 text-xs sm:text-sm md:min-w-0">
+                {tr.costPayments}
+              </TabsTrigger>
+            )}
+            {!isStudentUser && canTabDebtors && (
+              <TabsTrigger value="debtors" className="shrink-0 px-2 text-xs sm:text-sm md:min-w-0">
+                {tr.debtors}
+              </TabsTrigger>
+            )}
+            {canTabAttendanceStudents && (
+              <TabsTrigger value="attendance-students" className="shrink-0 px-2 text-xs sm:text-sm md:min-w-0">
+                {tr.studentAttendance}
+              </TabsTrigger>
+            )}
+            {canTabAttendanceTeachers && (
+              <TabsTrigger value="attendance-teachers" className="shrink-0 px-2 text-xs sm:text-sm md:min-w-0">
+                {tr.teacherAttendance}
+              </TabsTrigger>
+            )}
+          </TabsList>
+        </div>
+
+        {canTabGeneral && (
+        <TabsContent value="general" className="space-y-6">
+          {/* First Row - Course Details & Dates */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6" dir="rtl">
+            {/* Course Details Card */}
+            <Card>
+              <CardHeader className="flex flex-row-reverse items-center justify-start gap-2 pb-4">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <BookOpen className="h-5 w-5 text-blue-600" />
+                </div>
+                <CardTitle className="text-lg">{tr.courseInfo}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-row-reverse justify-between items-center">
+                  <span className="text-muted-foreground">{tr.level}:</span>
+                  <span className="font-medium">{levelLabels[course.level || "beginner"]?.[locale] || course.level || "-"}</span>
+                </div>
+                <div className="flex flex-row-reverse justify-between items-center">
+                  <span className="text-muted-foreground">{tr.duration}:</span>
+                  <span className="font-medium">{course.duration || 0} {tr.weeks}</span>
+                </div>
+                <div className="flex flex-row-reverse justify-between items-center">
+                  <span className="text-muted-foreground">{tr.status}:</span>
+                  <Badge className={statusPres.badgeClassName}>
+                    {locale === "ar" ? statusPres.labelAr : locale === "en" ? statusPres.labelEn : statusPres.labelHe}
+                  </Badge>
+                </div>
+                {!isStudentUser && currentUser?.role?.toLowerCase?.() === "admin" && (
+                  <div className="flex flex-row-reverse justify-between items-center">
+                    <span className="text-muted-foreground">{isTotalPriceMode ? `${tr.totalCoursePrice}:` : `${tr.pricePerStudent}:`}</span>
+                    <span className="font-medium text-blue-600 text-xl">₪{course.price || 0}</span>
+                  </div>
+                )}
+                {isCampCourse && campNoAttendanceRuleEnabled && (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    {tr.campNoAttendanceChargeRule}
+                  </div>
+                )}
+                <div
+                  className={`rounded-md border px-3 py-2 text-xs ${
+                    course.useStudentSiblingDiscountInCourse !== false
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                      : "border-slate-200 bg-slate-50 text-slate-700"
+                  }`}
+                >
+                  {course.useStudentSiblingDiscountInCourse !== false
+                    ? tr.studentSiblingDiscountRule
+                    : tr.studentSiblingDiscountRuleOff}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Dates & Times Card */}
+            <Card>
+              <CardHeader className="flex flex-row-reverse items-center justify-start gap-2 pb-4">
+                <div className="p-2 bg-gray-100 rounded-lg">
+                  <Calendar className="h-5 w-5 text-gray-600" />
+                </div>
+                <CardTitle className="text-lg">{tr.dateTime}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-row-reverse justify-between items-center">
+                  <span className="text-muted-foreground">{tr.startDate}:</span>
+                  <span className="font-medium">{course.startDate ? new Intl.DateTimeFormat(localeTag, { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(course.startDate)) : "-"}</span>
+                </div>
+                <div className="flex flex-row-reverse justify-between items-center">
+                  <span className="text-muted-foreground">{tr.endDate}:</span>
+                  <span className="font-medium">{course.endDate ? new Intl.DateTimeFormat(localeTag, { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(course.endDate)) : "-"}</span>
+                </div>
+                <div className="flex flex-row-reverse justify-between items-center">
+                  <span className="text-muted-foreground">{tr.startTime}:</span>
+                  <span className="font-medium">{courseTimeToDisplayValue(course.startTime) || "-"}</span>
+                </div>
+                <div className="flex flex-row-reverse justify-between items-center">
+                  <span className="text-muted-foreground">{tr.endTime}:</span>
+                  <span className="font-medium">{courseTimeToDisplayValue(course.endTime) || "-"}</span>
+                </div>
+                <div className="flex flex-row-reverse justify-between items-center">
+                  <span className="text-muted-foreground">{tr.weekdays}:</span>
+                  <div className="flex gap-1 flex-wrap flex-row-reverse">
+                    {daysOfWeek.length > 0 ? daysOfWeek.map(day => (
+                      <Badge key={day} variant="outline" className="text-xs">
+                        {dayLabels[day]?.[locale] || day}
+                      </Badge>
+                    )) : "-"}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Second Row - Statistics & Teachers */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6" dir="rtl">
+            {/* Statistics Card */}
+            <Card>
+              <CardHeader className="flex flex-row-reverse items-center justify-start gap-2 pb-4">
+                <div className="p-2 bg-gray-100 rounded-lg">
+                  <BarChart3 className="h-5 w-5 text-gray-600" />
+                </div>
+                <CardTitle className="text-lg">{tr.stats}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-row-reverse justify-between items-center">
+                  <span className="text-muted-foreground">{tr.totalStudents}:</span>
+                  <span className="font-bold text-2xl text-blue-600">{enrollments.length}</span>
+                </div>
+                {canSeeCourseFinancial && (
+                  <div className="mt-3 flex flex-col gap-1 text-right sm:flex-row sm:flex-row-reverse sm:items-center sm:justify-between sm:gap-0">
+                    <span className="break-words text-sm text-muted-foreground sm:text-base">עלות משוערת אחרי הנחות אחים:</span>
+                    <span className="shrink-0 font-bold text-xl text-emerald-600">₪{expectedTotalByEnrollments.toLocaleString()}</span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Teachers Card */}
+            <Card>
+              <CardHeader className="flex flex-row-reverse items-center justify-start gap-2 pb-4">
+                <div className="p-2 bg-gray-100 rounded-lg">
+                  <Users className="h-5 w-5 text-gray-600" />
+                </div>
+                <CardTitle className="text-lg">{tr.teachers}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-2 flex-wrap flex-row-reverse justify-start">
+                  {courseTeachers.length > 0 ? courseTeachers.map(teacher => (
+                    <Badge key={teacher.id} variant="outline" className="text-sm py-2 px-4">
+                      {teacher.name}
+                    </Badge>
+                  )) : (
+                    <span className="text-muted-foreground">{tr.noTeachers}</span>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+        )}
+
+        {canTabSessionsFeedback && (
+          <TabsContent value="sessions-feedback" className="space-y-4">
+            {!isStudentUser && canEditSessionsFeedbackTab && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">{tr.newSession}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid md:grid-cols-2 gap-3">
+                    <div>
+                      <div className="text-sm text-muted-foreground mb-1">{tr.sessionDate}</div>
+                      <input
+                        type="date"
+                        value={newSessionDate}
+                        onChange={(e) => setNewSessionDate(e.target.value)}
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground mb-1">{tr.generalTopic}</div>
+                      <Textarea value={newSessionTopic} onChange={(e) => setNewSessionTopic(e.target.value)} rows={2} />
+                    </div>
+                  </div>
+                  <Button onClick={handleAddSession} disabled={savingSession}>
+                    {savingSession ? <Loader2 className="h-4 w-4 animate-spin" /> : tr.addSession}
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {sessions.length === 0 ? (
+              <Card><CardContent className="p-6 text-center text-muted-foreground">{tr.noSessionsYet}</CardContent></Card>
+            ) : sessions.map((s) => {
+              const ownFeedback = (s.feedback || [])[0]?.feedbackText || ""
+              return (
+                <Card key={s.id}>
+                  <CardHeader>
+                    <CardTitle className="break-words text-base leading-snug">
+                      {new Date(s.sessionDate).toLocaleDateString(localeTag)} - {s.generalTopic || "—"}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {isStudentUser ? (
+                      <div className="space-y-2">
+                        <div className="text-sm text-muted-foreground">{tr.yourFeedback}</div>
+                        <div className="rounded-md border p-3">{ownFeedback || "—"}</div>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <Input
+                          value={sessionsStudentsQuery}
+                          onChange={(e) => setSessionsStudentsQuery(e.target.value)}
+                          placeholder={studentSearchPlaceholder}
+                          className="h-8 max-w-xs text-right"
+                          dir={isRtl ? "rtl" : "ltr"}
+                        />
+                        {filteredSessionFeedbackEnrollments.map((enr) => (
+                          <div key={`${s.id}-${enr.studentId}`}>
+                            <div className="text-sm mb-1">{enr.studentName}</div>
+                            <Textarea
+                              rows={2}
+                              readOnly={!canEditSessionsFeedbackTab}
+                              value={feedbackDrafts[s.id]?.[enr.studentId] ?? ""}
+                              onChange={(e) =>
+                                setFeedbackDrafts((prev) => ({
+                                  ...prev,
+                                  [s.id]: { ...(prev[s.id] || {}), [enr.studentId]: e.target.value },
+                                }))
+                              }
+                              placeholder={tr.feedbackForStudent}
+                            />
+                          </div>
+                        ))}
+                        {canEditSessionsFeedbackTab ? (
+                          <Button onClick={() => handleSaveSessionFeedback(s.id)} disabled={savingFeedbackBySession[s.id]}>
+                            {savingFeedbackBySession[s.id] ? <Loader2 className="h-4 w-4 animate-spin" /> : tr.saveFeedback}
+                          </Button>
+                        ) : null}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </TabsContent>
+        )}
+
+        {!isStudentUser && canTabStudents && (
+        <TabsContent value="students">
+          {canEditCourses && statusPres.key !== "completed" && (
+          <Card className="mb-4" dir={isRtl ? "rtl" : "ltr"}>
+            <CardHeader
+              className="cursor-pointer"
+              onClick={() => setIsAssignStudentsCardOpen((prev) => !prev)}
+            >
+              <div className={`flex items-center justify-between ${isRtl ? "flex-row-reverse" : ""}`}>
+                <span className="text-sm text-muted-foreground">
+                  {isAssignStudentsCardOpen ? tr.collapse : tr.expand}
+                </span>
+                <CardTitle className="text-base">{tr.assignStudentsTitle}</CardTitle>
+              </div>
+            </CardHeader>
+            {isAssignStudentsCardOpen && (
+            <CardContent className="space-y-3 text-right">
+              {studentsAvailableToAssign.length > 0 ? (
+                <>
+                  <Input
+                    value={assignStudentsQuery}
+                    onChange={(e) => setAssignStudentsQuery(e.target.value)}
+                    placeholder={tr.assignStudentsSearch}
+                    className="max-w-md text-right"
+                    dir={isRtl ? "rtl" : "ltr"}
+                  />
+                  <div className={`flex flex-wrap items-center gap-2 ${isRtl ? "flex-row-reverse justify-end" : ""}`}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        setSelectedStudentIdsToAssign(
+                          assignStudentsFiltered.map((student) => String(student.id)),
+                        )
+                      }
+                      className="bg-transparent"
+                    >
+                      {tr.assignStudentsSelectAll}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setSelectedStudentIdsToAssign([])}
+                    >
+                      {tr.assignStudentsClear}
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      {tr.assignStudentsSelected}: {selectedStudentIdsToAssign.length}
+                    </span>
+                  </div>
+                  <div className="max-h-56 space-y-2 overflow-auto rounded-md border p-2">
+                    {assignStudentsFiltered.length > 0 ? (
+                      assignStudentsFiltered.map((student) => {
+                        const isSelected = selectedStudentIdsToAssign.includes(String(student.id))
+                        return (
+                          <label
+                            key={student.id}
+                            className={`flex cursor-pointer items-center justify-between rounded border px-3 py-2 hover:bg-muted/40 ${isRtl ? "flex-row-reverse" : ""}`}
+                          >
+                            <span className="font-medium">{student.name}</span>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() =>
+                                setSelectedStudentIdsToAssign((prev) =>
+                                  isSelected
+                                    ? prev.filter((id) => id !== String(student.id))
+                                    : [...prev, String(student.id)],
+                                )
+                              }
+                            />
+                          </label>
+                        )
+                      })
+                    ) : (
+                      <p className="py-4 text-center text-sm text-muted-foreground">{tr.assignStudentsNoResults}</p>
+                    )}
+                  </div>
+                  {assignStudentsMessage && (
+                    <p className="text-sm text-green-700">{assignStudentsMessage}</p>
+                  )}
+                  <Button
+                    type="button"
+                    onClick={assignSelectedStudents}
+                    disabled={selectedStudentIdsToAssign.length === 0 || isAssigningStudents}
+                    className="gap-2"
+                  >
+                    {isAssigningStudents ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                    {tr.assignStudentsBulk}
+                  </Button>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">{tr.assignStudentsNoneLeft}</p>
+              )}
+            </CardContent>
+            )}
+          </Card>
+          )}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">{tr.enrolledStudents} ({enrollments.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {enrollments.length > 0 ? (
+                <div className="overflow-x-auto rounded-md border">
+                  <div className="border-b p-2">
+                    <Input
+                      value={studentsTabQuery}
+                      onChange={(e) => setStudentsTabQuery(e.target.value)}
+                      placeholder={studentSearchPlaceholder}
+                      className="h-8 max-w-xs text-right"
+                      dir={isRtl ? "rtl" : "ltr"}
+                    />
+                  </div>
+                  <Table className="min-w-[640px]">
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead className="text-right">{tr.student}</TableHead>
+                        <TableHead className="text-right">{tr.status}</TableHead>
+                        <TableHead className="text-right">{tr.enrollmentDate}</TableHead>
+                        <TableHead className="text-right">חבילות</TableHead>
+                        <TableHead className="text-right">תוכנית חיוב</TableHead>
+                        <TableHead className="text-right">{tr.siblingRank}</TableHead>
+                        <TableHead className="text-right">{tr.packageSource}</TableHead>
+                        <TableHead className="text-right">{tr.performedBy}</TableHead>
+                        {isCampCourse && (
+                          <TableHead className="text-right">
+                            {locale === "ar" ? "المجموعة" : locale === "en" ? "Camp group" : "קבוצת קייטנה"}
+                          </TableHead>
+                        )}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredStudentsTabEnrollments.map((enrollment) => (
+                        <TableRow key={enrollment.id}>
+                          <TableCell className="font-medium text-right">{enrollment.studentName || (locale === "en" ? "Unknown student" : locale === "ar" ? "طالب غير معروف" : "תלמיד לא ידוע")}</TableCell>
+                          <TableCell className="text-right">
+                            <Badge className={enrollment.status === "active" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}>
+                              {enrollment.status === "active" ? (locale === "en" ? "Active" : locale === "ar" ? "نشط" : "פעיל") : enrollment.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {enrollment.enrollmentDate ? new Date(enrollment.enrollmentDate).toLocaleDateString(localeTag) : "-"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {enrollment.siblingDiscountPackageName ? (
+                              <div className="flex flex-col items-end gap-1">
+                                <span className={enrollment.siblingDiscountDisabled ? "text-muted-foreground line-through" : ""}>
+                                  {enrollment.siblingDiscountPackageName}
+                                </span>
+                                {canTabDebtors && statusPres.key !== "completed" ? (
+                                  <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="outline"
+                                    className={`h-7 w-7 ${
+                                      enrollment.siblingDiscountDisabled
+                                        ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                                        : "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                    }`}
+                                    title={enrollment.siblingDiscountDisabled ? "הפעל חבילה" : "בטל חבילה"}
+                                    onClick={() =>
+                                      saveEnrollmentSiblingDiscountDisabled(
+                                        enrollment.id,
+                                        !Boolean(enrollment.siblingDiscountDisabled),
+                                      )
+                                    }
+                                  >
+                                    {enrollment.siblingDiscountDisabled ? (
+                                      <ToggleLeft className="h-4 w-4" />
+                                    ) : (
+                                      <ToggleRight className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                ) : null}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {String((course as any)?.billingPlanSelectionMode || "").trim() === "billing" && canTabDebtors && statusPres.key !== "completed" ? (
+                              <Select
+                                value={
+                                  enrollment.billingPlanChoice === "discounted" || enrollment.billingPlanChoice === "perSession"
+                                    ? enrollment.billingPlanChoice
+                                    : "summer"
+                                }
+                                onValueChange={(v: "summer" | "discounted" | "perSession") =>
+                                  saveEnrollmentBillingPlanChoice(enrollment.id, v)
+                                }
+                              >
+                                <SelectTrigger className="w-[min(100%,220px)]">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="summer">תוכנית קיץ</SelectItem>
+                                  <SelectItem value="discounted">תוכנית מוזלת</SelectItem>
+                                  <SelectItem value="perSession">לפי מפגש</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <span className="text-muted-foreground">
+                                {enrollment.billingPlanChoice === "discounted"
+                                  ? "תוכנית מוזלת"
+                                  : enrollment.billingPlanChoice === "perSession"
+                                    ? "לפי מפגש"
+                                    : "תוכנית קיץ"}
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground">{enrollment.siblingRankLabel || "—"}</TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {enrollment.siblingDiscountPackageSource === "course"
+                              ? tr.sourceCourse
+                              : enrollment.siblingDiscountPackageSource === "student"
+                                ? tr.sourceStudent
+                                : "—"}
+                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {enrollment.createdByUserName || enrollment.createdByUserId || "—"}
+                          </TableCell>
+                          {isCampCourse && (
+                            <TableCell className="text-right">
+                              {canEditEnrollmentCampGroup && !isStudentUser ? (
+                                <Select
+                                  value={enrollment.campGroupLabel || "__none__"}
+                                  onValueChange={(v) =>
+                                    saveEnrollmentCampGroup(enrollment.id, v === "__none__" ? "" : v)
+                                  }
+                                >
+                                  <SelectTrigger className="w-[min(100%,200px)]">
+                                    <SelectValue placeholder="—" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__none__">—</SelectItem>
+                                    {campGroups.map((g) => (
+                                      <SelectItem key={g} value={g}>
+                                        {g}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <span className="text-muted-foreground">
+                                  {enrollment.campGroupLabel || "—"}
+                                </span>
+                              )}
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <p className="text-center text-muted-foreground py-8">
+                  {tr.noneStudents}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        )}
+
+        {!isStudentUser && canTabCampGroups && (
+          <TabsContent value="camp-groups" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">{tr.campGroupsTabTitle}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {campGroupTabsData.length === 0 && campUnassignedEnrollments.length === 0 ? (
+                  <p className="py-8 text-center text-muted-foreground">{tr.noCampGroupAssignments}</p>
+                ) : (
+                  <Tabs
+                    key={campGroupsInnerDefault}
+                    defaultValue={campGroupsInnerDefault}
+                    className="w-full"
+                    dir={isRtl ? "rtl" : "ltr"}
+                  >
+                    <div className="-mx-1 overflow-x-auto px-1 pb-2 sm:mx-0 sm:px-0">
+                      <div className="mb-3 px-1">
+                        <Input
+                          value={campGroupsQuery}
+                          onChange={(e) => setCampGroupsQuery(e.target.value)}
+                          placeholder={studentSearchPlaceholder}
+                          className="h-8 max-w-xs text-right"
+                          dir={isRtl ? "rtl" : "ltr"}
+                        />
+                      </div>
+                      <TabsList className="inline-flex h-auto min-h-9 w-max max-w-full flex-wrap justify-start gap-1 p-1">
+                        {filteredCampGroupTabsData.map(({ label, members }) => (
+                          <TabsTrigger
+                            key={label}
+                            value={label}
+                            className="gap-1.5 px-3 py-2 data-[state=active]:shadow-sm"
+                          >
+                            <span className="font-medium">
+                              {locale === "en" ? `Group ${label}` : locale === "ar" ? `مجموعة ${label}` : `קבוצה ${label}`}
+                            </span>
+                            <Badge variant="secondary" className="tabular-nums">
+                              {members.length}
+                            </Badge>
+                          </TabsTrigger>
+                        ))}
+                        {filteredCampUnassignedEnrollments.length > 0 && (
+                          <TabsTrigger
+                            value="__unassigned__"
+                            className="gap-1.5 px-3 py-2 data-[state=active]:shadow-sm"
+                          >
+                            <span className="font-medium">{tr.unassignedCampGroup}</span>
+                            <Badge variant="secondary" className="tabular-nums">
+                              {filteredCampUnassignedEnrollments.length}
+                            </Badge>
+                          </TabsTrigger>
+                        )}
+                      </TabsList>
+                    </div>
+
+                    {filteredCampGroupTabsData.map(({ label, members }) => (
+                      <TabsContent key={label} value={label} className="mt-4 space-y-3">
+                        <p className="text-sm text-muted-foreground">
+                          {tr.studentsInGroup}:{" "}
+                          <span className="font-semibold text-foreground">{members.length}</span>
+                        </p>
+                        {members.length === 0 ? (
+                          <p className="text-center text-muted-foreground py-6">—</p>
+                        ) : (
+                          <div className="overflow-x-auto rounded-md border">
+                            <Table>
+                              <TableHeader>
+                                <TableRow className="bg-muted/50">
+                                  <TableHead className="text-right">{tr.student}</TableHead>
+                                  <TableHead className="text-right">{tr.status}</TableHead>
+                                  <TableHead className="text-right">{tr.enrollmentDate}</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {members.map((enrollment) => (
+                                  <TableRow key={enrollment.id}>
+                                    <TableCell className="text-right font-medium">
+                                      <Link
+                                        href={`/dashboard/students/${enrollment.studentId}`}
+                                        className="text-primary hover:underline"
+                                      >
+                                        {enrollment.studentName ||
+                                          (locale === "en" ? "Unknown" : locale === "ar" ? "—" : "לא ידוע")}
+                                      </Link>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      <Badge
+                                        className={
+                                          enrollment.status === "active"
+                                            ? "bg-green-100 text-green-800"
+                                            : "bg-gray-100 text-gray-800"
+                                        }
+                                      >
+                                        {enrollment.status === "active"
+                                          ? locale === "en"
+                                            ? "Active"
+                                            : locale === "ar"
+                                              ? "نشط"
+                                              : "פעיל"
+                                          : enrollment.status}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-right text-muted-foreground">
+                                      {enrollment.enrollmentDate
+                                        ? new Date(enrollment.enrollmentDate).toLocaleDateString(localeTag)
+                                        : "—"}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        )}
+                      </TabsContent>
+                    ))}
+
+                    {filteredCampUnassignedEnrollments.length > 0 && (
+                      <TabsContent value="__unassigned__" className="mt-4 space-y-3">
+                        <p className="text-sm text-muted-foreground">
+                          {tr.studentsInGroup}:{" "}
+                          <span className="font-semibold text-foreground">
+                            {filteredCampUnassignedEnrollments.length}
+                          </span>
+                        </p>
+                        <div className="overflow-x-auto rounded-md border">
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="bg-muted/50">
+                                <TableHead className="text-right">{tr.student}</TableHead>
+                                <TableHead className="text-right">{tr.status}</TableHead>
+                                <TableHead className="text-right">{tr.enrollmentDate}</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {filteredCampUnassignedEnrollments.map((enrollment) => (
+                                <TableRow key={enrollment.id}>
+                                  <TableCell className="text-right font-medium">
+                                    <Link
+                                      href={`/dashboard/students/${enrollment.studentId}`}
+                                      className="text-primary hover:underline"
+                                    >
+                                      {enrollment.studentName ||
+                                        (locale === "en" ? "Unknown" : locale === "ar" ? "—" : "לא ידוע")}
+                                    </Link>
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <Badge
+                                      className={
+                                        enrollment.status === "active"
+                                          ? "bg-green-100 text-green-800"
+                                          : "bg-gray-100 text-gray-800"
+                                      }
+                                    >
+                                      {enrollment.status === "active"
+                                        ? locale === "en"
+                                          ? "Active"
+                                          : locale === "ar"
+                                            ? "نشط"
+                                            : "פעיל"
+                                        : enrollment.status}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="text-right text-muted-foreground">
+                                    {enrollment.enrollmentDate
+                                      ? new Date(enrollment.enrollmentDate).toLocaleDateString(localeTag)
+                                      : "—"}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </TabsContent>
+                    )}
+                  </Tabs>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {canTabSiblingPackages && (
+          <TabsContent value="sibling-packages">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">{tr.siblingPackagesTab}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Input
+                  value={siblingPackagesQuery}
+                  onChange={(e) => setSiblingPackagesQuery(e.target.value)}
+                  placeholder={studentSearchPlaceholder}
+                  className="h-8 max-w-xs text-right"
+                  dir={isRtl ? "rtl" : "ltr"}
+                />
+                {filteredSiblingPackageGroups.length === 0 ? (
+                  <p className="py-8 text-center text-muted-foreground">{tr.noSiblingPackagesLinked}</p>
+                ) : (
+                  filteredSiblingPackageGroups.map((group) => (
+                    <div key={group.packageName} className="rounded-lg border p-3">
+                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                        <h3 className="text-base font-semibold">{group.packageName}</h3>
+                        <Badge variant="outline" className="font-semibold">
+                          ₪{Math.round(group.totalDue * 100) / 100}
+                        </Badge>
+                      </div>
+                      <div className="mb-2 text-sm text-muted-foreground">
+                        {tr.packageStudents}: {group.members.length}
+                      </div>
+                      <div className="overflow-x-auto rounded-md border">
+                        <Table className="min-w-[560px]">
+                          <TableHeader>
+                            <TableRow className="bg-muted/50">
+                              <TableHead className="text-right">{tr.student}</TableHead>
+                              <TableHead className="text-right">{tr.siblingRank}</TableHead>
+                              <TableHead className="text-right">{tr.packageSource}</TableHead>
+                              <TableHead className="text-right">סכום לתשלום</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {group.members.map((member) => (
+                              <TableRow key={member.id}>
+                                <TableCell className="text-right font-medium">{member.studentName || "—"}</TableCell>
+                                <TableCell className="text-right">{member.siblingRankLabel || "—"}</TableCell>
+                                <TableCell className="text-right">
+                                  {member.siblingDiscountPackageSource === "course"
+                                    ? tr.sourceCourse
+                                    : member.siblingDiscountPackageSource === "student"
+                                      ? tr.sourceStudent
+                                      : "—"}
+                                </TableCell>
+                                <TableCell className="text-right font-semibold">
+                                  ₪{Number(member.siblingAmountForRank ?? (member as any).coursePrice ?? 0).toLocaleString()}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {canTabCamp && (
+          <TabsContent value="camp" className="space-y-4">
+            <CourseCampTab
+              courseId={id}
+              canEdit={!isStudentUser && !!canEditCampPlanTab}
+              onMeetingsSaved={() => setCampScheduleRefreshTick((t) => t + 1)}
+            />
+          </TabsContent>
+        )}
+
+        {!isStudentUser && canTabPayments && (
+        <TabsContent value="payments">
+          <Card>
+            <CardContent className="p-6 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  {paymentTotalsByMethod.map((item) => (
+                    <Badge
+                      key={item.method}
+                      variant="outline"
+                      className={`text-xs sm:text-sm border font-semibold ${paymentTypeBadgeClass(item.method)}`}
+                    >
+                      {item.label}: ₪{item.total.toLocaleString()}
+                    </Badge>
+                  ))}
+                  <Badge className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:from-indigo-700 hover:to-purple-700 text-xs sm:text-sm font-semibold shadow-sm">
+                    סה&quot;כ כללי: ₪{paymentGrandTotal.toLocaleString()}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    disabled={!canEditPaymentsTab}
+                    onClick={() => setIsAddPaymentOpen(true)}
+                  >
+                    + הוספת תשלום
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="gap-1 bg-purple-600 hover:bg-purple-700 text-white"
+                    onClick={() => {
+                    const w = window.open("", "_blank")
+                    if (!w) return
+                    const logoHtml = centerLogo ? `<img src="${centerLogo}" style="max-height:60px;max-width:160px;object-fit:contain" />` : ""
+                    w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>עלות ותשלומים - ${course?.name || ""}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;padding:32px 40px;color:#1f2937;max-width:980px;margin:0 auto}.header{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:20px;padding-bottom:12px;border-bottom:2px solid #3b82f6}.header h1{font-size:22px;color:#1e40af;margin-top:6px}.header h2{font-size:15px;color:#4b5563;font-weight:400;margin-top:2px}.summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0 16px}.box{border:1px solid #dbeafe;background:#eff6ff;border-radius:8px;padding:10px 12px}.label{font-size:12px;color:#1e40af}.val{font-size:18px;font-weight:700;color:#1f2937;margin-top:2px}table{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px}th{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:8px 10px;text-align:center;font-weight:600}td{border:1px solid #d1d5db;padding:8px 10px;text-align:center;vertical-align:middle}tr:nth-child(even) td{background:#f9fafb}@media print{body{padding:20px 28px;max-width:100%}@page{margin:20mm 15mm}}</style></head><body>`)
+                    w.document.write(`<div class="header">${logoHtml}<h1>${centerName || "מרכז"}</h1>${course?.name ? `<h2 style="font-size:17px;color:#1f2937;font-weight:600;margin-top:4px">${course.name}</h2>` : ""}<h2>דוח עלות ותשלומים</h2></div>`)
+                    w.document.write(`<div class="summary"><div class="box"><div class="label">מספר תלמידים משויכים</div><div class="val">${enrollments.length}</div></div><div class="box"><div class="label">מחיר קורס לתלמיד</div><div class="val">₪${Number(course?.price || 0).toLocaleString()}</div></div></div>`)
+                    w.document.write(`<table><thead><tr><th>#</th><th>שם תלמיד</th><th>תאריך תשלום</th><th>שיטת תשלום</th><th>סכום תשלום</th><th>הערות</th><th>חבילת הנחות</th></tr></thead><tbody>`)
+                    paymentsForCourse.forEach((p, idx) => {
+                      const d = p.paymentDate ? new Date(p.paymentDate).toLocaleDateString(localeTag) : "—"
+                      w.document.write(`<tr><td>${idx + 1}</td><td>${p.studentName || "—"}</td><td>${d}</td><td>${paymentTypeLabel(p.paymentType)}</td><td>₪${Number(p.amount || 0).toLocaleString()}</td><td>${p.description || "—"}</td><td>${p.siblingDiscountPackageName || "—"}</td></tr>`)
+                    })
+                    w.document.write(`</tbody></table></body></html>`)
+                    w.document.close()
+                    setTimeout(() => w.print(), 300)
+                    }}
+                  >
+                    <Printer className="h-4 w-4" />
+                    הדפסת עלות ותשלומים
+                  </Button>
+                </div>
+              </div>
+              <div className="text-center text-muted-foreground">
+                {tr.paymentInfoPlaceholder}
+              </div>
+              <Input
+                value={paymentsQuery}
+                onChange={(e) => setPaymentsQuery(e.target.value)}
+                placeholder={studentSearchPlaceholder}
+                className="h-8 max-w-xs text-right"
+                dir={isRtl ? "rtl" : "ltr"}
+              />
+              <div className="overflow-x-auto rounded-md border">
+                <Table className="min-w-[980px]">
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="text-right">תלמיד</TableHead>
+                      <TableHead className="text-right">תאריך תשלום</TableHead>
+                      <TableHead className="text-right">שיטת תשלום</TableHead>
+                      <TableHead className="text-right">סכום תשלום</TableHead>
+                      <TableHead className="text-right">הערות</TableHead>
+                      <TableHead className="text-right">חבילת הנחות</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paymentsGroupedByStudent.length > 0 ? paymentsGroupedByStudent.map((group) => (
+                      <Fragment key={group.key}>
+                        <TableRow className="bg-muted/30">
+                          <TableCell className="text-right font-semibold">
+                            {group.studentName}
+                            <div className="text-xs text-muted-foreground mt-1">
+                              סה"כ תשלומים: ₪{group.totalPaid.toLocaleString()} | נוכחות: {group.attendanceCount}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground">—</TableCell>
+                          <TableCell className="text-right text-muted-foreground">—</TableCell>
+                          <TableCell className="text-right font-semibold">₪{group.totalPaid.toLocaleString()}</TableCell>
+                          <TableCell className="text-right text-muted-foreground">—</TableCell>
+                          <TableCell className="text-right text-muted-foreground">—</TableCell>
+                        </TableRow>
+                        {group.rows.map((p) => (
+                          <TableRow key={p.id}>
+                            <TableCell className="text-right text-muted-foreground pe-6">↳ {p.studentName || "—"}</TableCell>
+                            <TableCell className="text-right">{p.paymentDate ? new Date(p.paymentDate).toLocaleDateString(localeTag) : "—"}</TableCell>
+                            <TableCell className="text-right">{paymentTypeLabel(p.paymentType)}</TableCell>
+                            <TableCell className="text-right">₪{Number(p.amount || 0).toLocaleString()}</TableCell>
+                            <TableCell className="text-right">{p.description || "—"}</TableCell>
+                            <TableCell className="text-right">{p.siblingDiscountPackageName || "—"}</TableCell>
+                          </TableRow>
+                        ))}
+                      </Fragment>
+                    )) : (
+                      <TableRow>
+                        <TableCell className="text-center text-muted-foreground" colSpan={6}>
+                          אין תלמידים עם תשלומים בקורס זה
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+          <Dialog
+            open={isAddPaymentOpen}
+            onOpenChange={(open) => {
+              if (!open) {
+                resetAddPaymentFormAndClose()
+                return
+              }
+              setIsAddPaymentOpen(true)
+            }}
+          >
+            <DialogContent dir="rtl">
+              <DialogHeader>
+                <DialogTitle>הוספת תשלום לקורס</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div>
+                  <div className="mb-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div>
+                      <div className="mb-1 text-sm text-muted-foreground">סוג יעד לתשלום</div>
+                      <Select
+                        value={payTargetMode}
+                        onValueChange={(v: "single" | "multi") => {
+                          setPayTargetMode(v)
+                          setPayStudentId("")
+                          setPayStudentIds([])
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="single">תלמיד יחיד</SelectItem>
+                          <SelectItem value="multi">מספר תלמידים</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <div className="mb-1 text-sm text-muted-foreground">חיפוש תלמיד</div>
+                      <Input
+                        value={payStudentSearchQuery}
+                        onChange={(e) => setPayStudentSearchQuery(e.target.value)}
+                        placeholder="חיפוש תלמיד..."
+                        className="h-9"
+                        dir={isRtl ? "rtl" : "ltr"}
+                      />
+                    </div>
+                  </div>
+                  <div className="mb-1 text-sm text-muted-foreground">
+                    {payTargetMode === "single" ? "תלמיד משויך" : "תלמידים לתשלום מרוכז"}
+                  </div>
+                  <div className="mb-2 text-xs text-muted-foreground">
+                    {payTargetMode === "single"
+                      ? `מוצגים ${filteredPayTargetEnrollments.length} תלמידים (סה"כ ${enrollments.length})`
+                      : `נבחרו ${payStudentIds.length} תלמידים | מוצגים ${filteredPayTargetEnrollments.length} (סה"כ ${enrollments.length})`}
+                  </div>
+                  <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border p-2">
+                    {filteredPayTargetEnrollments.map((e) => {
+                      const sid = String(e.studentId || "")
+                      const isSelected =
+                        payTargetMode === "single" ? String(payStudentId) === sid : payStudentIds.includes(sid)
+                      return (
+                        <button
+                          key={sid}
+                          type="button"
+                          className={`w-full rounded-md border px-3 py-2 text-right text-sm ${
+                            isSelected ? "border-primary bg-primary/10" : "border-border hover:bg-muted/50"
+                          }`}
+                          onClick={() => {
+                            if (payTargetMode === "single") {
+                              setPayStudentId(sid)
+                              return
+                            }
+                            setPayStudentIds((prev) =>
+                              prev.includes(sid) ? prev.filter((x) => x !== sid) : [...prev, sid],
+                            )
+                          }}
+                        >
+                          {e.studentName || "—"}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="mb-1 text-sm text-muted-foreground">שיטת תשלום</div>
+                    <Select value={payMethod} onValueChange={(v: any) => setPayMethod(v)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cash">מזומן</SelectItem>
+                        <SelectItem value="credit">אשראי</SelectItem>
+                        <SelectItem value="transfer">העברה בנקאית</SelectItem>
+                        <SelectItem value="check">שיק</SelectItem>
+                        <SelectItem value="bit">ביט</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <div className="mb-1 text-sm text-muted-foreground">סכום</div>
+                    <Input type="number" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} placeholder="0.00" />
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-1 text-sm text-muted-foreground">תאריך</div>
+                  <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+                </div>
+                <div>
+                  <div className="mb-1 text-sm text-muted-foreground">תיאור</div>
+                  <Input value={payDescription} onChange={(e) => setPayDescription(e.target.value)} placeholder={`תשלום לקורס: ${course?.name || ""}`} />
+                </div>
+                {payTargetMode === "multi" && (
+                  <div className="space-y-2 rounded-md border p-3">
+                    <div className="text-sm font-medium">תצוגה מקדימה לחלוקה</div>
+                    {paymentPreviewAllocations.length > 0 ? (
+                      <>
+                        <div className="space-y-1 text-sm">
+                          {paymentPreviewAllocations.map((row) => (
+                            <div key={row.studentId} className="flex items-center justify-between">
+                              <span className="text-muted-foreground">{row.studentName}</span>
+                              <span className="font-medium">₪{row.amount.toLocaleString()}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="border-t pt-2 text-sm font-semibold flex items-center justify-between">
+                          <span>סה"כ חלוקה</span>
+                          <span>
+                            ₪
+                            {paymentPreviewAllocations
+                              .reduce((sum, row) => sum + Number(row.amount || 0), 0)
+                              .toLocaleString()}
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">
+                        בחר תלמידים וסכום כדי לראות חלוקה.
+                      </div>
+                    )}
+                  </div>
+                )}
+                <Button className="w-full bg-emerald-600 hover:bg-emerald-700" onClick={addCoursePayment} disabled={isAddingPayment || !canSubmitPayment}>
+                  {isAddingPayment ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  שמירת תשלום
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </TabsContent>
+        )}
+
+        {!isStudentUser && canTabDebtors && (
+        <TabsContent value="debtors">
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="rounded-lg bg-rose-100 p-2">
+                    <BarChart3 className="h-5 w-5 text-rose-600" />
+                  </div>
+                  <CardTitle
+                    className="text-lg font-bold tracking-tight text-rose-700"
+                    title="מוצגים רק תלמידים עם יתרה לתשלום. תלמיד שסיים לשלם לא יופיע ברשימה."
+                  >
+                    <span className="cursor-help underline decoration-dotted underline-offset-4">{tr.debtors}</span>
+                  </CardTitle>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className="bg-gradient-to-r from-indigo-600 to-blue-600 text-white hover:from-indigo-700 hover:to-blue-700 text-xs sm:text-sm font-semibold shadow-sm">
+                    סה&quot;כ לתשלום: ₪{debtRowsTotalDue.toLocaleString()}
+                  </Badge>
+                  <Badge className="bg-gradient-to-r from-emerald-600 to-green-600 text-white hover:from-emerald-700 hover:to-green-700 text-xs sm:text-sm font-semibold shadow-sm">
+                    שולם: ₪{debtRowsTotalPaid.toLocaleString()}
+                  </Badge>
+                  <Badge className="bg-gradient-to-r from-rose-600 to-red-600 text-white hover:from-rose-700 hover:to-red-700 text-xs sm:text-sm font-semibold shadow-sm">
+                    סה&quot;כ חוב: ₪{totalDebtAmount.toLocaleString()}
+                  </Badge>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="gap-1 bg-purple-600 hover:bg-purple-700 text-white"
+                    onClick={() => {
+                      const w = window.open("", "_blank")
+                      if (!w) return
+                      const logoHtml = centerLogo ? `<img src="${centerLogo}" style="max-height:60px;max-width:160px;object-fit:contain" />` : ""
+                      w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>דוח חייבים - ${course?.name || ""}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;padding:32px 40px;color:#1f2937;max-width:980px;margin:0 auto}.header{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:20px;padding-bottom:12px;border-bottom:2px solid #3b82f6}.header h1{font-size:22px;color:#1e40af;margin-top:6px}.header h2{font-size:15px;color:#4b5563;font-weight:400;margin-top:2px}.totals{display:flex;justify-content:center;margin:12px 0 16px}.total-box{border:1px solid #fecaca;background:#fff1f2;border-radius:10px;padding:10px 14px;text-align:center}.total-label{font-size:12px;color:#9f1239}.total-val{font-size:22px;font-weight:700;color:#be123c;margin-top:4px}table{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px}th{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:8px 10px;text-align:center;font-weight:600}td{border:1px solid #d1d5db;padding:8px 10px;text-align:center;vertical-align:middle}tr:nth-child(even) td{background:#f9fafb}.paid{color:#166534;font-weight:600}.debt{color:#b91c1c;font-weight:700}@media print{body{padding:20px 28px;max-width:100%}@page{margin:20mm 15mm}}</style></head><body>`)
+                      w.document.write(`<div class="header">${logoHtml}<h1>${centerName || "מרכז"}</h1>${course?.name ? `<h2 style="font-size:17px;color:#1f2937;font-weight:600;margin-top:4px">${course.name}</h2>` : ""}<h2>דוח חייבים</h2></div>`)
+                      w.document.write(`<div class="totals"><div class="total-box"><div class="total-label">סה"כ חוב בקורס</div><div class="total-val">₪${totalDebtAmount.toLocaleString()}</div></div></div>`)
+                      w.document.write(`<table><thead><tr><th>#</th><th>שם תלמיד</th><th>סה"כ לתשלום</th><th>שולם</th><th>יתרה</th></tr></thead><tbody>`)
+                      debtRows.forEach((r, idx) => {
+                        w.document.write(`<tr><td>${idx + 1}</td><td>${r.studentName}</td><td>₪${r.totalDue.toLocaleString()}</td><td class="paid">₪${r.paid.toLocaleString()}</td><td class="debt">₪${r.balance.toLocaleString()}</td></tr>`)
+                      })
+                      w.document.write(`</tbody></table></body></html>`)
+                      w.document.close()
+                      setTimeout(() => w.print(), 300)
+                    }}
+                  >
+                    <Printer className="h-4 w-4" />
+                    הדפסה
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2 pt-0">
+              <Input
+                value={debtorsQuery}
+                onChange={(e) => setDebtorsQuery(e.target.value)}
+                placeholder={studentSearchPlaceholder}
+                className="h-8 max-w-xs text-right"
+                dir={isRtl ? "rtl" : "ltr"}
+              />
+              <div className="overflow-x-auto rounded-md border">
+                <Table className="min-w-[760px]">
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="text-right">{tr.student}</TableHead>
+                      <TableHead className="text-right">חבילה</TableHead>
+                      <TableHead className="text-right">תוכנית חיוב</TableHead>
+                      <TableHead className="text-right">סה&quot;כ לתשלום</TableHead>
+                      <TableHead className="text-right">שולם</TableHead>
+                      <TableHead className="text-right">יתרה</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredDebtRows.length > 0 ? filteredDebtRows.map((r) => (
+                      <TableRow key={r.enrollmentId}>
+                        <TableCell className="text-right">{r.studentName}</TableCell>
+                        <TableCell className="text-right">
+                          {r.siblingDiscountPackageName ? (
+                            <div className="flex flex-col items-end gap-1">
+                              <span className={r.siblingDiscountDisabled ? "text-muted-foreground line-through" : ""}>
+                                {r.siblingDiscountPackageName}
+                              </span>
+                              {canTabDebtors && statusPres.key !== "completed" ? (
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="outline"
+                                  className={`h-7 w-7 ${
+                                    r.siblingDiscountDisabled
+                                      ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                                      : "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                  }`}
+                                  title={r.siblingDiscountDisabled ? "הפעל חבילה" : "בטל חבילה"}
+                                  onClick={() =>
+                                    saveEnrollmentSiblingDiscountDisabled(
+                                      r.enrollmentId,
+                                      !r.siblingDiscountDisabled,
+                                    )
+                                  }
+                                >
+                                  {r.siblingDiscountDisabled ? (
+                                    <ToggleLeft className="h-4 w-4" />
+                                  ) : (
+                                    <ToggleRight className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {String((course as any)?.billingPlanSelectionMode || "").trim() === "billing" && canTabDebtors && statusPres.key !== "completed" ? (
+                            <Select
+                              value={r.billingPlanChoice}
+                              onValueChange={(v: "summer" | "discounted" | "perSession") =>
+                                saveEnrollmentBillingPlanChoice(r.enrollmentId, v)
+                              }
+                            >
+                              <SelectTrigger className="w-[min(100%,220px)]">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="summer">תוכנית קיץ</SelectItem>
+                                <SelectItem value="discounted">תוכנית מוזלת</SelectItem>
+                                <SelectItem value="perSession">לפי מפגש</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <span className="text-muted-foreground">
+                              {r.billingPlanChoice === "discounted"
+                                ? "תוכנית מוזלת"
+                                : r.billingPlanChoice === "perSession"
+                                  ? "לפי מפגש"
+                                  : "תוכנית קיץ"}
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">₪{r.totalDue.toLocaleString()}</TableCell>
+                        <TableCell className="text-right text-emerald-700 font-medium">₪{r.paid.toLocaleString()}</TableCell>
+                        <TableCell className="text-right text-red-600 font-semibold">₪{r.balance.toLocaleString()}</TableCell>
+                      </TableRow>
+                    )) : (
+                      <TableRow>
+                        <TableCell className="text-center text-muted-foreground" colSpan={6}>
+                          אין תלמידים עם חוב בקורס זה
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        )}
+
+        {canTabAttendanceStudents && (
+        <TabsContent value="attendance-students" className="space-y-6" dir={isRtl ? "rtl" : "ltr"}>
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-purple-100 rounded-lg">
+                    <CalendarCheck className="h-5 w-5 text-purple-600" />
+                  </div>
+                  <CardTitle className="text-lg">{tr.studentAttendanceTitle}</CardTitle>
+                </div>
+                <div className="flex flex-col items-stretch gap-1 sm:flex-row sm:items-center sm:gap-2">
+                  <span className="text-sm text-muted-foreground shrink-0">{tr.date}:</span>
+                  {allowedAttendanceDates.length > 0 ? (
+                    <Select value={attendanceDateForApi} onValueChange={setAttendanceDate}>
+                      <SelectTrigger className="h-9 w-full min-w-[200px] max-w-[min(100vw-2rem,320px)]" dir={isRtl ? "rtl" : "ltr"}>
+                        <SelectValue placeholder={tr.date} />
+                      </SelectTrigger>
+                      <SelectContent dir={isRtl ? "rtl" : "ltr"}>
+                        {allowedAttendanceDates.map((d) => (
+                          <SelectItem key={d} value={d}>
+                            {formatCourseSessionDateOption(d, locale === "ar" ? "ar" : locale === "en" ? "en" : "he")}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <input
+                      type="date"
+                      value={attendanceDate}
+                      onChange={(e) => setAttendanceDate(e.target.value)}
+                      min={attendanceDateBounds.min || undefined}
+                      max={attendanceDateBounds.max || undefined}
+                      className="flex h-9 w-full min-w-0 max-w-[min(100vw-2rem,200px)] rounded-md border border-input bg-background px-3 py-1 text-sm"
+                    />
+                  )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    onClick={() => {
+                      const seed: Record<string, "present" | "absent" | "sick" | "vacation"> = {}
+                      sortedEnrollmentsForAttendanceTab.forEach((e) => {
+                        const curr = String(attendanceByStudent[e.studentId] || "").toLowerCase()
+                        if (curr === "present" || curr === "absent" || curr === "sick" || curr === "vacation") {
+                          seed[e.studentId] = curr
+                        }
+                      })
+                      setBulkAttendanceByStudent(seed)
+                      setIsBulkAttendanceOpen(true)
+                    }}
+                  >
+                    <Plus className="h-4 w-4" />
+                    הוסף נוכחות
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="gap-1 bg-purple-600 hover:bg-purple-700 text-white"
+                    onClick={() => {
+                      const w = window.open("", "_blank")
+                      if (!w) return
+                      const logoHtml = centerLogo ? `<img src="${centerLogo}" style="max-height:60px;max-width:160px;object-fit:contain" />` : ""
+                      const dateStr = new Date(attendanceDateForApi).toLocaleDateString(localeTag)
+                      const slotLine =
+                        teacherCampAttendanceMode && selectedCampCellId
+                          ? teacherCampCells.find((c) => c.cellId === selectedCampCellId)?.label || ""
+                          : ""
+                      w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>רשימת נוכחות - ${course?.name || ""}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;padding:32px 40px;color:#1f2937;max-width:900px;margin:0 auto}
+.header{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:20px;padding-bottom:12px;border-bottom:2px solid #3b82f6}
+.header h1{font-size:22px;color:#1e40af;margin-top:6px}
+.header h2{font-size:15px;color:#4b5563;font-weight:400;margin-top:2px}
+table{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px}
+th{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:8px 10px;text-align:center;font-weight:600}
+td{border:1px solid #d1d5db;padding:8px 10px;text-align:center;vertical-align:middle}
+tr:nth-child(even) td{background:#f9fafb}
+.status-present{color:#166534;font-weight:600}
+.status-absent{color:#991b1b;font-weight:600}
+.status-sick{color:#9a3412;font-weight:600}
+.status-vacation{color:#1e40af;font-weight:600}
+@media print{body{padding:20px 28px;max-width:100%}@page{margin:20mm 15mm}}
+</style></head><body>`)
+                      const slotEsc = slotLine
+                        ? slotLine.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                        : ""
+                      w.document.write(`<div class="header">${logoHtml}<h1>${centerName || "מרכז"}</h1>${course?.name ? `<h2 style="font-size:17px;color:#1f2937;font-weight:600;margin-top:4px">${course.name}</h2>` : ""}<h2>רשימת נוכחות - ${dateStr}</h2>${slotEsc ? `<p style="margin-top:8px;font-size:14px;color:#374151">${slotEsc}</p>` : ""}</div>`)
+                      w.document.write(`<table><thead><tr><th>#</th><th>שם תלמיד</th><th>קבוצה</th><th>סטטוס</th><th>חתימה</th></tr></thead><tbody>`)
+                      sortedEnrollmentsForAttendanceTab.forEach((e, idx) => {
+                        const st = attendanceByStudent[e.studentId] || ""
+                        const statusText = st === "present" || st === "PRESENT" ? tr.present : st === "absent" || st === "ABSENT" ? tr.absent : st === "sick" || st === "SICK" ? tr.sick : st === "vacation" || st === "VACATION" ? tr.vacation : "—"
+                        const statusClass = st === "present" || st === "PRESENT" ? "status-present" : st === "absent" || st === "ABSENT" ? "status-absent" : st === "sick" || st === "SICK" ? "status-sick" : st === "vacation" || st === "VACATION" ? "status-vacation" : ""
+                        w.document.write(`<tr><td>${idx + 1}</td><td>${e.studentName || "—"}</td><td>${e.campGroupLabel ? "קבוצה " + e.campGroupLabel : "—"}</td><td class="${statusClass}">${statusText}</td><td style="min-width:80px"></td></tr>`)
+                      })
+                      w.document.write(`</tbody></table></body></html>`)
+                      w.document.close()
+                      setTimeout(() => w.print(), 300)
+                    }}
+                  >
+                    <Printer className="h-4 w-4" />
+                    הדפסה
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="gap-1 bg-indigo-600 hover:bg-indigo-700 text-white"
+                    onClick={() => {
+                      const w = window.open("", "_blank")
+                      if (!w) return
+                      const logoHtml = centerLogo ? `<img src="${centerLogo}" style="max-height:60px;max-width:160px;object-fit:contain" />` : ""
+                      const datesForReport = [...allowedAttendanceDates].sort((a, b) => a.localeCompare(b))
+                      const studentsForReport = [...sortedEnrollmentsForAttendanceTab]
+                      const statusAt = (studentId: string, date: string): string => {
+                        const rows = attendanceList.filter((r) => {
+                          const head = String(r.date ?? "").trim().slice(0, 10)
+                          const ymd = /^\d{4}-\d{2}-\d{2}$/.test(head) ? head : ""
+                          return String(r.studentId || "") === studentId && ymd === date
+                        })
+                        return latestStudentStatusFromRows(rows as Array<Record<string, unknown>>)
+                      }
+                      const lbl = (s: string) => (s === "present" ? "נוכח" : s === "absent" ? "לא נכח" : s === "sick" ? "חולה" : s === "vacation" ? "חופש" : "—")
+                      const presentByDate = new Map<string, number>()
+                      const notPresentByDate = new Map<string, number>()
+                      datesForReport.forEach((d) => {
+                        let p = 0
+                        let n = 0
+                        studentsForReport.forEach((e) => {
+                          const st = statusAt(String(e.studentId), d)
+                          if (st === "present") p += 1
+                          else n += 1
+                        })
+                        presentByDate.set(d, p)
+                        notPresentByDate.set(d, n)
+                      })
+                      w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>דוח נוכחות מלא - ${course?.name || ""}</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;padding:24px;color:#1f2937}.header{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid #4f46e5}.header h1{font-size:22px;color:#3730a3}.header h2{font-size:14px;color:#4b5563;font-weight:500}.note{font-size:12px;color:#64748b;text-align:center;margin-bottom:10px}.table-wrap{overflow:auto;border:1px solid #cbd5e1;border-radius:10px}table{border-collapse:collapse;min-width:1200px;width:max-content;background:#fff}th{background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe;padding:8px 10px;text-align:center;font-size:12px;white-space:nowrap}td{border:1px solid #d1d5db;padding:6px 8px;text-align:center;font-size:12px;white-space:nowrap}tr:nth-child(even) td{background:#f8fafc}.name-col{position:sticky;right:0;background:#fff;font-weight:600;text-align:right;min-width:170px}.idx-col{position:sticky;right:170px;background:#fff;min-width:52px}.total-col{font-weight:700;background:#ecfeff}.present{color:#166534;font-weight:700}.not-present{color:#991b1b;font-weight:700}.summary-row td{background:#f1f5f9 !important;font-weight:700}@media print{@page{size:landscape;margin:12mm}body{padding:0}.table-wrap{border:none}}</style></head><body>`)
+                      w.document.write(`<div class="header">${logoHtml}<h1>${centerName || "מרכז"}</h1>${course?.name ? `<h2>${course.name}</h2>` : ""}<h2>דוח נוכחות מלא לתלמידים</h2></div>`)
+                      if (datesForReport.length > 0) w.document.write(`<div class="note">טווח תאריכים: ${new Date(datesForReport[0]).toLocaleDateString("he-IL")} - ${new Date(datesForReport[datesForReport.length - 1]).toLocaleDateString("he-IL")}</div>`)
+                      const studentsSortedByAttendance = studentsForReport
+                        .map((e) => {
+                          const presentCount = datesForReport.reduce((sum, d) => {
+                            const st = statusAt(String(e.studentId), d)
+                            return sum + (st === "present" ? 1 : 0)
+                          }, 0)
+                          return { enrollment: e, presentCount }
+                        })
+                        .sort((a, b) => b.presentCount - a.presentCount || String(a.enrollment.studentName || "").localeCompare(String(b.enrollment.studentName || ""), "he"))
+
+                      w.document.write(`<div class="table-wrap"><table><thead><tr><th class="idx-col">מס'</th><th class="name-col">שם תלמיד</th>`)
+                      datesForReport.forEach((d) => w.document.write(`<th>${new Date(d).toLocaleDateString("he-IL")}</th>`))
+                      w.document.write(`<th class="total-col">סה"כ נוכחות</th></tr></thead><tbody>`)
+                      studentsSortedByAttendance.forEach((row, i) => {
+                        const e = row.enrollment
+                        let presentCount = 0
+                        w.document.write(`<tr><td class="idx-col">${i + 1}</td><td class="name-col">${(e.studentName || "—").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</td>`)
+                        datesForReport.forEach((d) => {
+                          const st = statusAt(String(e.studentId), d)
+                          if (st === "present") presentCount += 1
+                          w.document.write(`<td class="${st === "present" ? "present" : st ? "not-present" : ""}">${lbl(st)}</td>`)
+                        })
+                        w.document.write(`<td class="total-col present">${presentCount}</td></tr>`)
+                      })
+                      w.document.write(`<tr class="summary-row"><td class="idx-col" colspan="2">סה"כ נוכחים</td>`)
+                      datesForReport.forEach((d) => w.document.write(`<td class="present">${presentByDate.get(d) || 0}</td>`))
+                      w.document.write(`<td class="total-col present">${datesForReport.reduce((s, d) => s + (presentByDate.get(d) || 0), 0)}</td></tr>`)
+                      w.document.write(`<tr class="summary-row"><td class="idx-col" colspan="2">סה"כ לא נכחו</td>`)
+                      datesForReport.forEach((d) => w.document.write(`<td class="not-present">${notPresentByDate.get(d) || 0}</td>`))
+                      w.document.write(`<td class="total-col not-present">${datesForReport.reduce((s, d) => s + (notPresentByDate.get(d) || 0), 0)}</td></tr>`)
+                      w.document.write(`</tbody></table></div></body></html>`)
+                      w.document.close()
+                      setTimeout(() => w.print(), 400)
+                    }}
+                  >
+                    <Printer className="h-4 w-4" />
+                    הדפסת כל הנוכחות
+                  </Button>
+                </div>
+              </div>
+              {teacherCampAttendanceMode && teacherCampCells.length > 0 ? (
+                <div className="mt-3 flex w-full flex-wrap gap-2 border-t border-border/60 pt-3">
+                  {teacherCampCells.map((c) => (
+                    <Button
+                      key={c.cellId}
+                      type="button"
+                      size="sm"
+                      variant={selectedCampCellId === c.cellId ? "default" : "outline"}
+                      className={
+                        selectedCampCellId === c.cellId
+                          ? "bg-purple-600 text-white hover:bg-purple-700"
+                          : "border-purple-200"
+                      }
+                      onClick={() => setSelectedCampCellId(c.cellId)}
+                    >
+                      {c.label}
+                    </Button>
+                  ))}
+                </div>
+              ) : null}
+              {teacherCampDayNoSlots ? (
+                <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  {tr.campNoTeacherSlots}
+                </p>
+              ) : null}
+            </CardHeader>
+            <CardContent>
+              <Input
+                value={attendanceStudentsQuery}
+                onChange={(e) => setAttendanceStudentsQuery(e.target.value)}
+                placeholder={studentSearchPlaceholder}
+                className="mb-3 h-8 max-w-xs text-right"
+                dir={isRtl ? "rtl" : "ltr"}
+              />
+              {(() => {
+                const total = filteredAttendanceEnrollments.length
+                const present = filteredAttendanceEnrollments.filter((e) => {
+                  const st = attendanceByStudent[e.studentId]
+                  return st === "present" || st === "PRESENT"
+                }).length
+                const absent = filteredAttendanceEnrollments.filter((e) => {
+                  const st = attendanceByStudent[e.studentId]
+                  return st === "absent" || st === "ABSENT"
+                }).length
+                const sick = filteredAttendanceEnrollments.filter((e) => {
+                  const st = attendanceByStudent[e.studentId]
+                  return st === "sick" || st === "SICK"
+                }).length
+                const vacation = filteredAttendanceEnrollments.filter((e) => {
+                  const st = attendanceByStudent[e.studentId]
+                  return st === "vacation" || st === "VACATION"
+                }).length
+                const unmarked = total - present - absent - sick - vacation
+                return total > 0 ? (
+                  <div className="hidden mb-4 flex flex-wrap gap-3 text-sm">
+                    <span className="rounded-md bg-green-100 text-green-800 px-3 py-1 font-medium">{tr.present}: {present}</span>
+                    <span className="rounded-md bg-red-100 text-red-800 px-3 py-1 font-medium">{tr.absent}: {absent}</span>
+                    <span className="rounded-md bg-orange-100 text-orange-800 px-3 py-1 font-medium">{tr.sick}: {sick}</span>
+                    <span className="rounded-md bg-blue-100 text-blue-800 px-3 py-1 font-medium">{tr.vacation}: {vacation}</span>
+                    {unmarked > 0 && <span className="rounded-md bg-gray-100 text-gray-600 px-3 py-1 font-medium">טרם סומן: {unmarked}</span>}
+                  </div>
+                ) : null
+              })()}
+              <div className="hidden mb-6 overflow-x-auto rounded-md border">
+                <Table className="min-w-0">
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="max-w-[40%] text-right sm:max-w-none">{tr.student}</TableHead>
+                      <TableHead className="text-right">{tr.attendanceStatus}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredAttendanceEnrollments.length > 0 ? filteredAttendanceEnrollments.map((enrollment) => (
+                      <TableRow key={enrollment.id}>
+                        <TableCell className="max-w-[40%] break-words text-right font-medium sm:max-w-none">{enrollment.studentName || "—"}</TableCell>
+                        <TableCell className="align-top">
+                          <div className="flex flex-wrap gap-2">
+                            {attendanceStatusButton(enrollment.studentId, "present", tr.present, Check)}
+                            {attendanceStatusButton(enrollment.studentId, "absent", tr.absent, X)}
+                            {attendanceStatusButton(enrollment.studentId, "sick", tr.sick, Thermometer)}
+                            {attendanceStatusButton(enrollment.studentId, "vacation", tr.vacation, Plane)}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )) : (
+                      <TableRow>
+                        <TableCell className="text-center text-muted-foreground" colSpan={2}>
+                          {teacherCampDayNoSlots ? tr.campNoTeacherSlots : tr.noLinkedStudents}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+              {(() => {
+                const dates = [...allowedAttendanceDates].sort((a, b) => a.localeCompare(b))
+                const students = [...filteredAttendanceEnrollments]
+                const statusFor = (studentId: string, date: string) => {
+                  const rows = attendanceList.filter((r) => {
+                    const head = String(r.date ?? "").trim().slice(0, 10)
+                    const ymd = /^\d{4}-\d{2}-\d{2}$/.test(head) ? head : ""
+                    if (String(r.studentId || "") !== String(studentId)) return false
+                    if (ymd !== date) return false
+                    if (teacherCampAttendanceMode && selectedCampCellId) {
+                      return String(r.campMeetingCellId || "") === selectedCampCellId
+                    }
+                    return true
+                  })
+                  const latest = latestStudentStatusFromRows(rows as Array<Record<string, unknown>>)
+                  if (latest === "present") return "נוכח"
+                  if (latest === "absent") return "לא נכח"
+                  if (latest === "sick") return "חולה"
+                  if (latest === "vacation") return "חופש"
+                  return "—"
+                }
+                const studentRows = students
+                  .map((e) => {
+                    const byDate: Record<string, string> = {}
+                    let presentCount = 0
+                    dates.forEach((d) => {
+                      const s = statusFor(e.studentId, d)
+                      byDate[d] = s
+                      if (s === "נוכח") presentCount += 1
+                    })
+                    return { enrollment: e, byDate, presentCount }
+                  })
+                  .sort(
+                    (a, b) =>
+                      b.presentCount - a.presentCount ||
+                      String(a.enrollment.studentName || "").localeCompare(String(b.enrollment.studentName || ""), "he"),
+                  )
+                const presentByDate = new Map<string, number>()
+                const absentByDate = new Map<string, number>()
+                dates.forEach((d) => {
+                  let present = 0
+                  let absent = 0
+                  studentRows.forEach((row) => {
+                    if (row.byDate[d] === "נוכח") present += 1
+                    else absent += 1
+                  })
+                  presentByDate.set(d, present)
+                  absentByDate.set(d, absent)
+                })
+                const needsHorizontalScroll = dates.length > 12
+                const dateColWidth = 90
+                const explicitTableWidth = 42 + 150 + dates.length * dateColWidth + 74
+                const tableStyle: React.CSSProperties | undefined = needsHorizontalScroll
+                  ? { width: `${explicitTableWidth}px`, tableLayout: "fixed" }
+                  : undefined
+                const dateHeadStyle: React.CSSProperties | undefined = needsHorizontalScroll
+                  ? { width: `${dateColWidth}px`, minWidth: `${dateColWidth}px` }
+                  : undefined
+                const tableLayoutClass = needsHorizontalScroll
+                  ? "text-xs"
+                  : "w-full table-fixed text-xs"
+                const weekdayNames = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"]
+                const weekdayForDate = (d: string) => {
+                  const dt = new Date(`${d}T12:00:00`)
+                  if (Number.isNaN(dt.getTime())) return ""
+                  return weekdayNames[dt.getDay()] || ""
+                }
+                return students.length > 0 ? (
+                  <div className="overflow-x-auto rounded-md border">
+                    <Table className={tableLayoutClass} style={tableStyle}>
+                      <TableHeader>
+                        <TableRow className="bg-emerald-50/60">
+                          <TableHead className="text-right px-2 w-[192px]" colSpan={2}>נוכח</TableHead>
+                          {dates.map((d) => (
+                            <TableHead
+                              key={`present-${d}`}
+                              className="text-center text-emerald-700 font-semibold px-1 whitespace-nowrap"
+                              style={dateHeadStyle}
+                            >
+                              {presentByDate.get(d) || 0}
+                            </TableHead>
+                          ))}
+                          <TableHead className="text-center text-emerald-700 font-semibold px-1 whitespace-nowrap w-[74px]">
+                            {Array.from(presentByDate.values()).reduce((sum, n) => sum + n, 0)}
+                          </TableHead>
+                        </TableRow>
+                        <TableRow className="bg-rose-50/60">
+                          <TableHead className="text-right px-2 w-[192px]" colSpan={2}>לא נכח</TableHead>
+                          {dates.map((d) => (
+                            <TableHead
+                              key={`absent-${d}`}
+                              className="text-center text-rose-700 font-semibold px-1 whitespace-nowrap"
+                              style={dateHeadStyle}
+                            >
+                              {absentByDate.get(d) || 0}
+                            </TableHead>
+                          ))}
+                          <TableHead className="text-center text-rose-700 font-semibold px-1 whitespace-nowrap w-[74px]">
+                            {Array.from(absentByDate.values()).reduce((sum, n) => sum + n, 0)}
+                          </TableHead>
+                        </TableRow>
+                        <TableRow className="bg-muted/50">
+                          <TableHead className="text-right w-[42px] px-1">מס'</TableHead>
+                          <TableHead className="text-right w-[150px] px-2">{tr.student}</TableHead>
+                          {dates.map((d) => (
+                            <TableHead
+                              key={d}
+                              className="text-center px-1 whitespace-nowrap"
+                              style={dateHeadStyle}
+                            >
+                              <div className="flex flex-col items-center leading-tight">
+                                <span>{new Date(d).toLocaleDateString("he-IL")}</span>
+                                <span className="text-[10px] font-normal text-muted-foreground">
+                                  {weekdayForDate(d)}
+                                </span>
+                              </div>
+                            </TableHead>
+                          ))}
+                          <TableHead className="text-center w-[74px] px-1 whitespace-nowrap">סה"כ נוכחות</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {studentRows.map((row, idx) => {
+                          const e = row.enrollment
+                          return (
+                            <TableRow key={e.id}>
+                              <TableCell className="text-right px-1">{idx + 1}</TableCell>
+                              <TableCell className="text-right font-medium px-2 truncate">{e.studentName || "—"}</TableCell>
+                              {dates.map((d) => {
+                                const s = row.byDate[d] || "—"
+                                const toneClass =
+                                  s === "נוכח"
+                                    ? "text-emerald-700 font-semibold"
+                                    : s === "לא נכח"
+                                      ? "text-rose-700 font-semibold"
+                                      : "text-foreground"
+                                return (
+                                  <TableCell key={`${e.id}-${d}`} className={`text-center px-1 whitespace-nowrap ${toneClass}`}>
+                                    {s}
+                                  </TableCell>
+                                )
+                              })}
+                              <TableCell className="text-center font-semibold text-emerald-700 px-1">{row.presentCount}</TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <p className="text-center text-muted-foreground py-6">{tr.noStudentAttendance}</p>
+                )
+              })()}
+            </CardContent>
+            <Dialog open={isBulkAttendanceOpen} onOpenChange={setIsBulkAttendanceOpen}>
+              <DialogContent dir={isRtl ? "rtl" : "ltr"} className="max-w-3xl">
+                <DialogHeader>
+                  <DialogTitle>
+                    הוספת נוכחות מרוכזת לתאריך {new Date(attendanceDateForApi).toLocaleDateString("he-IL")}
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="max-h-[55vh] overflow-y-auto rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead className="text-right">תלמיד</TableHead>
+                        <TableHead className="text-right">סטטוס</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredAttendanceEnrollments.map((enrollment) => {
+                        const selected = bulkAttendanceByStudent[enrollment.studentId] || ""
+                        const itemBtn = (
+                          status: "present" | "absent" | "sick" | "vacation",
+                          label: string,
+                          cls: string,
+                        ) => (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={selected === status ? "default" : "outline"}
+                            className={selected === status ? cls : ""}
+                            onClick={() =>
+                              setBulkAttendanceByStudent((prev) => ({
+                                ...prev,
+                                [enrollment.studentId]: status,
+                              }))
+                            }
+                          >
+                            {label}
+                          </Button>
+                        )
+                        return (
+                          <TableRow key={`bulk-${enrollment.id}`}>
+                            <TableCell className="text-right font-medium">{enrollment.studentName || "—"}</TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex flex-wrap gap-2">
+                                {itemBtn("present", tr.present, "bg-green-600 hover:bg-green-700")}
+                                {itemBtn("absent", tr.absent, "bg-red-600 hover:bg-red-700")}
+                                {itemBtn("sick", tr.sick, "bg-orange-600 hover:bg-orange-700")}
+                                {itemBtn("vacation", tr.vacation, "bg-blue-600 hover:bg-blue-700")}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={() => setIsBulkAttendanceOpen(false)}>
+                    ביטול
+                  </Button>
+                  <Button type="button" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={saveBulkAttendanceForSelectedDate}>
+                    שמור נוכחות
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </Card>
+        </TabsContent>
+        )}
+
+        {canTabAttendanceTeachers && (
+        <TabsContent value="attendance-teachers" className="space-y-6" dir={isRtl ? "rtl" : "ltr"}>
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-purple-100 rounded-lg">
+                    <CalendarCheck className="h-5 w-5 text-purple-600" />
+                  </div>
+                  <CardTitle className="text-lg">{tr.teacherAttendanceTitle}</CardTitle>
+                </div>
+                <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+                  {teacherAttendanceHoursSummary.length > 0 ? (
+                    <div
+                      className={
+                        isCampCourse
+                          ? "flex max-w-full flex-wrap items-center gap-2 rounded-xl border border-purple-200/90 bg-gradient-to-l from-fuchsia-50/90 via-purple-50/80 to-violet-50/50 px-3 py-2 shadow-sm ring-1 ring-purple-100/60"
+                          : "flex max-w-full flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2"
+                      }
+                      dir={isRtl ? "rtl" : "ltr"}
+                    >
+                      <div
+                        className={`flex min-w-[6.5rem] flex-col gap-0.5 rounded-lg border px-2.5 py-1.5 sm:flex-row sm:items-baseline sm:gap-2 ${
+                          isCampCourse
+                            ? "border-purple-200/80 bg-white/80 text-purple-950 shadow-sm"
+                            : "border-border bg-background/90 text-foreground shadow-sm"
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <Clock
+                            className={`h-4 w-4 shrink-0 ${isCampCourse ? "text-purple-600" : "text-muted-foreground"}`}
+                          />
+                          <span
+                            className={`text-[11px] font-semibold leading-tight sm:text-xs ${isCampCourse ? "text-purple-900" : "text-muted-foreground"}`}
+                          >
+                            {tr.teacherHoursGrandTotal}
+                          </span>
+                        </div>
+                        <span className="text-base font-bold tabular-nums leading-tight sm:ms-auto">
+                          {teacherAttendanceHoursGrandTotal.toFixed(1)}
+                          <span className="ms-0.5 text-xs font-semibold opacity-80">{tr.hoursShort}</span>
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-stretch gap-2">
+                        {teacherAttendanceHoursSummary.map((row) => {
+                          const chipIdx = teacherAttendanceColorIndexById.get(row.teacherId) ?? 0
+                          return (
+                          <div
+                            key={row.teacherId}
+                            className={`flex min-w-[7.5rem] flex-col rounded-lg border px-2.5 py-1.5 ${
+                              isCampCourse
+                                ? TEACHER_HOURS_CHIP_STYLES[chipIdx % TEACHER_HOURS_CHIP_STYLES.length]
+                                : "border-border bg-background/90 text-foreground shadow-sm"
+                            }`}
+                          >
+                            <span className="line-clamp-2 text-[11px] font-medium leading-snug opacity-90">{row.name}</span>
+                            <span className="text-base font-bold tabular-nums leading-tight">
+                              {row.hours.toFixed(1)}
+                              <span className="ms-0.5 text-xs font-semibold opacity-80">{tr.hoursShort}</span>
+                            </span>
+                          </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="gap-1 bg-purple-600 hover:bg-purple-700 text-white"
+                    onClick={() => {
+                    const teacherAtt = sortedCourseTeacherAttendanceList
+                    const w = window.open("", "_blank")
+                    if (!w) return
+                    const logoHtml = centerLogo ? `<img src="${centerLogo}" style="max-height:60px;max-width:160px;object-fit:contain" />` : ""
+                    w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>נוכחות מורים - ${course?.name || ""}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;padding:32px 40px;color:#1f2937;max-width:900px;margin:0 auto}.header{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:20px;padding-bottom:12px;border-bottom:2px solid #3b82f6}.header h1{font-size:22px;color:#1e40af;margin-top:6px}.header h2{font-size:15px;color:#4b5563;font-weight:400;margin-top:2px}table{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px}th{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:8px 10px;text-align:center;font-weight:600}td{border:1px solid #d1d5db;padding:8px 10px;text-align:center;vertical-align:middle}tr:nth-child(even) td{background:#f9fafb}.status-present{color:#166534;font-weight:600}.status-absent{color:#991b1b;font-weight:600}@media print{body{padding:20px 28px;max-width:100%}@page{margin:20mm 15mm}}</style></head><body>`)
+                    w.document.write(`<div class="header">${logoHtml}<h1>${centerName || "מרכז"}</h1>${course?.name ? `<h2 style="font-size:17px;color:#1f2937;font-weight:600;margin-top:4px">${course.name}</h2>` : ""}<h2>נוכחות מורים</h2></div>`)
+                    w.document.write(`<table><thead><tr><th>#</th><th>תאריך</th><th>מורה</th><th>שיעור</th><th>משעה</th><th>עד שעה</th><th>סה"כ שעות</th><th>סטטוס</th><th>הערה</th></tr></thead><tbody>`)
+                    teacherAtt.forEach((a, idx) => {
+                      const teacher = teachers.find((t) => t.id === a.teacherId)
+                      const statusLabel = isTeacherAttendancePresentStatus(a.status)
+                        ? "נוכח"
+                        : a.status === "absent" || a.status === "ABSENT"
+                          ? "חיסור"
+                          : String(a.status ?? "—")
+                      const cls = isTeacherAttendancePresentStatus(a.status) ? "status-present" : "status-absent"
+                      const rs = attendanceSlotTimeDisplay(a.campSlotStart)
+                      const re = attendanceSlotTimeDisplay(a.campSlotEnd)
+                      const useCrs = rs === "—" || re === "—"
+                      const startDisp = useCrs ? courseTimeToDisplayValue(course?.startTime) || "—" : rs
+                      const endDisp = useCrs ? courseTimeToDisplayValue(course?.endTime) || "—" : re
+                      const totalH = attendanceHoursFromSlots(a.hours, a.campSlotStart, a.campSlotEnd, course?.startTime, course?.endTime)
+                      const lessonEsc = String(a.campLessonTitle || "—").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                      w.document.write(`<tr><td>${idx + 1}</td><td>${new Date(a.date).toLocaleDateString("he-IL")}</td><td>${teacher?.name || "—"}</td><td>${lessonEsc}</td><td>${startDisp}</td><td>${endDisp}</td><td>${totalH}</td><td class="${cls}">${statusLabel}</td><td>${(a.notes || "—").replace(/&/g, "&amp;").replace(/</g, "&lt;")}</td></tr>`)
+                    })
+                    w.document.write(`</tbody></table></body></html>`)
+                    w.document.close()
+                    setTimeout(() => w.print(), 300)
+                    }}
+                  >
+                    <Printer className="h-4 w-4" />
+                    הדפסה
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {(() => {
+                const teacherAttendance = sortedCourseTeacherAttendanceList
+                return teacherAttendance.length > 0 ? (
+                  <div className="overflow-x-auto rounded-md border">
+                    <Table className="min-w-[880px]">
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead className="text-right">{tr.date}</TableHead>
+                          <TableHead className="text-right">{tr.teachers}</TableHead>
+                          <TableHead className="text-right">{tr.campLessonCol}</TableHead>
+                          <TableHead className="text-center">משעה</TableHead>
+                          <TableHead className="text-center">עד שעה</TableHead>
+                          <TableHead className="text-center">סה&quot;כ שעות</TableHead>
+                          <TableHead className="text-right">{tr.status}</TableHead>
+                          <TableHead className="text-right">{tr.note}</TableHead>
+                          <TableHead className="text-right">{tr.performedBy}</TableHead>
+                          {canDeleteTeacherAttendanceRow ? (
+                            <TableHead className="w-12 text-center">{tr.actions}</TableHead>
+                          ) : null}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(() => {
+                          return teacherAttendance.map((a, idx) => {
+                            const teacher = teachers.find((t) => t.id === a.teacherId)
+                            const teacherName = teacher?.name ?? "—"
+                            const statusLabel = isTeacherAttendancePresentStatus(a.status)
+                              ? tr.present
+                              : a.status === "absent" || a.status === "ABSENT"
+                                ? tr.absent
+                                : String(a.status ?? "—")
+                            const busy = deletingTeacherAttendanceId === a.id
+                            const rs = attendanceSlotTimeDisplay(a.campSlotStart)
+                            const re = attendanceSlotTimeDisplay(a.campSlotEnd)
+                            const useCrs = rs === "—" || re === "—"
+                            const startDisp = useCrs ? courseTimeToDisplayValue(course?.startTime) || "—" : rs
+                            const endDisp = useCrs ? courseTimeToDisplayValue(course?.endTime) || "—" : re
+                            const hoursDisp = attendanceHoursFromSlots(
+                              a.hours,
+                              a.campSlotStart,
+                              a.campSlotEnd,
+                              course?.startTime,
+                              course?.endTime,
+                            )
+                            const lessonDisp = String(a.campLessonTitle || "").trim() || "—"
+                            const tid = a.teacherId ? String(a.teacherId) : ""
+                            const colorIdx = tid ? teacherAttendanceColorIndexById.get(tid) ?? 0 : 0
+                            const rowAccent =
+                              TEACHER_ROW_ACCENT_STYLES[colorIdx % TEACHER_ROW_ACCENT_STYLES.length]
+                            const aTeacherId = String(a.teacherId || "")
+                            const aDateKey = String(a.date || "")
+                            const next = teacherAttendance[idx + 1]
+                            const nextTeacherId = next ? String(next.teacherId || "") : ""
+                            const nextDateKey = next ? String(next.date || "") : ""
+                            const isEndOfTeacherDayGroup = !next || nextTeacherId !== aTeacherId || nextDateKey !== aDateKey
+                            const dayTeacherTotalHours = isEndOfTeacherDayGroup
+                              ? teacherAttendance
+                                  .filter(
+                                    (row) =>
+                                      String(row.teacherId || "") === aTeacherId &&
+                                      String(row.date || "") === aDateKey &&
+                                      isTeacherAttendancePresentStatus(row.status),
+                                  )
+                                  .reduce(
+                                    (sum, row) =>
+                                      sum +
+                                      attendanceHoursToNumber(
+                                        row.hours,
+                                        row.campSlotStart,
+                                        row.campSlotEnd,
+                                        course?.startTime,
+                                        course?.endTime,
+                                      ),
+                                    0,
+                                  )
+                              : 0
+                            return (
+                              <Fragment key={a.id}>
+                                <TableRow className={rowAccent}>
+                                  <TableCell className="text-right">{new Date(a.date).toLocaleDateString(localeTag)}</TableCell>
+                                  <TableCell className="text-right">{teacherName}</TableCell>
+                                  <TableCell className="text-right text-muted-foreground">{lessonDisp}</TableCell>
+                                  <TableCell className="text-center">{startDisp}</TableCell>
+                                  <TableCell className="text-center">{endDisp}</TableCell>
+                                  <TableCell className="text-center font-medium">{hoursDisp}</TableCell>
+                                  <TableCell className="text-right">{statusLabel}</TableCell>
+                                  <TableCell className="text-right text-muted-foreground">{a.notes ?? "—"}</TableCell>
+                                  <TableCell className="text-right text-muted-foreground">{a.createdByUserName || "—"}</TableCell>
+                                  {canDeleteTeacherAttendanceRow ? (
+                                    <TableCell className="text-center p-1">
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                        disabled={busy}
+                                        aria-label={locale === "en" ? "Delete attendance" : locale === "ar" ? "حذف" : "מחיקת נוכחות"}
+                                        onClick={() => deleteTeacherAttendanceRecord(a.id)}
+                                      >
+                                        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                      </Button>
+                                    </TableCell>
+                                  ) : null}
+                                </TableRow>
+                                {isEndOfTeacherDayGroup ? (
+                                  <TableRow className="bg-amber-50/70">
+                                    <TableCell
+                                      className="text-right font-semibold text-amber-900"
+                                      colSpan={canDeleteTeacherAttendanceRow ? 10 : 9}
+                                    >
+                                      סה&quot;כ נוכחות לתאריך {new Date(a.date).toLocaleDateString("he-IL")} - {teacherName}: {dayTeacherTotalHours.toFixed(1)} {tr.hoursShort}
+                                    </TableCell>
+                                  </TableRow>
+                                ) : null}
+                              </Fragment>
+                            )
+                          })
+                        })()}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <p className="text-center text-muted-foreground py-6">{tr.noTeacherAttendance}</p>
+                )
+              })()}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        )}
+      </Tabs>
+    </div>
+  )
+}

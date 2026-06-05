@@ -1,0 +1,345 @@
+"use client"
+
+import { useEffect, useState, type ChangeEvent } from "react"
+import { useRouter } from "next/navigation"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { User, Phone, Mail, Loader2, CheckCircle, Lock, Calendar, IdCard, MapPin, Briefcase } from "lucide-react"
+import { fileToProfileImageDataUrl } from "@/lib/profile-image-client"
+
+export default function RegisterTeacherPage() {
+  const router = useRouter()
+  const [name, setName] = useState("")
+  const [phone, setPhone] = useState("")
+  const [email, setEmail] = useState("")
+  const [idNumber, setIdNumber] = useState("")
+  const [birthDate, setBirthDate] = useState("")
+  const [city, setCity] = useState("")
+  const [specialization, setSpecialization] = useState("")
+  const [bio, setBio] = useState("")
+  const [profileImage, setProfileImage] = useState("")
+  const [username, setUsername] = useState("")
+  const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [success, setSuccess] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!success) return
+    const timer = setTimeout(() => {
+      router.push("/login")
+    }, 5000)
+    return () => clearTimeout(timer)
+  }, [success, router])
+
+  const handleProfileImageUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const dataUrl = await fileToProfileImageDataUrl(file)
+    setProfileImage(dataUrl)
+  }
+
+  function normalizeBirthDateInput(value: string): string {
+    const v = value.trim()
+    if (!v) return ""
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v
+    const m = v.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/)
+    if (!m) return v
+    const dd = m[1].padStart(2, "0")
+    const mm = m[2].padStart(2, "0")
+    const yyyy = m[3]
+    return `${yyyy}-${mm}-${dd}`
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    if (!name.trim()) {
+      setError("יש להזין שם")
+      return
+    }
+    if (!username.trim()) {
+      setError("יש להזין שם משתמש")
+      return
+    }
+    if (!password || password.length < 4) {
+      setError("הסיסמה חייבת להכיל לפחות 4 תווים")
+      return
+    }
+    if (password !== confirmPassword) {
+      setError("אימות הסיסמה לא תואם")
+      return
+    }
+    setIsSubmitting(true)
+    try {
+      const res = await fetch("/api/register/teacher", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          phone: phone.trim() || null,
+          email: email.trim() || null,
+          idNumber: idNumber.trim() || null,
+          birthDate: normalizeBirthDateInput(birthDate) || null,
+          city: city.trim() || null,
+          specialization: specialization.trim() || null,
+          bio: bio.trim() || null,
+          profileImage: profileImage.trim() || null,
+          username: username.trim(),
+          password,
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || "שגיאה ברישום")
+      }
+      setSuccess(true)
+      setName("")
+      setPhone("")
+      setEmail("")
+      setIdNumber("")
+      setBirthDate("")
+      setCity("")
+      setSpecialization("")
+      setBio("")
+      setProfileImage("")
+      setUsername("")
+      setPassword("")
+      setConfirmPassword("")
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "שגיאה ברישום")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  if (success) {
+    return (
+      <div className="flex min-h-[100dvh] flex-col items-center justify-center px-2 py-6 sm:px-4">
+        <Card className="w-full max-w-md border-green-200 bg-green-50 shadow-md">
+          <CardContent className="px-4 pt-6 text-center sm:px-6">
+            <CheckCircle className="mx-auto mb-4 h-16 w-16 text-green-600" />
+            <h2 className="text-lg font-bold text-green-800 sm:text-xl">הרישום התקבל</h2>
+            <p className="mt-2 text-sm text-green-700 sm:text-base">נצור איתך קשר בהקדם.</p>
+            <p className="mt-2 text-sm text-green-700 sm:text-base">מעבירים אותך לדף התחברות בעוד 5 שניות...</p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex min-h-[100dvh] w-full flex-col items-center justify-start py-6 sm:justify-center sm:py-8">
+      <Card className="w-full max-w-md shadow-lg sm:max-w-lg">
+        <CardHeader className="space-y-2 px-4 text-center sm:px-6">
+          <CardTitle className="text-xl sm:text-2xl">רישום מורה</CardTitle>
+          <CardDescription className="text-pretty">מלא פרטים אישיים ופרטי התחברות למערכת</CardDescription>
+        </CardHeader>
+        <CardContent className="px-4 pb-6 sm:px-6">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
+                {error}
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="name">שם מלא *</Label>
+              <div className="relative">
+                <User className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="הכנס שם"
+                  className="pr-10"
+                  required
+                  disabled={isSubmitting}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="profileImageUpload">תמונת פרופיל (לא חובה)</Label>
+              <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+                {profileImage ? (
+                  <img src={profileImage} alt="profile preview" className="mx-auto h-16 w-16 rounded-full border bg-white object-cover sm:mx-0" />
+                ) : (
+                  <div className="mx-auto h-16 w-16 rounded-full border-2 border-dashed bg-muted sm:mx-0" />
+                )}
+                <div className="min-w-0 flex-1 space-y-2">
+                  <Input
+                    id="profileImageUpload"
+                    type="file"
+                    accept="image/*"
+                    className="text-xs sm:text-sm"
+                    onChange={handleProfileImageUpload}
+                    disabled={isSubmitting}
+                  />
+                  {profileImage && (
+                    <Button type="button" variant="outline" size="sm" onClick={() => setProfileImage("")} disabled={isSubmitting}>
+                      הסר תמונה
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone">טלפון</Label>
+              <div className="relative">
+                <Phone className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="phone"
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="הכנס טלפון"
+                  className="pr-10"
+                  disabled={isSubmitting}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email">אימייל</Label>
+              <div className="relative">
+                <Mail className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="הכנס אימייל"
+                  className="pr-10"
+                  disabled={isSubmitting}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="idNumber">ת"ז</Label>
+              <div className="relative">
+                <IdCard className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="idNumber"
+                  value={idNumber}
+                  onChange={(e) => setIdNumber(e.target.value)}
+                  placeholder="הכנס תעודת זהות"
+                  className="pr-10"
+                  disabled={isSubmitting}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="birthDate">תאריך לידה</Label>
+              <div className="relative">
+                <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="birthDate"
+                  type="text"
+                  value={birthDate}
+                  onChange={(e) => setBirthDate(e.target.value)}
+                  placeholder="YYYY-MM-DD או DD/MM/YYYY"
+                  className="pr-10"
+                  disabled={isSubmitting}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="city">עיר</Label>
+              <div className="relative">
+                <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="city"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  placeholder="הכנס עיר"
+                  className="pr-10"
+                  disabled={isSubmitting}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="specialization">התמחות</Label>
+              <div className="relative">
+                <Briefcase className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="specialization"
+                  value={specialization}
+                  onChange={(e) => setSpecialization(e.target.value)}
+                  placeholder="לדוגמה: רובוטיקה / תכנות"
+                  className="pr-10"
+                  disabled={isSubmitting}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="bio">אודות</Label>
+              <Textarea
+                id="bio"
+                value={bio}
+                onChange={(e) => setBio(e.target.value)}
+                placeholder="תיאור קצר על ניסיון מקצועי"
+                rows={3}
+                disabled={isSubmitting}
+              />
+            </div>
+            <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
+              <div className="text-sm font-medium leading-snug">פרטי התחברות למערכת</div>
+              <div className="space-y-2">
+                <Label htmlFor="username">שם משתמש *</Label>
+                <Input
+                  id="username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="בחר שם משתמש ייחודי"
+                  disabled={isSubmitting}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">סיסמה *</Label>
+                <div className="relative">
+                  <Lock className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="לפחות 4 תווים"
+                    className="pr-10"
+                    disabled={isSubmitting}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">אימות סיסמה *</Label>
+                <div className="relative">
+                  <Lock className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="הקלד שוב את הסיסמה"
+                    className="pr-10"
+                    disabled={isSubmitting}
+                  />
+                </div>
+              </div>
+            </div>
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin ml-2" />
+                  שולח...
+                </>
+              ) : (
+                "שלח רישום"
+              )}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

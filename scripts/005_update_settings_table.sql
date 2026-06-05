@@ -1,0 +1,11 @@
+-- Add new columns to center_settings table for numbers and other tabs
+ALTER TABLE center_settings 
+ADD COLUMN IF NOT EXISTS lesson_price DECIMAL(10,2) DEFAULT 0,
+ADD COLUMN IF NOT EXISTS monthly_price DECIMAL(10,2) DEFAULT 0,
+ADD COLUMN IF NOT EXISTS registration_fee DECIMAL(10,2) DEFAULT 0,
+ADD COLUMN IF NOT EXISTS discount_siblings INTEGER DEFAULT 0,
+ADD COLUMN IF NOT EXISTS max_students_per_class INTEGER DEFAULT 0,
+ADD COLUMN IF NOT EXISTS email VARCHAR(255),
+ADD COLUMN IF NOT EXISTS website VARCHAR(255),
+ADD COLUMN IF NOT EXISTS working_hours TEXT,
+ADD COLUMN IF NOT EXISTS notes TEXT;
